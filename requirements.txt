@@ -1,0 +1,11 @@
+# Telegram Bot
+python-telegram-bot==21.0.1
+
+# OpenAI (latest stable)
+openai>=1.30.0
+
+# Utilities
+python-dotenv==1.0.1
+
+# Logging (optional)
+# python-json-logger==2.0.7
