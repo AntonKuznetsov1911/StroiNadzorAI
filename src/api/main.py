@@ -17,6 +17,8 @@ from .schemas import (
     UserResponse, RequestResponse, ProjectResponse,
     AnalyticsResponse, StatsResponse
 )
+from .middleware import LoggingMiddleware, CORSHeadersMiddleware, SecurityHeadersMiddleware
+from .health import router as health_router
 
 # Настройка логирования
 setup_logging()
@@ -39,6 +41,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Custom middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CORSHeadersMiddleware)
+app.add_middleware(LoggingMiddleware)
 
 
 # === EVENTS ===
@@ -63,12 +70,10 @@ async def shutdown_event():
     logger.info("Shutting down Admin API")
 
 
-# === HEALTH CHECK ===
+# === ROUTERS ===
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "version": settings.APP_VERSION}
+# Include health check router
+app.include_router(health_router)
 
 
 @app.get("/metrics")

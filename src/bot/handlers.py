@@ -25,6 +25,7 @@ from src.database.models import User, Request, RequestType, UserRole, DefectSeve
 from src.services.rate_limiter import get_rate_limiter
 from src.services.openai_service import get_openai_service
 from src.services.pdf_service import get_pdf_service
+from src.services.excel_service import get_excel_service
 from src.cache import get_cache
 from src.utils.helpers import (
     extract_regulations, calculate_defect_severity,
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 rate_limiter = get_rate_limiter()
 openai_service = get_openai_service()
 pdf_service = get_pdf_service()
+excel_service = get_excel_service()
 cache = get_cache()
 
 
@@ -140,6 +142,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /stats - Ваша статистика
 /projects - Мои проекты
 /report - Создать PDF отчет
+/export - Экспорт данных в Excel
+/premium - Информация о Premium
 
 **Ваш статус:** {user.role.value.upper()}
 **Запросов сегодня:** {rate_limiter.get_remaining_requests(user)} доступно
@@ -268,6 +272,278 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
 
+    finally:
+        db.close()
+
+
+async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /projects - управление проектами"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user)
+
+        from src.database.models import Project
+        from sqlalchemy import func
+
+        # Получаем проекты пользователя
+        projects = db.query(Project).filter(
+            Project.owner_id == user.id
+        ).order_by(Project.created_at.desc()).all()
+
+        if not projects:
+            text = """📁 **Управление проектами**
+
+У вас пока нет проектов.
+
+Проекты помогают организовать работу:
+• Группируйте дефекты по объектам
+• Следите за прогрессом
+• Работайте с командой
+
+Хотите создать первый проект?"""
+
+            keyboard = [
+                [InlineKeyboardButton("➕ Создать проект", callback_data="create_project")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        else:
+            text = "📁 **Ваши проекты:**\n\n"
+
+            for project in projects:
+                # Считаем дефекты в проекте
+                defects_count = db.query(func.count(Request.id)).filter(
+                    Request.project_id == project.id
+                ).scalar()
+
+                text += f"📂 **{project.name}**\n"
+                text += f"   🏗️ {project.address or 'Адрес не указан'}\n"
+                text += f"   📊 Дефектов: {defects_count}\n"
+                text += f"   📅 {project.created_at.strftime('%d.%m.%Y')}\n\n"
+
+            keyboard = [
+                [InlineKeyboardButton("➕ Создать проект", callback_data="create_project")],
+                [InlineKeyboardButton("📊 Статистика", callback_data="project_stats")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+    except Exception as e:
+        logger.error(f"Error in projects command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка при получении проектов")
+    finally:
+        db.close()
+
+
+async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /export - экспорт данных в Excel"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user)
+
+        # Проверяем, есть ли данные для экспорта
+        requests_count = db.query(Request).filter(Request.user_id == user.id).count()
+
+        if requests_count == 0:
+            await update.message.reply_text(
+                "📊 У вас пока нет данных для экспорта.\n\n"
+                "Сначала отправьте фото или задайте вопросы!"
+            )
+            return
+
+        text = f"""📊 **Экспорт данных**
+
+Доступно для экспорта:
+• Запросов: {requests_count}
+• Период: с {user.created_at.strftime('%d.%m.%Y')}
+
+Выберите что экспортировать:"""
+
+        keyboard = [
+            [InlineKeyboardButton("📋 Все запросы", callback_data="export_requests")],
+            [InlineKeyboardButton("📸 Только фото", callback_data="export_photos")],
+            [InlineKeyboardButton("💬 Только текст", callback_data="export_text")],
+            [InlineKeyboardButton("📈 Статистика", callback_data="export_analytics")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+    except Exception as e:
+        logger.error(f"Error in export command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка при подготовке экспорта")
+    finally:
+        db.close()
+
+
+async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /premium - информация о Premium"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user)
+
+        if user.role == UserRole.PREMIUM:
+            text = """💎 **Premium статус активен!**
+
+Ваши преимущества:
+✅ 200 запросов в час (вместо 50)
+✅ Приоритетная обработка
+✅ Расширенная аналитика
+✅ Экспорт в Excel без ограничений
+✅ Командная работа над проектами
+✅ Email-уведомления о дефектах
+✅ Техническая поддержка 24/7
+
+Спасибо, что выбрали Premium! 🎉"""
+        else:
+            text = """💎 **Upgrade to Premium**
+
+**Базовый план (FREE):**
+• 50 запросов в час
+• Базовая аналитика
+• Личные проекты
+
+**Premium план:**
+• ✨ 200 запросов в час
+• ✨ Приоритетная обработка
+• ✨ Расширенная аналитика
+• ✨ Экспорт в Excel
+• ✨ Командная работа
+• ✨ Email-уведомления
+• ✨ Техническая поддержка 24/7
+
+**Стоимость:** 2990₽/месяц
+
+Для подключения свяжитесь с @admin"""
+
+            keyboard = [
+                [InlineKeyboardButton("💳 Подключить Premium", url="https://t.me/admin")],
+                [InlineKeyboardButton("📊 Сравнить планы", callback_data="compare_plans")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+    except Exception as e:
+        logger.error(f"Error in premium command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка при получении информации о Premium")
+    finally:
+        db.close()
+
+
+async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /report - создать PDF отчет из последнего анализа"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user)
+
+        # Получаем последний запрос с фото
+        last_request = db.query(Request).filter(
+            Request.user_id == user.id,
+            Request.request_type == RequestType.PHOTO
+        ).order_by(Request.created_at.desc()).first()
+
+        if not last_request:
+            await update.message.reply_text(
+                "📄 У вас нет анализов фотографий для создания отчета.\n\n"
+                "Сначала отправьте фото дефекта!"
+            )
+            return
+
+        # Генерируем PDF
+        await update.message.reply_text("📄 Генерирую PDF отчет...")
+
+        pdf_path = pdf_service.generate_defect_report(
+            title=f"Дефект #{last_request.id}",
+            defect_type=last_request.defect_type or "Не определен",
+            severity=last_request.defect_severity.value if last_request.defect_severity else "Не определена",
+            analysis=last_request.response_text,
+            recommendations="См. анализ выше",
+            regulations=last_request.mentioned_regulations,
+            user_name=user.first_name
+        )
+
+        # Отправляем PDF
+        with open(pdf_path, 'rb') as pdf_file:
+            await update.message.reply_document(
+                document=pdf_file,
+                filename=f"defect_report_{last_request.id}.pdf",
+                caption=f"📄 PDF отчет по последнему анализу\n\nДефект #{last_request.id}"
+            )
+
+        logger.info(f"PDF report sent via /report command for user {user.telegram_id}")
+
+    except Exception as e:
+        logger.error(f"Error in report command: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Ошибка при создании отчета: {str(e)}")
+    finally:
+        db.close()
+
+
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /admin - администраторские функции"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user)
+
+        # Проверяем права администратора
+        if user.role != UserRole.ADMIN:
+            await update.message.reply_text("❌ У вас нет прав администратора")
+            return
+
+        from sqlalchemy import func
+        from datetime import datetime, timedelta
+
+        # Общая статистика
+        total_users = db.query(func.count(User.id)).scalar()
+        total_requests = db.query(func.count(Request.id)).scalar()
+
+        # Статистика за сегодня
+        today = datetime.utcnow().date()
+        today_requests = db.query(func.count(Request.id)).filter(
+            func.date(Request.created_at) == today
+        ).scalar()
+
+        # Новые пользователи за неделю
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        new_users_week = db.query(func.count(User.id)).filter(
+            User.created_at >= week_ago
+        ).scalar()
+
+        # Cache hit rate
+        total_cached = db.query(func.count(Request.id)).filter(Request.cached == True).scalar()
+        cache_hit_rate = (total_cached / total_requests * 100) if total_requests > 0 else 0
+
+        text = f"""👨‍💼 **Панель администратора**
+
+📊 **Общая статистика:**
+• Пользователей: {total_users}
+• Всего запросов: {total_requests}
+• Запросов сегодня: {today_requests}
+• Новых за неделю: {new_users_week}
+
+⚡ **Производительность:**
+• Cache hit rate: {cache_hit_rate:.1f}%
+
+🔗 **Ссылки:**
+• Admin API: {settings.API_HOST}:{settings.API_PORT}
+• API Docs: {settings.API_HOST}:{settings.API_PORT}/docs
+"""
+
+        keyboard = [
+            [InlineKeyboardButton("📊 Детальная статистика", url=f"http://{settings.API_HOST}:{settings.API_PORT}/api/stats")],
+            [InlineKeyboardButton("👥 Управление пользователями", url=f"http://{settings.API_HOST}:{settings.API_PORT}/api/users")],
+            [InlineKeyboardButton("📈 Аналитика", url=f"http://{settings.API_HOST}:{settings.API_PORT}/api/analytics")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+    except Exception as e:
+        logger.error(f"Error in admin command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка в панели администратора")
     finally:
         db.close()
 
@@ -600,6 +876,93 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Генерация PDF отчета
         request_id = int(data.split(":")[1])
         await generate_pdf_report(update, context, request_id)
+    elif data == "create_project":
+        await update.callback_query.message.reply_text(
+            "📝 Чтобы создать проект, отправьте название в формате:\n\n"
+            "`/create_project Название объекта, адрес`"
+        )
+    elif data.startswith("export_"):
+        # Экспорт данных
+        export_type = data.split("_")[1]
+        await handle_export(update, context, export_type)
+
+
+async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE, export_type: str):
+    """Обработка экспорта данных"""
+    db: Session = next(get_db())
+    try:
+        user = get_or_create_user(db, update.effective_user.id)
+
+        await update.callback_query.message.reply_text("📊 Готовлю экспорт данных...")
+
+        # Получаем данные в зависимости от типа
+        if export_type == "requests":
+            requests = db.query(Request).filter(Request.user_id == user.id).all()
+            data = [{
+                "ID": r.id,
+                "Тип": r.request_type.value,
+                "Дата": r.created_at.strftime('%d.%m.%Y %H:%M'),
+                "Дефект": r.defect_type or "-",
+                "Критичность": r.defect_severity.value if r.defect_severity else "-",
+                "Время (с)": r.processing_time
+            } for r in requests]
+            filename = f"requests_{user.telegram_id}_{int(time.time())}.xlsx"
+
+        elif export_type == "photos":
+            requests = db.query(Request).filter(
+                Request.user_id == user.id,
+                Request.request_type == RequestType.PHOTO
+            ).all()
+            data = [{
+                "ID": r.id,
+                "Дата": r.created_at.strftime('%d.%m.%Y %H:%M'),
+                "Дефект": r.defect_type or "-",
+                "Критичность": r.defect_severity.value if r.defect_severity else "-",
+                "Подпись": r.caption or "-"
+            } for r in requests]
+            filename = f"photos_{user.telegram_id}_{int(time.time())}.xlsx"
+
+        elif export_type == "text":
+            requests = db.query(Request).filter(
+                Request.user_id == user.id,
+                Request.request_type == RequestType.TEXT
+            ).all()
+            data = [{
+                "ID": r.id,
+                "Дата": r.created_at.strftime('%d.%m.%Y %H:%M'),
+                "Вопрос": r.message_text[:100] + "..." if len(r.message_text) > 100 else r.message_text,
+                "Время (с)": r.processing_time
+            } for r in requests]
+            filename = f"questions_{user.telegram_id}_{int(time.time())}.xlsx"
+
+        elif export_type == "analytics":
+            data = [{
+                "Всего запросов": user.total_requests,
+                "Анализов фото": user.total_photos,
+                "Голосовых": user.total_voice,
+                "Зарегистрирован": user.created_at.strftime('%d.%m.%Y'),
+                "Последняя активность": user.last_activity.strftime('%d.%m.%Y %H:%M')
+            }]
+            filename = f"analytics_{user.telegram_id}_{int(time.time())}.xlsx"
+
+        # Экспортируем в Excel
+        excel_path = excel_service.export_requests(data, filename)
+
+        # Отправляем файл
+        with open(excel_path, 'rb') as excel_file:
+            await update.callback_query.message.reply_document(
+                document=excel_file,
+                filename=filename,
+                caption=f"📊 Экспорт данных готов!\n\nЗаписей: {len(data)}"
+            )
+
+        logger.info(f"Data exported for user {user.telegram_id}, type: {export_type}")
+
+    except Exception as e:
+        logger.error(f"Error exporting data: {e}", exc_info=True)
+        await update.callback_query.message.reply_text(f"❌ Ошибка при экспорте: {str(e)}")
+    finally:
+        db.close()
 
 
 async def generate_pdf_report(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: int):
@@ -667,6 +1030,11 @@ def setup_handlers(application: Application):
     application.add_handler(CommandHandler("regulations", regulations_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("examples", examples_command))
+    application.add_handler(CommandHandler("projects", projects_command))
+    application.add_handler(CommandHandler("export", export_command))
+    application.add_handler(CommandHandler("premium", premium_command))
+    application.add_handler(CommandHandler("report", report_command))
+    application.add_handler(CommandHandler("admin", admin_command))
 
     # Сообщения
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
