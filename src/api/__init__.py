@@ -1,0 +1,3 @@
+"""
+FastAPI Admin Panel
+"""

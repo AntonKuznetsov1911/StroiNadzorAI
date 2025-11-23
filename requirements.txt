@@ -1,11 +1,56 @@
-# Telegram Bot
+# ===== TELEGRAM BOT =====
 python-telegram-bot==21.0.1
 
-# OpenAI (latest stable)
+# ===== OPENAI API =====
 openai>=1.30.0
 
-# Utilities
-python-dotenv==1.0.1
+# ===== WEB FRAMEWORK (Admin Panel) =====
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+pydantic-settings==2.1.0
 
-# Logging (optional)
-# python-json-logger==2.0.7
+# ===== DATABASE =====
+sqlalchemy==2.0.27
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# ===== CACHE =====
+redis==5.0.1
+
+# ===== PDF GENERATION =====
+reportlab==4.0.9
+Pillow==10.2.0
+
+# ===== OCR (опционально) =====
+pytesseract==0.3.10
+pdf2image==1.17.0
+
+# ===== UTILITIES =====
+python-dotenv==1.0.1
+httpx==0.26.0
+python-multipart==0.0.9
+
+# ===== MONITORING (опционально) =====
+prometheus-client==0.19.0
+sentry-sdk[fastapi]==1.40.4
+
+# ===== EMAIL (опционально) =====
+aiosmtplib==3.0.1
+email-validator==2.1.0
+
+# ===== TESTING =====
+pytest==8.0.0
+pytest-asyncio==0.23.4
+pytest-cov==4.1.0
+httpx==0.26.0
+
+# ===== CODE QUALITY =====
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
+isort==5.13.2
+
+# ===== ADDITIONAL =====
+python-json-logger==2.0.7
+geopy==2.4.1  # Для работы с геолокацией

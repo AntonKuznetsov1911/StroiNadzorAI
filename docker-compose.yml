@@ -1,0 +1,138 @@
+# Docker Compose для StroiNadzorAI
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: stroinadzor_postgres
+    environment:
+      POSTGRES_USER: stroinadzor
+      POSTGRES_PASSWORD: stroinadzor
+      POSTGRES_DB: stroinadzor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stroinadzor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: stroinadzor_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+
+  # Telegram Bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stroinadzor_bot
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://stroinadzor:stroinadzor@postgres:5432/stroinadzor
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+
+  # FastAPI Admin Panel
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stroinadzor_api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://stroinadzor:stroinadzor@postgres:5432/stroinadzor
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+
+  # Prometheus (опционально)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: stroinadzor_prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+    profiles:
+      - monitoring
+
+  # Grafana (опционально)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: stroinadzor_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - stroinadzor_network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  stroinadzor_network:
+    driver: bridge
