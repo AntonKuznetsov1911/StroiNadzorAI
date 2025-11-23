@@ -2,7 +2,7 @@
 Set WshShell = CreateObject("WScript.Shell")
 
 ' Путь к папке с ботом
-botPath = "C:\Users\PC\StroiNadzor\telegram_bot"
+botPath = "C:\Users\PC\StroiNadzorAI"
 
 ' Команда запуска бота
 command = "cmd /c cd /d """ & botPath & """ && python bot.py"
