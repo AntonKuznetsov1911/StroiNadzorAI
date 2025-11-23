@@ -1,4 +1,4 @@
-' Запуск Telegram бота ТехНадзор в фоновом режиме (без окна)
+' Запуск Telegram бота СтройНадзорAI в фоновом режиме (без окна)
 Set WshShell = CreateObject("WScript.Shell")
 
 ' Путь к папке с ботом
@@ -11,4 +11,4 @@ command = "cmd /c cd /d """ & botPath & """ && python bot.py"
 WshShell.Run command, 0, False
 
 ' Вывод уведомления (опционально)
-' WshShell.Popup "Telegram бот ТехНадзор запущен!", 3, "Автозапуск", 64
+' WshShell.Popup "Telegram бот СтройНадзорAI запущен!", 3, "Автозапуск", 64
