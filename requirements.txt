@@ -4,9 +4,7 @@ python-telegram-bot==21.0.1
 # ===== ANTHROPIC API (Claude) =====
 anthropic==0.18.1
 
-# ===== WEB FRAMEWORK (Admin Panel) =====
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
+# ===== CONFIGURATION =====
 pydantic==2.6.1
 pydantic-settings==2.1.0
 
@@ -33,7 +31,7 @@ python-multipart==0.0.18
 
 # ===== MONITORING (опционально) =====
 prometheus-client==0.19.0
-sentry-sdk[fastapi]==1.45.1
+sentry-sdk==1.45.1
 
 # ===== EMAIL (опционально) =====
 aiosmtplib==3.0.1

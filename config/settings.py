@@ -48,12 +48,6 @@ class Settings(BaseSettings):
     RATE_LIMIT_PERIOD: int = Field(default=3600, env="RATE_LIMIT_PERIOD")  # 1 час
     RATE_LIMIT_PREMIUM_REQUESTS: int = Field(default=200, env="RATE_LIMIT_PREMIUM_REQUESTS")
 
-    # FastAPI Admin Panel
-    API_HOST: str = Field(default="0.0.0.0", env="API_HOST")
-    API_PORT: int = Field(default=8000, env="API_PORT")
-    API_SECRET_KEY: str = Field(..., env="API_SECRET_KEY")
-    API_CORS_ORIGINS: list = Field(default=["*"], env="API_CORS_ORIGINS")
-
     # File Storage
     UPLOAD_DIR: str = Field(default="./uploads", env="UPLOAD_DIR")
     MAX_UPLOAD_SIZE: int = Field(default=20 * 1024 * 1024, env="MAX_UPLOAD_SIZE")  # 20MB

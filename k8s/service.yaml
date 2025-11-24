@@ -1,25 +1,6 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: stroinadzor-api
-  labels:
-    app: stroinadzor
-    component: api
-spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 8000
-    protocol: TCP
-    name: http
-  selector:
-    app: stroinadzor
-    component: api
-
----
-apiVersion: v1
-kind: Service
-metadata:
   name: stroinadzor-redis
   labels:
     app: stroinadzor
@@ -34,21 +15,3 @@ spec:
   selector:
     app: stroinadzor
     component: redis
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: stroinadzor-metrics
-  labels:
-    app: stroinadzor
-spec:
-  type: ClusterIP
-  ports:
-  - port: 8000
-    targetPort: 8000
-    protocol: TCP
-    name: metrics
-  selector:
-    app: stroinadzor
-    component: api

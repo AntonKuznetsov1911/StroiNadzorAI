@@ -4,35 +4,32 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-**StroiNadzorAI** - это продвинутый AI-консультант по строительным нормативам России с полной интеграцией Telegram Bot и административной панелью.
+**StroiNadzorAI** - это продвинутый AI-консультант по строительным нормативам России на базе Claude AI (Anthropic) с полной интеграцией Telegram Bot.
 
 ## 🌟 Основные возможности
 
 ### 🤖 Telegram Bot
-- **📸 Анализ фотографий дефектов** с помощью GPT-4o Vision API
-- **💬 Консультации по нормативам** (СП, ГОСТ, СНиП)
-- **🎤 Голосовые сообщения** через Whisper API
+- **📸 Анализ фотографий дефектов** с помощью Claude Sonnet 4.5 Vision
+- **💬 Консультации по нормативам** (СП, ГОСТ, СНиП) с RAG
+- **🧠 Экспертная система** - виртуальный Главный Прораб с 25-летним опытом
 - **📄 Генерация PDF отчетов** профессионального качества
 - **📍 Геолокация объектов** и привязка дефектов к карте
 - **⚡ Стриминг ответов** для мгновенной обратной связи
+- **🔍 RAG система** с векторной БД ChromaDB для точных ответов
+- **💭 Context Memory** - запоминание истории разговоров
 
 ### 💾 Базовые функции
 - **PostgreSQL** база данных с полной историей запросов
-- **Redis** кеширование для экономии API токенов
+- **Redis** кеширование и контекст разговоров
 - **Rate Limiting** защита от спама и злоупотреблений
 - **Многопользовательские проекты** для командной работы
 - **Система ролей** (User, Premium, Admin)
-
-### 📊 Административная панель (FastAPI)
-- **RESTful API** для управления ботом
-- **Аналитика и статистика** использования
-- **Мониторинг пользователей** и запросов
-- **Swagger/OpenAPI** документация
+- **Celery** фоновые задачи (PDF, email, аналитика)
 
 ### 🔧 DevOps & Production Ready
 - **Docker & Docker Compose** для легкого развертывания
-- **CI/CD Pipeline** с GitHub Actions
-- **Prometheus + Grafana** мониторинг
+- **Kubernetes (K8s)** манифесты с auto-scaling
+- **Prometheus** мониторинг метрик
 - **Structured Logging** с ротацией
 - **Автоматические тесты** (pytest)
 
@@ -73,7 +70,7 @@ cd StroiNadzorAI
 
 # 2. Создайте .env файл
 cp .env.example .env
-# Отредактируйте .env и добавьте TELEGRAM_BOT_TOKEN и OPENAI_API_KEY
+# Отредактируйте .env и добавьте TELEGRAM_BOT_TOKEN и ANTHROPIC_API_KEY
 
 # 3. Запустите все сервисы
 docker-compose up -d
@@ -161,54 +158,46 @@ python -m src.bot.bot_main
 Проанализируйте дефект → /report → Скачайте PDF
 ```
 
-### API Endpoints (Admin Panel)
-
-```bash
-# Получить статистику
-GET http://localhost:8000/api/stats
-
-# Список пользователей
-GET http://localhost:8000/api/users
-
-# История запросов пользователя
-GET http://localhost:8000/api/users/{user_id}/requests
-
-# Swagger документация
-http://localhost:8000/docs
-```
-
 ## 🏗️ Архитектура проекта
 
 ```
 StroiNadzorAI/
 ├── src/
-│   ├── api/                    # FastAPI Admin Panel
-│   │   ├── main.py
-│   │   └── schemas.py
 │   ├── bot/                    # Telegram Bot
 │   │   ├── bot_main.py
 │   │   └── handlers.py
-│   ├── cache/                  # Redis Cache
-│   │   └── redis_cache.py
+│   ├── services/               # Business Logic
+│   │   ├── claude_service.py   # Claude AI integration
+│   │   ├── vector_service.py   # RAG with ChromaDB
+│   │   ├── context_service.py  # Conversation memory
+│   │   ├── pdf_service.py
+│   │   ├── payment_service.py
+│   │   └── rate_limiter.py
 │   ├── database/               # Database Models
 │   │   ├── models.py
 │   │   ├── session.py
 │   │   └── base.py
-│   ├── services/               # Business Logic
-│   │   ├── openai_service.py
-│   │   ├── pdf_service.py
-│   │   ├── ocr_service.py
-│   │   └── rate_limiter.py
+│   ├── cache/                  # Redis Cache
+│   │   └── redis_cache.py
+│   ├── monitoring/             # Prometheus metrics
+│   │   └── metrics.py
+│   ├── tasks/                  # Celery background tasks
+│   │   └── background_tasks.py
 │   └── utils/                  # Utilities
 │       ├── helpers.py
 │       └── logger.py
+├── data/                       # Knowledge Base
+│   └── construction_knowledge.py  # 1000+ lines of СП/ГОСТ/СНиП
 ├── config/                     # Configuration
 │   └── settings.py
+├── k8s/                        # Kubernetes manifests
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── hpa.yaml
+│   └── configmap.yaml
 ├── tests/                      # Tests
 │   ├── unit/
 │   └── integration/
-├── docker/                     # Docker configs
-│   └── prometheus.yml
 ├── logs/                       # Logs
 ├── uploads/                    # User uploads
 ├── Dockerfile
@@ -227,9 +216,10 @@ StroiNadzorAI/
 TELEGRAM_BOT_TOKEN=your_token_here
 USE_WEBHOOK=False
 
-# OpenAI
-OPENAI_API_KEY=your_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+# Anthropic Claude AI
+ANTHROPIC_API_KEY=your_api_key_here
+CLAUDE_MODEL=claude-sonnet-4-5-20250929
+CLAUDE_MAX_TOKENS=4000
 
 # Database
 DATABASE_URL=postgresql://user:pass@localhost:5432/db
@@ -237,29 +227,33 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/db
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
+# Celery
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
 # Rate Limiting
 RATE_LIMIT_REQUESTS=50
 RATE_LIMIT_PREMIUM_REQUESTS=200
 
 # Features
-ENABLE_VOICE_MESSAGES=True
 ENABLE_PDF_REPORTS=True
-ENABLE_OCR=True
+ENABLE_STREAMING=True
+ENABLE_GEOLOCATION=True
 ```
 
 Полный список переменных см. в [.env.example](.env.example)
 
 ## 📊 Мониторинг
 
-### Запуск Prometheus + Grafana
+### Prometheus метрики
 
-```bash
-# Запустить с мониторингом
-docker-compose --profile monitoring up -d
+Бот экспортирует метрики для Prometheus:
+- Количество запросов по типам
+- Время обработки запросов
+- Использование Claude API
+- Ошибки и исключения
 
-# Prometheus: http://localhost:9090
-# Grafana: http://localhost:3000 (admin/admin)
-```
+Метрики доступны для сбора Prometheus.
 
 ## 🧪 Тестирование
 

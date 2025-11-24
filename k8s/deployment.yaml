@@ -28,11 +28,11 @@ spec:
             secretKeyRef:
               name: stroinadzor-secrets
               key: telegram-bot-token
-        - name: OPENAI_API_KEY
+        - name: ANTHROPIC_API_KEY
           valueFrom:
             secretKeyRef:
               name: stroinadzor-secrets
-              key: openai-api-key
+              key: anthropic-api-key
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -72,78 +72,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: stroinadzor-api
-  labels:
-    app: stroinadzor
-    component: api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: stroinadzor
-      component: api
-  template:
-    metadata:
-      labels:
-        app: stroinadzor
-        component: api
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
-        prometheus.io/path: "/metrics"
-    spec:
-      containers:
-      - name: api
-        image: stroinadzor/api:latest
-        imagePullPolicy: Always
-        command: ["python", "main.py", "api"]
-        ports:
-        - containerPort: 8000
-          name: http
-          protocol: TCP
-        env:
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: stroinadzor-secrets
-              key: openai-api-key
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: stroinadzor-secrets
-              key: database-url
-        - name: REDIS_URL
-          value: "redis://stroinadzor-redis:6379/0"
-        - name: API_HOST
-          value: "0.0.0.0"
-        - name: API_PORT
-          value: "8000"
-        - name: ENVIRONMENT
-          value: "production"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "400m"
-        livenessProbe:
-          httpGet:
-            path: /health/live
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: stroinadzor-celery-worker
   labels:
     app: stroinadzor
@@ -166,11 +94,11 @@ spec:
         imagePullPolicy: Always
         command: ["celery", "-A", "src.celery_app", "worker", "-l", "info", "-c", "4"]
         env:
-        - name: OPENAI_API_KEY
+        - name: ANTHROPIC_API_KEY
           valueFrom:
             secretKeyRef:
               name: stroinadzor-secrets
-              key: openai-api-key
+              key: anthropic-api-key
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
