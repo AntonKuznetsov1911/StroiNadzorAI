@@ -10,7 +10,7 @@ from io import BytesIO
 from datetime import datetime
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -151,9 +151,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /regulations - Список нормативов
 /examples - Примеры вопросов
 
+🏗️ **Полная версия**: Нажмите кнопку ниже, чтобы открыть веб-приложение с расширенными возможностями!
+
 Попробуйте отправить фото дефекта или задать вопрос! 👇"""
 
     keyboard = [
+        [InlineKeyboardButton("🏗️ Открыть полную версию", web_app=WebAppInfo(url="https://antonkuznetsov1911.github.io/StroiNadzorAI/"))],
         [InlineKeyboardButton("📚 Список нормативов", callback_data="regulations")],
         [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples")],
         [InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
