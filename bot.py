@@ -197,24 +197,32 @@ async def get_fastest_response_text(system_prompt: str, user_message: str):
     tasks = []
 
     if OPENAI_API_KEY:
-        tasks.append(call_openai_text(system_prompt, user_message))
+        tasks.append(asyncio.create_task(call_openai_text(system_prompt, user_message)))
     if ANTHROPIC_API_KEY:
-        tasks.append(call_claude_text(system_prompt, user_message))
+        tasks.append(asyncio.create_task(call_claude_text(system_prompt, user_message)))
 
     if not tasks:
         raise ValueError("No API keys available")
 
     # Ждем первый успешный ответ
-    for coro in asyncio.as_completed(tasks):
-        result = await coro
-        if result is not None:
-            api_name, content = result
-            logger.info(f"Response received from {api_name} first")
-            # Отменяем оставшиеся задачи
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            return api_name, content
+    while tasks:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+            try:
+                result = task.result()
+                if result is not None:
+                    api_name, content = result
+                    logger.info(f"Response received from {api_name} first")
+                    # Отменяем оставшиеся задачи
+                    for pending_task in pending:
+                        pending_task.cancel()
+                    return api_name, content
+            except Exception as e:
+                logger.error(f"Task failed: {e}")
+
+        # Убираем неудачные задачи и продолжаем ждать
+        tasks = list(pending)
 
     raise ValueError("All API calls failed")
 
@@ -223,24 +231,32 @@ async def get_fastest_response_vision(system_prompt: str, user_message: str, ima
     tasks = []
 
     if OPENAI_API_KEY:
-        tasks.append(call_openai_vision(system_prompt, user_message, image_base64))
+        tasks.append(asyncio.create_task(call_openai_vision(system_prompt, user_message, image_base64)))
     if ANTHROPIC_API_KEY:
-        tasks.append(call_claude_vision(system_prompt, user_message, image_base64))
+        tasks.append(asyncio.create_task(call_claude_vision(system_prompt, user_message, image_base64)))
 
     if not tasks:
         raise ValueError("No API keys available")
 
     # Ждем первый успешный ответ
-    for coro in asyncio.as_completed(tasks):
-        result = await coro
-        if result is not None:
-            api_name, content = result
-            logger.info(f"Vision response received from {api_name} first")
-            # Отменяем оставшиеся задачи
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            return api_name, content
+    while tasks:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in done:
+            try:
+                result = task.result()
+                if result is not None:
+                    api_name, content = result
+                    logger.info(f"Vision response received from {api_name} first")
+                    # Отменяем оставшиеся задачи
+                    for pending_task in pending:
+                        pending_task.cancel()
+                    return api_name, content
+            except Exception as e:
+                logger.error(f"Task failed: {e}")
+
+        # Убираем неудачные задачи и продолжаем ждать
+        tasks = list(pending)
 
     raise ValueError("All API calls failed")
 
