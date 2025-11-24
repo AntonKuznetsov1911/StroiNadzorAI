@@ -1,8 +1,7 @@
 # Telegram Bot
 python-telegram-bot==21.0.1
 
-# AI APIs
-openai>=1.30.0
+# AI API
 anthropic>=0.74.0
 
 # Utilities
