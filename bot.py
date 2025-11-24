@@ -328,10 +328,41 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_message += f"\n\nКонтекст от пользователя: {caption}"
 
         # Получаем самый быстрый ответ от обоих API
-        api_name, analysis = await get_fastest_response_vision(system_prompt, user_message, photo_base64)
+        # Вызываем Claude API для анализа изображения
+        client = get_anthropic_client()
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": photo_base64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": user_message
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.7
+            )
+        )
+        analysis = response.content[0].text
 
         # Формируем ответ
-        result = f"🔍 **Анализ фотографии** (⚡ {api_name}):\n\n{analysis}\n\n"
+        result = f"🔍 **Анализ фотографии** (Claude 3.5 Haiku):\n\n{analysis}\n\n"
         result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
 
         await update.message.reply_text(result, parse_mode='Markdown')
@@ -414,7 +445,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ВАЖНО: Отвечай как реальный инженер-эксперт с глубокими знаниями и практическим опытом."""
 
         # Получаем самый быстрый ответ от обоих API
-        api_name, answer = await get_fastest_response_text(system_prompt, question)
+        # Вызываем Claude API для ответа на вопрос
+        client = get_anthropic_client()
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": question}
+                ],
+                temperature=0.7
+            )
+        )
+        answer = response.content[0].text
 
         # Определяем упомянутые нормативы
         mentioned_regs = []
@@ -423,7 +469,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mentioned_regs.append(reg_code)
 
         # Формируем ответ
-        result = f"💬 **Ответ** (⚡ {api_name}):\n\n{answer}\n\n"
+        result = f"💬 **Ответ** (Claude 3.5 Haiku):\n\n{answer}\n\n"
 
         if mentioned_regs:
             result += "📚 **Упомянутые нормативы (нажмите, чтобы открыть):**\n"
