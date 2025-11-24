@@ -1,8 +1,8 @@
 # ===== TELEGRAM BOT =====
 python-telegram-bot==21.0.1
 
-# ===== OPENAI API =====
-openai>=1.30.0
+# ===== ANTHROPIC API (Claude) =====
+anthropic==0.18.1
 
 # ===== WEB FRAMEWORK (Admin Panel) =====
 fastapi==0.109.2

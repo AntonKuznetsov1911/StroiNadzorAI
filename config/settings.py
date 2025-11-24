@@ -23,11 +23,13 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_PATH: str = Field(default="/webhook/telegram", env="TELEGRAM_WEBHOOK_PATH")
     USE_WEBHOOK: bool = Field(default=False, env="USE_WEBHOOK")
 
-    # OpenAI
-    OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
-    OPENAI_MODEL: str = Field(default="gpt-4o-mini", env="OPENAI_MODEL")
-    OPENAI_MAX_TOKENS: int = Field(default=1500, env="OPENAI_MAX_TOKENS")
-    OPENAI_TEMPERATURE: float = Field(default=0.7, env="OPENAI_TEMPERATURE")
+    # Anthropic Claude
+    ANTHROPIC_API_KEY: str = Field(..., env="ANTHROPIC_API_KEY")
+    CLAUDE_MODEL: str = Field(default="claude-sonnet-4-5-20250929", env="CLAUDE_MODEL")
+    CLAUDE_MAX_TOKENS: int = Field(default=4000, env="CLAUDE_MAX_TOKENS")
+
+    # Backwards compatibility (will use ANTHROPIC_API_KEY if OPENAI_API_KEY not set)
+    OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
 
     # Database
     DATABASE_URL: str = Field(
