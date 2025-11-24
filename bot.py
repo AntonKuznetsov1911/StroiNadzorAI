@@ -20,6 +20,8 @@ from telegram.ext import (
     filters
 )
 from openai import OpenAI
+import anthropic
+import asyncio
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -34,22 +36,214 @@ logger = logging.getLogger(__name__)
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # Проверка наличия токенов
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_BOT_TOKEN не найден в .env файле!")
-if not OPENAI_API_KEY:
-    raise ValueError("❌ OPENAI_API_KEY не найден в .env файле!")
+if not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
+    raise ValueError("❌ Необходим хотя бы один API ключ (OPENAI_API_KEY или ANTHROPIC_API_KEY)!")
 
-# Инициализация OpenAI (ленивая - только когда нужно)
+# Инициализация клиентов (ленивая - только когда нужно)
 openai_client = None
+anthropic_client = None
 
 def get_openai_client():
     """Получить OpenAI клиент (ленивая инициализация)"""
     global openai_client
-    if openai_client is None:
+    if openai_client is None and OPENAI_API_KEY:
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
     return openai_client
+
+def get_anthropic_client():
+    """Получить Anthropic клиент (ленивая инициализация)"""
+    global anthropic_client
+    if anthropic_client is None and ANTHROPIC_API_KEY:
+        anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return anthropic_client
+
+
+# === ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА API ===
+
+async def call_openai_text(system_prompt: str, user_message: str):
+    """Асинхронный вызов OpenAI API для текста"""
+    try:
+        client = get_openai_client()
+        if not client:
+            return None
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+        )
+        return ("OpenAI", response.choices[0].message.content)
+    except Exception as e:
+        logger.error(f"OpenAI API error: {e}")
+        return None
+
+async def call_claude_text(system_prompt: str, user_message: str):
+    """Асинхронный вызов Claude API для текста"""
+    try:
+        client = get_anthropic_client()
+        if not client:
+            return None
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7
+            )
+        )
+        return ("Claude", response.content[0].text)
+    except Exception as e:
+        logger.error(f"Claude API error: {e}")
+        return None
+
+async def call_openai_vision(system_prompt: str, user_message: str, image_base64: str):
+    """Асинхронный вызов OpenAI Vision API"""
+    try:
+        client = get_openai_client()
+        if not client:
+            return None
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": user_message},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+        )
+        return ("OpenAI", response.choices[0].message.content)
+    except Exception as e:
+        logger.error(f"OpenAI Vision API error: {e}")
+        return None
+
+async def call_claude_vision(system_prompt: str, user_message: str, image_base64: str):
+    """Асинхронный вызов Claude Vision API"""
+    try:
+        client = get_anthropic_client()
+        if not client:
+            return None
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_base64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": user_message
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.7
+            )
+        )
+        return ("Claude", response.content[0].text)
+    except Exception as e:
+        logger.error(f"Claude Vision API error: {e}")
+        return None
+
+async def get_fastest_response_text(system_prompt: str, user_message: str):
+    """Получить самый быстрый ответ от доступных API для текста"""
+    tasks = []
+
+    if OPENAI_API_KEY:
+        tasks.append(call_openai_text(system_prompt, user_message))
+    if ANTHROPIC_API_KEY:
+        tasks.append(call_claude_text(system_prompt, user_message))
+
+    if not tasks:
+        raise ValueError("No API keys available")
+
+    # Ждем первый успешный ответ
+    for coro in asyncio.as_completed(tasks):
+        result = await coro
+        if result is not None:
+            api_name, content = result
+            logger.info(f"Response received from {api_name} first")
+            # Отменяем оставшиеся задачи
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            return api_name, content
+
+    raise ValueError("All API calls failed")
+
+async def get_fastest_response_vision(system_prompt: str, user_message: str, image_base64: str):
+    """Получить самый быстрый ответ от доступных API для изображений"""
+    tasks = []
+
+    if OPENAI_API_KEY:
+        tasks.append(call_openai_vision(system_prompt, user_message, image_base64))
+    if ANTHROPIC_API_KEY:
+        tasks.append(call_claude_vision(system_prompt, user_message, image_base64))
+
+    if not tasks:
+        raise ValueError("No API keys available")
+
+    # Ждем первый успешный ответ
+    for coro in asyncio.as_completed(tasks):
+        result = await coro
+        if result is not None:
+            api_name, content = result
+            logger.info(f"Vision response received from {api_name} first")
+            # Отменяем оставшиеся задачи
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            return api_name, content
+
+    raise ValueError("All API calls failed")
+
 
 # База нормативов (расширенная)
 REGULATIONS = {
@@ -218,7 +412,7 @@ async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка фотографий"""
-    await update.message.reply_text("📸 Анализирую фотографию... Это может занять несколько секунд.")
+    await update.message.reply_text("📸 Анализирую фотографию... (используя параллельные AI)")
 
     try:
         # Получаем фото (самое большое разрешение)
@@ -284,37 +478,16 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if caption:
             user_message += f"\n\nКонтекст от пользователя: {caption}"
 
-        # Запрос к OpenAI Vision API
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": user_message},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{photo_base64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=1000,
-            temperature=0.7
-        )
-
-        analysis = response.choices[0].message.content
+        # Получаем самый быстрый ответ от обоих API
+        api_name, analysis = await get_fastest_response_vision(system_prompt, user_message, photo_base64)
 
         # Формируем ответ
-        result = f"🔍 **Анализ фотографии:**\n\n{analysis}\n\n"
+        result = f"🔍 **Анализ фотографии** (⚡ {api_name}):\n\n{analysis}\n\n"
         result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
 
         await update.message.reply_text(result, parse_mode='Markdown')
 
-        logger.info(f"Photo analyzed for user {update.effective_user.id}")
+        logger.info(f"Photo analyzed for user {update.effective_user.id} by {api_name}")
 
     except Exception as e:
         logger.error(f"Error analyzing photo: {e}")
@@ -327,7 +500,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений"""
     question = update.message.text
 
-    await update.message.reply_text("🤔 Думаю над вашим вопросом...")
+    await update.message.reply_text("🤔 Думаю над вашим вопросом... (используя параллельные AI)")
 
     try:
         # Формируем улучшенный структурированный промпт
@@ -391,18 +564,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Используй конкретные цифры, формулы, таблицы. Приводи примеры расчетов.
 ВАЖНО: Отвечай как реальный инженер-эксперт с глубокими знаниями и практическим опытом."""
 
-        # Запрос к OpenAI
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
-            ],
-            max_tokens=1000,
-            temperature=0.7
-        )
-
-        answer = response.choices[0].message.content
+        # Получаем самый быстрый ответ от обоих API
+        api_name, answer = await get_fastest_response_text(system_prompt, question)
 
         # Определяем упомянутые нормативы
         mentioned_regs = []
@@ -411,7 +574,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mentioned_regs.append(reg_code)
 
         # Формируем ответ
-        result = f"💬 **Ответ:**\n\n{answer}\n\n"
+        result = f"💬 **Ответ** (⚡ {api_name}):\n\n{answer}\n\n"
 
         if mentioned_regs:
             result += "📚 **Упомянутые нормативы:**\n"
@@ -423,7 +586,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(result, parse_mode='Markdown')
 
-        logger.info(f"Question answered for user {update.effective_user.id}")
+        logger.info(f"Question answered for user {update.effective_user.id} by {api_name}")
 
     except Exception as e:
         logger.error(f"Error answering question: {e}")
