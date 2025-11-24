@@ -46,6 +46,10 @@ openpyxl==3.1.2
 chromadb==0.4.22
 tiktoken==0.5.2
 
+# ===== CELERY (Background Tasks) =====
+celery[redis]==5.3.4
+flower==2.0.1  # Celery monitoring
+
 # ===== TESTING =====
 pytest==8.0.0
 pytest-asyncio==0.23.4
