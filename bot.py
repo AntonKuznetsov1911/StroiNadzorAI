@@ -1555,7 +1555,8 @@ async def management_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка фотографий"""
-    await update.message.reply_text("📸 Анализирую фотографию через Claude AI...")
+    # Отправляем сообщение о процессе и сохраняем его для последующего удаления
+    thinking_message = await update.message.reply_text("📸 Анализирую фотографию...\n\nВы можете не ждать, я пришлю уведомление 😉")
 
     try:
         # Получаем фото (самое большое разрешение)
@@ -1665,6 +1666,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         analysis = response.content[0].text
 
+        # Удаляем сообщение "анализирую фотографию"
+        try:
+            await thinking_message.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete thinking message: {e}")
+
         # Формируем ответ
         result = f"🔍 **Анализ фотографии** (Claude 3.5 Haiku):\n\n{analysis}\n\n"
         result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
@@ -1696,6 +1703,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error analyzing photo: {e}")
+        # Удаляем сообщение "анализирую фотографию" даже в случае ошибки
+        try:
+            await thinking_message.delete()
+        except:
+            pass
         await update.message.reply_text(
             f"❌ Ошибка при анализе фотографии: {str(e)}\n\nПопробуйте еще раз или обратитесь к администратору."
         )
@@ -1709,7 +1721,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Добавляем вопрос пользователя в историю
     add_message_to_history(user_id, 'user', question)
 
-    await update.message.reply_text("🤔 Думаю над вашим вопросом через Claude AI...")
+    # Отправляем сообщение о процессе и сохраняем его для последующего удаления
+    thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом... \n\nВы можете не ждать, я пришлю уведомление 😉")
 
     try:
         # Профессиональный промпт с актуальными требованиями 2025
@@ -2065,6 +2078,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
 
+        # Удаляем сообщение "думаю над вопросом"
+        try:
+            await thinking_message.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete thinking message: {e}")
+
         # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
         max_length = 4000  # Оставляем запас
         if len(result) > max_length:
@@ -2092,6 +2111,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error answering question: {e}")
+
+        # Удаляем сообщение "думаю над вопросом" даже в случае ошибки
+        try:
+            await thinking_message.delete()
+        except:
+            pass
+
         await update.message.reply_text(
             f"❌ Ошибка при обработке вопроса: {str(e)}\n\nПопробуйте переформулировать вопрос."
         )
