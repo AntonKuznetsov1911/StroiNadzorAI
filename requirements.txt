@@ -7,5 +7,9 @@ anthropic>=0.40.0
 # Utilities
 python-dotenv==1.0.1
 
+# PDF/Word Export
+reportlab==4.0.7
+python-docx==1.1.0
+
 # Logging (optional)
 # python-json-logger==2.0.7

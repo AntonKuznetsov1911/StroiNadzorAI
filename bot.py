@@ -7,9 +7,10 @@ import os
 import logging
 import base64
 import json
+import re
 from io import BytesIO
-from datetime import datetime
-from collections import defaultdict
+from datetime import datetime, timedelta
+from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -24,6 +25,29 @@ from telegram.ext import (
 )
 import anthropic
 import asyncio
+
+# PDF/Word экспорт
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+    logging.warning("ReportLab not available - PDF export disabled")
+
+try:
+    from docx import Document
+    from docx.shared import Pt, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    logging.warning("python-docx not available - Word export disabled")
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -99,14 +123,18 @@ def save_user_history(user_id: int):
         logger.error(f"Error saving history for user {user_id}: {e}")
 
 def add_message_to_history(user_id: int, role: str, content: str, image_analyzed: bool = False):
-    """Добавить сообщение в историю диалога"""
+    """Добавить сообщение в историю диалога с автоматическим тегированием"""
     load_user_history(user_id)
+
+    # Извлекаем теги
+    tags = extract_tags_from_message(content)
 
     message = {
         'role': role,
         'content': content,
         'timestamp': datetime.now().isoformat(),
-        'image_analyzed': image_analyzed
+        'image_analyzed': image_analyzed,
+        'tags': tags
     }
 
     user_conversations[user_id].append(message)
@@ -156,6 +184,398 @@ def get_user_stats(user_id: int) -> dict:
     }
 
     return stats
+
+
+# === СИСТЕМА УМНЫХ ТЕГОВ ===
+
+def extract_tags_from_message(content: str) -> list:
+    """Извлечь теги из сообщения (упоминания нормативов, типы дефектов)"""
+    tags = []
+
+    # Извлекаем упоминания нормативов
+    for reg_code in REGULATIONS.keys():
+        if reg_code in content:
+            tags.append(f"норматив:{reg_code}")
+
+    # Извлекаем типы дефектов
+    defect_keywords = {
+        'трещина': 'дефект:трещина',
+        'коррозия': 'дефект:коррозия',
+        'отслоение': 'дефект:отслоение',
+        'деформация': 'дефект:деформация',
+        'протечка': 'дефект:протечка',
+        'бетон': 'материал:бетон',
+        'арматура': 'материал:арматура',
+        'фундамент': 'конструкция:фундамент',
+        'кровля': 'конструкция:кровля',
+        'стена': 'конструкция:стена',
+        'перекрытие': 'конструкция:перекрытие'
+    }
+
+    content_lower = content.lower()
+    for keyword, tag in defect_keywords.items():
+        if keyword in content_lower:
+            tags.append(tag)
+
+    return list(set(tags))  # Убираем дубликаты
+
+def add_message_to_history_with_tags(user_id: int, role: str, content: str, image_analyzed: bool = False):
+    """Добавить сообщение в историю с автоматическим тегированием"""
+    load_user_history(user_id)
+
+    # Извлекаем теги
+    tags = extract_tags_from_message(content)
+
+    message = {
+        'role': role,
+        'content': content,
+        'timestamp': datetime.now().isoformat(),
+        'image_analyzed': image_analyzed,
+        'tags': tags
+    }
+
+    user_conversations[user_id].append(message)
+
+    # Ограничиваем размер истории
+    if len(user_conversations[user_id]) > 50:
+        user_conversations[user_id] = user_conversations[user_id][-50:]
+
+    save_user_history(user_id)
+
+
+# === СИСТЕМА ПОИСКА ПО ИСТОРИИ ===
+
+def search_in_history(user_id: int, query: str, limit: int = 10) -> list:
+    """Поиск по истории диалогов"""
+    load_user_history(user_id)
+    messages = user_conversations[user_id]
+
+    if not messages:
+        return []
+
+    query_lower = query.lower()
+    results = []
+
+    for msg in messages:
+        # Поиск по содержимому
+        if query_lower in msg['content'].lower():
+            results.append(msg)
+        # Поиск по тегам
+        elif 'tags' in msg and any(query_lower in tag.lower() for tag in msg['tags']):
+            results.append(msg)
+
+    # Возвращаем последние N результатов
+    return results[-limit:]
+
+def search_by_tags(user_id: int, tags: list, limit: int = 10) -> list:
+    """Поиск по тегам"""
+    load_user_history(user_id)
+    messages = user_conversations[user_id]
+
+    if not messages:
+        return []
+
+    results = []
+    for msg in messages:
+        if 'tags' in msg:
+            # Проверяем пересечение тегов
+            msg_tags_lower = [t.lower() for t in msg['tags']]
+            tags_lower = [t.lower() for t in tags]
+            if any(tag in msg_tags_lower for tag in tags_lower):
+                results.append(msg)
+
+    return results[-limit:]
+
+
+# === СИСТЕМА РЕКОМЕНДАЦИЙ ===
+
+def get_recommendations(user_id: int) -> dict:
+    """Получить рекомендации на основе истории диалогов"""
+    load_user_history(user_id)
+    messages = user_conversations[user_id]
+
+    if not messages:
+        return {'recommendations': [], 'popular_topics': []}
+
+    # Собираем все теги
+    all_tags = []
+    for msg in messages:
+        if 'tags' in msg:
+            all_tags.extend(msg['tags'])
+
+    # Подсчитываем частоту тегов
+    tag_counter = Counter(all_tags)
+    popular_tags = tag_counter.most_common(5)
+
+    # Формируем рекомендации на основе популярных тем
+    recommendations = []
+    for tag, count in popular_tags:
+        if tag.startswith('норматив:'):
+            reg_code = tag.split(':')[1]
+            if reg_code in REGULATIONS:
+                recommendations.append({
+                    'type': 'related_regulation',
+                    'code': reg_code,
+                    'title': REGULATIONS[reg_code]['title'],
+                    'reason': f'Вы часто обращались к этому нормативу ({count} раз)'
+                })
+        elif tag.startswith('дефект:'):
+            defect_type = tag.split(':')[1]
+            recommendations.append({
+                'type': 'defect_guide',
+                'defect': defect_type,
+                'reason': f'Вы интересовались дефектами типа "{defect_type}"'
+            })
+
+    # Популярные темы
+    popular_topics = []
+    for tag, count in popular_tags:
+        category = tag.split(':')[0] if ':' in tag else 'общее'
+        topic = tag.split(':')[1] if ':' in tag else tag
+        popular_topics.append({
+            'category': category,
+            'topic': topic,
+            'mentions': count
+        })
+
+    return {
+        'recommendations': recommendations[:3],
+        'popular_topics': popular_topics[:5]
+    }
+
+
+# === ЭКСПОРТ В PDF ===
+
+def export_history_to_pdf(user_id: int) -> BytesIO:
+    """Экспортировать историю в PDF"""
+    if not PDF_AVAILABLE:
+        raise ImportError("ReportLab не установлен")
+
+    load_user_history(user_id)
+    messages = user_conversations[user_id]
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                           rightMargin=2*cm, leftMargin=2*cm,
+                           topMargin=2*cm, bottomMargin=2*cm)
+
+    story = []
+    styles = getSampleStyleSheet()
+
+    # Заголовок
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+
+    story.append(Paragraph("История диалогов СтройНадзорAI", title_style))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Информация
+    info_text = f"""
+    Пользователь ID: {user_id}<br/>
+    Дата экспорта: {datetime.now().strftime('%d.%m.%Y %H:%M')}<br/>
+    Всего сообщений: {len(messages)}<br/>
+    """
+    story.append(Paragraph(info_text, styles['Normal']))
+    story.append(Spacer(1, 1*cm))
+
+    # Сообщения
+    for msg in messages:
+        role = "Пользователь" if msg['role'] == 'user' else "Бот"
+        timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%d.%m.%Y %H:%M')
+
+        # Заголовок сообщения
+        msg_header = f"<b>{role}</b> - {timestamp}"
+        story.append(Paragraph(msg_header, styles['Heading3']))
+
+        # Содержимое
+        content = msg['content'][:500] + "..." if len(msg['content']) > 500 else msg['content']
+        content = content.replace('<', '&lt;').replace('>', '&gt;')
+        story.append(Paragraph(content, styles['Normal']))
+
+        # Теги (если есть)
+        if 'tags' in msg and msg['tags']:
+            tags_text = f"<i>Теги: {', '.join(msg['tags'])}</i>"
+            story.append(Paragraph(tags_text, styles['Italic']))
+
+        story.append(Spacer(1, 0.5*cm))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+# === ЭКСПОРТ В WORD ===
+
+def export_history_to_docx(user_id: int) -> BytesIO:
+    """Экспортировать историю в Word"""
+    if not DOCX_AVAILABLE:
+        raise ImportError("python-docx не установлен")
+
+    load_user_history(user_id)
+    messages = user_conversations[user_id]
+
+    doc = Document()
+
+    # Заголовок
+    title = doc.add_heading('История диалогов СтройНадзорAI', 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Информация
+    doc.add_paragraph(f"Пользователь ID: {user_id}")
+    doc.add_paragraph(f"Дата экспорта: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    doc.add_paragraph(f"Всего сообщений: {len(messages)}")
+    doc.add_paragraph()
+
+    # Сообщения
+    for msg in messages:
+        role = "👤 Пользователь" if msg['role'] == 'user' else "🤖 Бот"
+        timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%d.%m.%Y %H:%M')
+
+        # Заголовок сообщения
+        heading = doc.add_heading(f"{role} - {timestamp}", level=2)
+
+        # Содержимое
+        content = msg['content']
+        p = doc.add_paragraph(content)
+
+        # Теги
+        if 'tags' in msg and msg['tags']:
+            tags_p = doc.add_paragraph(f"Теги: {', '.join(msg['tags'])}")
+            tags_p.italic = True
+
+        doc.add_paragraph()
+
+    # Сохраняем в буфер
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+# === БАЗА ТИПОВЫХ ДЕФЕКТОВ ===
+
+DEFECT_DATABASE = {
+    'трещина': {
+        'types': {
+            'усадочная': {
+                'description': 'Вертикальная трещина, возникающая при усадке бетона',
+                'критичность': 'низкая',
+                'норматив': 'СП 63.13330.2018',
+                'допустимая_ширина': '0.1-0.3 мм'
+            },
+            'температурная': {
+                'description': 'Трещина от температурных деформаций',
+                'критичность': 'средняя',
+                'норматив': 'СП 63.13330.2018',
+                'допустимая_ширина': '0.2-0.4 мм'
+            },
+            'силовая': {
+                'description': 'Трещина от превышения нагрузки',
+                'критичность': 'высокая',
+                'норматив': 'СП 63.13330.2018',
+                'допустимая_ширина': '0.1-0.2 мм'
+            }
+        },
+        'методы_устранения': [
+            'Инъектирование эпоксидными смолами',
+            'Усиление внешними композитными материалами',
+            'Устройство обойм'
+        ]
+    },
+    'коррозия': {
+        'types': {
+            'арматуры': {
+                'description': 'Коррозия стальной арматуры в бетоне',
+                'критичность': 'высокая',
+                'норматив': 'СП 28.13330.2017',
+                'признаки': 'Ржавые потеки, отслоение защитного слоя'
+            },
+            'металлоконструкций': {
+                'description': 'Коррозия стальных конструкций',
+                'критичность': 'высокая',
+                'норматив': 'СП 28.13330.2017',
+                'признаки': 'Ржавчина, утонение элементов'
+            }
+        },
+        'методы_устранения': [
+            'Механическая очистка',
+            'Антикоррозионная защита',
+            'Усиление конструкций'
+        ]
+    },
+    'отслоение': {
+        'types': {
+            'защитного_слоя': {
+                'description': 'Отслоение защитного слоя бетона',
+                'критичность': 'высокая',
+                'норматив': 'СП 13-102-2003',
+                'причины': 'Коррозия арматуры, некачественный бетон'
+            },
+            'штукатурки': {
+                'description': 'Отслоение штукатурного слоя',
+                'критичность': 'средняя',
+                'норматив': 'СП 71.13330.2017',
+                'причины': 'Плохая адгезия, влажность'
+            }
+        },
+        'методы_устранения': [
+            'Удаление отслоившихся участков',
+            'Восстановление защитного слоя',
+            'Грунтование поверхности'
+        ]
+    }
+}
+
+def get_defect_info(defect_type: str) -> dict:
+    """Получить информацию о дефекте из базы"""
+    defect_lower = defect_type.lower()
+    for key in DEFECT_DATABASE.keys():
+        if key in defect_lower:
+            return DEFECT_DATABASE[key]
+    return None
+
+
+# === СИСТЕМА УВЕДОМЛЕНИЙ О НОРМАТИВАХ ===
+
+REGULATIONS_UPDATES = {
+    'recent': [
+        {
+            'code': 'СП 24.13330.2021',
+            'title': 'Свайные фундаменты',
+            'date': '2021-12-01',
+            'type': 'новая_редакция',
+            'changes': 'Актуализированы требования к испытаниям свай'
+        },
+        {
+            'code': 'СП 2.13130.2020',
+            'title': 'Обеспечение огнестойкости',
+            'date': '2020-09-01',
+            'type': 'новый',
+            'changes': 'Новые требования к огнезащите'
+        }
+    ],
+    'upcoming': []
+}
+
+def check_for_regulation_updates() -> list:
+    """Проверить наличие обновлений нормативов"""
+    recent_updates = REGULATIONS_UPDATES['recent']
+
+    # Фильтруем обновления за последние 30 дней
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    new_updates = []
+
+    for update in recent_updates:
+        update_date = datetime.fromisoformat(update['date'])
+        if update_date > thirty_days_ago:
+            new_updates.append(update)
+
+    return new_updates
 
 
 # База нормативов с URL-ссылками на первоисточники (обновлено 2024-2025)
@@ -375,14 +795,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • СП, ГОСТ, СНиП с прямыми ссылками
    • Постоянное обновление
 
-📋 **Команды:**
+📋 **Основные команды:**
 /start - Это сообщение
 /help - Подробная справка
-/regulations - Список нормативов
+/regulations - Список нормативов (27 документов)
 /examples - Примеры вопросов
-/history - История ваших диалогов
+
+🧠 **Работа с историей:**
+/history - Последние сообщения
 /stats - Статистика использования
-/clear - Очистить историю диалогов
+/search <запрос> - Поиск по истории
+/export - Экспорт в PDF/Word
+/clear - Очистить историю
+
+💡 **Умные функции (НОВОЕ!):**
+/recommendations - Персональные рекомендации
+/defects <тип> - Справочник дефектов
+/updates - Обновления нормативов
 
 """
 
@@ -586,6 +1015,194 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
+
+
+async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /export - экспортировать историю"""
+    user_id = update.effective_user.id
+
+    keyboard = [
+        [InlineKeyboardButton("📄 PDF", callback_data="export_pdf")],
+        [InlineKeyboardButton("📝 Word", callback_data="export_docx")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="export_cancel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "📤 **Экспорт истории диалогов**\n\n"
+        "Выберите формат для экспорта:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /search - поиск по истории"""
+    user_id = update.effective_user.id
+
+    if not context.args:
+        await update.message.reply_text(
+            "🔍 **Поиск по истории**\n\n"
+            "Использование: `/search <запрос>`\n\n"
+            "Примеры:\n"
+            "• `/search трещина` - найти все сообщения про трещины\n"
+            "• `/search СП 63` - найти все упоминания СП 63.13330.2018\n"
+            "• `/search бетон B25` - найти сообщения про бетон B25",
+            parse_mode='Markdown'
+        )
+        return
+
+    query = " ".join(context.args)
+    results = search_in_history(user_id, query, limit=5)
+
+    if not results:
+        await update.message.reply_text(
+            f"❌ По запросу «{query}» ничего не найдено.\n\n"
+            "Попробуйте изменить запрос или проверьте историю через /history"
+        )
+        return
+
+    response = f"🔍 **Результаты поиска по запросу «{query}»**\n\n"
+    response += f"Найдено: {len(results)} сообщений\n\n"
+
+    for i, msg in enumerate(results, 1):
+        role_emoji = "👤" if msg['role'] == 'user' else "🤖"
+        timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%d.%m %H:%M')
+        content = msg['content'][:150] + "..." if len(msg['content']) > 150 else msg['content']
+
+        response += f"{i}. {role_emoji} **{timestamp}**\n{content}\n\n"
+
+    response += f"\nИспользуйте /history для просмотра полной истории"
+
+    await update.message.reply_text(response, parse_mode='Markdown')
+
+
+async def recommendations_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /recommendations - персональные рекомендации"""
+    user_id = update.effective_user.id
+
+    recs = get_recommendations(user_id)
+
+    if not recs['recommendations'] and not recs['popular_topics']:
+        await update.message.reply_text(
+            "💡 **Рекомендации**\n\n"
+            "Пока недостаточно данных для персональных рекомендаций.\n"
+            "Продолжайте общение с ботом!"
+        )
+        return
+
+    response = "💡 **Персональные рекомендации**\n\n"
+
+    if recs['recommendations']:
+        response += "**На основе ваших интересов:**\n\n"
+        for rec in recs['recommendations']:
+            if rec['type'] == 'related_regulation':
+                response += f"📚 [{rec['code']}]({REGULATIONS[rec['code']]['url']}) - {rec['title']}\n"
+                response += f"_{rec['reason']}_\n\n"
+            elif rec['type'] == 'defect_guide':
+                defect = rec['defect'].capitalize()
+                response += f"🔍 Справочник по дефекту: {defect}\n"
+                response += f"_{rec['reason']}_\n\n"
+
+    if recs['popular_topics']:
+        response += "\n**Ваши популярные темы:**\n\n"
+        for topic in recs['popular_topics']:
+            emoji_map = {
+                'норматив': '📄',
+                'дефект': '⚠️',
+                'материал': '🧱',
+                'конструкция': '🏗️'
+            }
+            emoji = emoji_map.get(topic['category'], '📌')
+            response += f"{emoji} {topic['topic'].capitalize()} - {topic['mentions']} упоминаний\n"
+
+    await update.message.reply_text(response, parse_mode='Markdown', disable_web_page_preview=True)
+
+
+async def defects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /defects - справочник дефектов"""
+    if not context.args:
+        text = """🔍 **Справочник дефектов**
+
+**Доступные типы дефектов:**
+
+⚠️ **Трещины**
+   • Усадочные
+   • Температурные
+   • Силовые (от перегрузки)
+
+🦠 **Коррозия**
+   • Коррозия арматуры
+   • Коррозия металлоконструкций
+
+🔻 **Отслоение**
+   • Отслоение защитного слоя бетона
+   • Отслоение штукатурки
+
+**Использование:**
+`/defects трещина` - информация о трещинах
+`/defects коррозия` - информация о коррозии
+`/defects отслоение` - информация об отслоении"""
+
+        await update.message.reply_text(text, parse_mode='Markdown')
+        return
+
+    defect_query = " ".join(context.args).lower()
+    defect_info = get_defect_info(defect_query)
+
+    if not defect_info:
+        await update.message.reply_text(
+            f"❌ Информация о дефекте «{defect_query}» не найдена.\n\n"
+            "Используйте `/defects` без параметров для списка доступных дефектов.",
+            parse_mode='Markdown'
+        )
+        return
+
+    response = f"🔍 **Справочник: {defect_query.capitalize()}**\n\n"
+
+    if 'types' in defect_info:
+        response += "**Типы:**\n\n"
+        for type_name, type_data in defect_info['types'].items():
+            response += f"• **{type_name.capitalize()}**\n"
+            response += f"  {type_data['description']}\n"
+            response += f"  Критичность: {type_data['критичность']}\n"
+            response += f"  Норматив: {type_data['норматив']}\n"
+            if 'допустимая_ширина' in type_data:
+                response += f"  Допустимая ширина: {type_data['допустимая_ширина']}\n"
+            response += "\n"
+
+    if 'методы_устранения' in defect_info:
+        response += "**Методы устранения:**\n\n"
+        for i, method in enumerate(defect_info['методы_устранения'], 1):
+            response += f"{i}. {method}\n"
+
+    await update.message.reply_text(response, parse_mode='Markdown')
+
+
+async def updates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /updates - проверить обновления нормативов"""
+    recent_updates = REGULATIONS_UPDATES['recent']
+
+    if not recent_updates:
+        await update.message.reply_text(
+            "✅ Все нормативы актуальны.\n"
+            "Новых обновлений не обнаружено."
+        )
+        return
+
+    response = "🆕 **Недавние обновления нормативов**\n\n"
+
+    for upd in recent_updates:
+        type_emoji = "🆕" if upd['type'] == 'новый' else "♻️"
+        update_date = datetime.fromisoformat(upd['date']).strftime('%d.%m.%Y')
+
+        response += f"{type_emoji} **{upd['code']}** - {upd['title']}\n"
+        response += f"Дата: {update_date}\n"
+        response += f"Изменения: {upd['changes']}\n\n"
+
+    response += "\n💡 Используйте /regulations для просмотра всех нормативов"
+
+    await update.message.reply_text(response, parse_mode='Markdown')
 
 
 # === ОБРАБОТКА СООБЩЕНИЙ ===
@@ -935,6 +1552,50 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Ваши данные сохранены.",
             parse_mode='Markdown'
         )
+    elif query.data == "export_pdf":
+        # Экспорт в PDF
+        user_id = update.effective_user.id
+        try:
+            await query.edit_message_text("⏳ Создаю PDF файл...")
+            pdf_buffer = export_history_to_pdf(user_id)
+            filename = f"history_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            await query.message.reply_document(
+                document=pdf_buffer,
+                filename=filename,
+                caption="📄 История диалогов в формате PDF"
+            )
+            await query.edit_message_text("✅ PDF файл успешно создан!")
+        except Exception as e:
+            logger.error(f"Error exporting to PDF: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка при создании PDF:\n{str(e)}\n\n"
+                "Попробуйте экспорт в Word или обратитесь к администратору."
+            )
+    elif query.data == "export_docx":
+        # Экспорт в Word
+        user_id = update.effective_user.id
+        try:
+            await query.edit_message_text("⏳ Создаю Word файл...")
+            docx_buffer = export_history_to_docx(user_id)
+            filename = f"history_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            await query.message.reply_document(
+                document=docx_buffer,
+                filename=filename,
+                caption="📝 История диалогов в формате Word"
+            )
+            await query.edit_message_text("✅ Word файл успешно создан!")
+        except Exception as e:
+            logger.error(f"Error exporting to Word: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка при создании Word:\n{str(e)}\n\n"
+                "Попробуйте экспорт в PDF или обратитесь к администратору."
+            )
+    elif query.data == "export_cancel":
+        # Отмена экспорта
+        await query.edit_message_text(
+            "❌ Экспорт отменен.",
+            parse_mode='Markdown'
+        )
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -968,6 +1629,12 @@ def main():
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("clear", clear_command))
+    # Новые команды v2.1
+    application.add_handler(CommandHandler("export", export_command))
+    application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("recommendations", recommendations_command))
+    application.add_handler(CommandHandler("defects", defects_command))
+    application.add_handler(CommandHandler("updates", updates_command))
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
