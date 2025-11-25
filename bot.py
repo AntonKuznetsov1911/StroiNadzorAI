@@ -1673,7 +1673,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Could not delete thinking message: {e}")
 
         # Формируем ответ
-        result = f"🔍 **Анализ фотографии** (Claude 3.5 Haiku):\n\n{analysis}\n\n"
+        result = f"🔍 **Анализ фотографии:**\n\n{analysis}\n\n"
         result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
 
         # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
@@ -2066,7 +2066,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mentioned_regs.append(reg_code)
 
         # Формируем ответ
-        result = f"💬 **Ответ** (Claude 3.5 Haiku):\n\n{answer}\n\n"
+        result = f"💬 **Ответ:**\n\n{answer}\n\n"
 
         if mentioned_regs:
             result += "📚 **Упомянутые нормативы (нажмите, чтобы открыть):**\n"
