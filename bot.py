@@ -375,7 +375,28 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = f"🔍 **Анализ фотографии** (Claude 3.5 Haiku):\n\n{analysis}\n\n"
         result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
 
-        await update.message.reply_text(result, parse_mode='Markdown')
+        # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
+        max_length = 4000  # Оставляем запас
+        if len(result) > max_length:
+            parts = []
+            current_part = ""
+            for line in result.split('\n'):
+                if len(current_part) + len(line) + 1 > max_length:
+                    parts.append(current_part)
+                    current_part = line + '\n'
+                else:
+                    current_part += line + '\n'
+            if current_part:
+                parts.append(current_part)
+
+            # Отправляем по частям
+            for i, part in enumerate(parts):
+                if i == 0:
+                    await update.message.reply_text(part, parse_mode='Markdown')
+                else:
+                    await update.message.reply_text(f"_(продолжение {i+1}/{len(parts)})_\n\n{part}", parse_mode='Markdown')
+        else:
+            await update.message.reply_text(result, parse_mode='Markdown')
 
         logger.info(f"Photo analyzed for user {update.effective_user.id} by Claude")
 
@@ -502,7 +523,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
 
-        await update.message.reply_text(result, parse_mode='Markdown')
+        # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
+        max_length = 4000  # Оставляем запас
+        if len(result) > max_length:
+            parts = []
+            current_part = ""
+            for line in result.split('\n'):
+                if len(current_part) + len(line) + 1 > max_length:
+                    parts.append(current_part)
+                    current_part = line + '\n'
+                else:
+                    current_part += line + '\n'
+            if current_part:
+                parts.append(current_part)
+
+            # Отправляем по частям
+            for i, part in enumerate(parts):
+                if i == 0:
+                    await update.message.reply_text(part, parse_mode='Markdown')
+                else:
+                    await update.message.reply_text(f"_(продолжение {i+1}/{len(parts)})_\n\n{part}", parse_mode='Markdown')
+        else:
+            await update.message.reply_text(result, parse_mode='Markdown')
 
         logger.info(f"Question answered for user {update.effective_user.id} by Claude")
 
