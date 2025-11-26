@@ -32,7 +32,11 @@ load_dotenv()
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('bot.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -136,6 +140,69 @@ def get_anthropic_client():
     if anthropic_client is None:
         anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     return anthropic_client
+
+
+# === RATE LIMITING СИСТЕМА ===
+
+# Хранилище времени запросов пользователей
+user_request_times = defaultdict(list)
+
+# Настройки rate limiting
+RATE_LIMIT_MAX_REQUESTS = 10  # Максимум запросов
+RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
+
+def check_rate_limit(user_id: int) -> bool:
+    """
+    Проверка rate limit для пользователя
+    Returns: True если запрос разрешен, False если превышен лимит
+    """
+    now = datetime.now()
+    cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW_SECONDS)
+
+    # Очистка старых запросов
+    user_request_times[user_id] = [
+        t for t in user_request_times[user_id] if t > cutoff
+    ]
+
+    # Проверка лимита
+    if len(user_request_times[user_id]) >= RATE_LIMIT_MAX_REQUESTS:
+        logger.warning(f"Rate limit exceeded for user {user_id}")
+        return False
+
+    # Добавляем новый запрос
+    user_request_times[user_id].append(now)
+    return True
+
+
+# === УЛУЧШЕННАЯ ОБРАБОТКА CLAUDE API ===
+
+import time
+
+def call_claude_with_retry(client, **kwargs):
+    """
+    Вызов Claude API с retry logic и exponential backoff
+    """
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return client.messages.create(**kwargs)
+        except anthropic.RateLimitError as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning(f"Claude API rate limit hit (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Claude API rate limit exceeded after {max_retries} attempts")
+                raise Exception("⚠️ Claude API временно недоступен. Попробуйте через минуту.")
+        except anthropic.APIConnectionError as e:
+            logger.error(f"Claude API connection error: {e}")
+            raise Exception("❌ Проблемы с подключением к AI сервису. Проверьте интернет-соединение.")
+        except anthropic.APIError as e:
+            logger.error(f"Claude API error: {e}")
+            raise Exception("⚠️ Временные проблемы с AI сервисом. Попробуйте позже.")
+        except Exception as e:
+            logger.error(f"Unexpected error calling Claude API: {e}")
+            raise
 
 
 # === СИСТЕМА ХРАНЕНИЯ ИСТОРИИ ДИАЛОГОВ ===
@@ -1754,6 +1821,17 @@ async def management_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка фотографий"""
+    user_id = update.effective_user.id
+
+    # Проверка rate limit
+    if not check_rate_limit(user_id):
+        await update.message.reply_text(
+            "⏱️ Слишком много запросов!\n\n"
+            f"Вы можете отправлять до {RATE_LIMIT_MAX_REQUESTS} запросов в минуту.\n"
+            "Пожалуйста, подождите немного и попробуйте снова."
+        )
+        return
+
     # Отправляем сообщение о процессе и сохраняем его для последующего удаления
     thinking_message = await update.message.reply_text("📸 Анализирую фотографию...\n\nВы можете не ждать, я пришлю уведомление 😉")
 
@@ -1825,13 +1903,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if caption:
             user_message += f"\n\nДополнительная информация от пользователя: {caption}"
 
-        # Получаем самый быстрый ответ от обоих API
-        # Вызываем Claude API для анализа изображения
+        # Вызываем Claude API для анализа изображения с retry logic
         client = get_anthropic_client()
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: client.messages.create(
+            lambda: call_claude_with_retry(
+                client,
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=2500,
                 system=system_prompt,
@@ -1911,6 +1989,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
     user_id = update.effective_user.id
     question = update.message.text
+
+    # Проверка rate limit
+    if not check_rate_limit(user_id):
+        await update.message.reply_text(
+            "⏱️ Слишком много запросов!\n\n"
+            f"Вы можете отправлять до {RATE_LIMIT_MAX_REQUESTS} запросов в минуту.\n"
+            "Пожалуйста, подождите немного и попробуйте снова."
+        )
+        return
 
     # Добавляем вопрос пользователя в историю
     add_message_to_history(user_id, 'user', question)
@@ -2235,12 +2322,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем текущий вопрос
         conversation_history.append({"role": "user", "content": question})
 
-        # Вызываем Claude API с контекстом истории
+        # Вызываем Claude API с контекстом истории и retry logic
         client = get_anthropic_client()
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: client.messages.create(
+            lambda: call_claude_with_retry(
+                client,
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=2500,
                 system=system_prompt,

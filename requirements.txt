@@ -1,8 +1,8 @@
 # Telegram Bot
 python-telegram-bot==21.0.1
 
-# AI API
-anthropic>=0.40.0
+# AI API (ЗАФИКСИРОВАННАЯ ВЕРСИЯ для стабильности)
+anthropic==0.40.0
 
 # Utilities
 python-dotenv==1.0.1
