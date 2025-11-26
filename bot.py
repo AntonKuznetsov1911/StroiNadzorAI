@@ -121,6 +121,24 @@ except ImportError:
     DOCX_AVAILABLE = False
     logging.warning("python-docx not available - Word export disabled")
 
+# PostgreSQL Database
+try:
+    from database import (
+        init_db,
+        save_message,
+        get_user_messages,
+        search_messages as db_search_messages,
+        get_user_tags,
+        clear_user_history as db_clear_history,
+        get_total_messages,
+        close_db
+    )
+    DATABASE_AVAILABLE = True
+    logger.info("✅ PostgreSQL модуль загружен")
+except ImportError:
+    DATABASE_AVAILABLE = False
+    logger.warning("⚠️ PostgreSQL не доступен, используется JSON")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -247,13 +265,33 @@ def save_user_history(user_id: int):
     except Exception as e:
         logger.error(f"Error saving history for user {user_id}: {e}")
 
-def add_message_to_history(user_id: int, role: str, content: str, image_analyzed: bool = False):
-    """Добавить сообщение в историю диалога с автоматическим тегированием"""
-    load_user_history(user_id)
-
+async def add_message_to_history_async(user_id: int, role: str, content: str, image_analyzed: bool = False):
+    """Добавить сообщение в историю (PostgreSQL с fallback на JSON)"""
     # Извлекаем теги
     tags = extract_tags_from_message(content)
 
+    # Сохраняем в PostgreSQL если доступен
+    if DATABASE_AVAILABLE:
+        try:
+            await save_message(user_id, role, content, image_analyzed, tags)
+            # Обновляем in-memory кеш
+            load_user_history(user_id)
+            message = {
+                'role': role,
+                'content': content,
+                'timestamp': datetime.now().isoformat(),
+                'image_analyzed': image_analyzed,
+                'tags': tags
+            }
+            user_conversations[user_id].append(message)
+            if len(user_conversations[user_id]) > 50:
+                user_conversations[user_id] = user_conversations[user_id][-50:]
+            return
+        except Exception as e:
+            logger.error(f"PostgreSQL save failed, falling back to JSON: {e}")
+
+    # Fallback на JSON
+    load_user_history(user_id)
     message = {
         'role': role,
         'content': content,
@@ -261,13 +299,25 @@ def add_message_to_history(user_id: int, role: str, content: str, image_analyzed
         'image_analyzed': image_analyzed,
         'tags': tags
     }
-
     user_conversations[user_id].append(message)
-
-    # Ограничиваем размер истории (храним последние 50 сообщений в файле)
     if len(user_conversations[user_id]) > 50:
         user_conversations[user_id] = user_conversations[user_id][-50:]
+    save_user_history(user_id)
 
+def add_message_to_history(user_id: int, role: str, content: str, image_analyzed: bool = False):
+    """Синхронная обертка для совместимости"""
+    load_user_history(user_id)
+    tags = extract_tags_from_message(content)
+    message = {
+        'role': role,
+        'content': content,
+        'timestamp': datetime.now().isoformat(),
+        'image_analyzed': image_analyzed,
+        'tags': tags
+    }
+    user_conversations[user_id].append(message)
+    if len(user_conversations[user_id]) > 50:
+        user_conversations[user_id] = user_conversations[user_id][-50:]
     save_user_history(user_id)
 
 def get_conversation_context(user_id: int) -> list:
@@ -2000,7 +2050,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Добавляем вопрос пользователя в историю
-    add_message_to_history(user_id, 'user', question)
+    await add_message_to_history_async(user_id, 'user', question)
 
     # Отправляем сообщение о процессе и сохраняем его для последующего удаления
     thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом... \n\nВы можете не ждать, я пришлю уведомление 😉")
@@ -2339,7 +2389,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = response.content[0].text
 
         # Добавляем ответ бота в историю
-        add_message_to_history(user_id, 'assistant', answer)
+        await add_message_to_history_async(user_id, 'assistant', answer)
 
         # Определяем упомянутые нормативы
         mentioned_regs = []
@@ -2498,6 +2548,14 @@ def main():
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+    # Инициализируем PostgreSQL базу данных
+    if DATABASE_AVAILABLE:
+        try:
+            loop.run_until_complete(init_db())
+        except Exception as e:
+            logger.error(f"Ошибка инициализации PostgreSQL: {e}")
+            logger.info("Продолжаем работу с JSON хранилищем")
 
     logger.info("✅ Бот СтройНадзорAI запущен успешно!")
 
