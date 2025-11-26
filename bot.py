@@ -232,6 +232,21 @@ except ImportError:
     ROLES_AVAILABLE = False
     logger.warning("⚠️ Модуль role_modes.py не найден")
 
+# Галерея дефектов v3.4
+try:
+    from defect_gallery import (
+        defects_command,
+        handle_defect_callback,
+        get_defect_count,
+        DEFECT_CATEGORIES
+    )
+    DEFECTS_GALLERY_AVAILABLE = True
+    defect_count = get_defect_count()
+    logger.info(f"✅ Галерея дефектов v3.4 загружена ({defect_count} дефектов в базе)")
+except ImportError:
+    DEFECTS_GALLERY_AVAILABLE = False
+    logger.warning("⚠️ Модуль defect_gallery.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1347,10 +1362,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /export - Экспорт в PDF/Word
    /clear - Очистить историю
 
-**💡 УМНЫЕ ФУНКЦИИ:**
+**💡 УМНЫЕ ФУНКЦИИ v3.4:**
+   /calculators - 6 интерактивных калькуляторов
+   /defects - Галерея типичных дефектов (12 дефектов)
+   /templates - Шаблоны документов
+   /role - Выбор режима работы (прораб/ГИП/ОТК)
    /recommendations - Персональные рекомендации
-   /defects <тип> - Справочник дефектов
-   /updates - Обновления нормативов
 
 **Примеры вопросов:**
 📌 Какие требования к прочности бетона класса B25?
@@ -1994,6 +2011,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Формируем профессиональный промпт для Claude 3.5 Sonnet
         system_prompt = """Вы — ведущий инженер-эксперт по техническому надзору в строительстве с 20-летним стажем работы на крупных объектах России. Ваша специализация: объективная экспертиза конструкций, диагностика дефектов, нормативный контроль.
+
+💡 У бота есть галерея типичных дефектов с подробным описанием - пользователь может открыть её командой /defects
 
 🎯 ТРЕБОВАНИЯ К АНАЛИЗУ:
 
@@ -3012,6 +3031,13 @@ def main():
     if ROLES_AVAILABLE:
         application.add_handler(CommandHandler("role", role_command))
         logger.info("✅ Команда /role зарегистрирована")
+
+    # === ГАЛЕРЕЯ ДЕФЕКТОВ v3.4 ===
+    if DEFECTS_GALLERY_AVAILABLE:
+        application.add_handler(CommandHandler("defects", defects_command))
+        # Обработчик callback для навигации по галерее
+        application.add_handler(CallbackQueryHandler(handle_defect_callback, pattern="^def"))
+        logger.info("✅ Галерея дефектов v3.4 зарегистрирована")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
