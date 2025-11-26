@@ -175,14 +175,19 @@ except ImportError:
     CALCULATORS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculators.py не найден")
 
-# Интерактивные обработчики калькуляторов v3.1
+# Интерактивные обработчики калькуляторов v3.3
 try:
     from calculator_handlers import (
         create_concrete_calculator_handler,
+        create_rebar_calculator_handler,
+        create_formwork_calculator_handler,
+        create_electrical_calculator_handler,
+        create_water_calculator_handler,
+        create_winter_calculator_handler,
         quick_concrete
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.1 загружены")
+    logger.info("✅ Интерактивные калькуляторы v3.3 (все 6) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -3008,13 +3013,18 @@ def main():
         application.add_handler(CommandHandler("role", role_command))
         logger.info("✅ Команда /role зарегистрирована")
 
-    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.1 ===
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
-        # ConversationHandler для калькулятора бетона (приоритет выше callback)
+        # ConversationHandler для всех 6 калькуляторов
         application.add_handler(create_concrete_calculator_handler())
+        application.add_handler(create_rebar_calculator_handler())
+        application.add_handler(create_formwork_calculator_handler())
+        application.add_handler(create_electrical_calculator_handler())
+        application.add_handler(create_water_calculator_handler())
+        application.add_handler(create_winter_calculator_handler())
         # Быстрая команда для расчёта одной строкой
         application.add_handler(CommandHandler("calc_concrete", quick_concrete))
-        logger.info("✅ Интерактивный калькулятор бетона зарегистрирован")
+        logger.info("✅ Все 6 интерактивных калькуляторов зарегистрированы (v3.3)")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

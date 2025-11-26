@@ -354,3 +354,752 @@ async def quick_concrete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"❌ Ошибка в параметрах: {str(e)}\n\n"
             "Проверьте формат команды."
         )
+
+
+# ========================================
+# КАЛЬКУЛЯТОР АРМАТУРЫ - ConversationHandler
+# ========================================
+
+async def rebar_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало диалога для калькулятора арматуры"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "🔧 **КАЛЬКУЛЯТОР АРМАТУРЫ**\n\n"
+            "Шаг 1 из 6\n\n"
+            "Введите **длину** элемента в метрах:\n\n"
+            "_Например: 10_",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "🔧 **КАЛЬКУЛЯТОР АРМАТУРЫ**\n\n"
+            "Шаг 1 из 6\n\n"
+            "Введите **длину** элемента в метрах:",
+            parse_mode='Markdown'
+        )
+    return REBAR_LENGTH
+
+
+async def rebar_length(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить длину"""
+    try:
+        length = float(update.message.text.replace(',', '.'))
+        if length <= 0 or length > 1000:
+            await update.message.reply_text("❌ Длина должна быть от 0 до 1000 м")
+            return REBAR_LENGTH
+
+        context.user_data['rebar_length'] = length
+        await update.message.reply_text(
+            f"✅ Длина: {length} м\n\n"
+            "🔧 Шаг 2 из 6\n\n"
+            "Введите **ширину** элемента в метрах:",
+            parse_mode='Markdown'
+        )
+        return REBAR_WIDTH
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return REBAR_LENGTH
+
+
+async def rebar_width(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить ширину"""
+    try:
+        width = float(update.message.text.replace(',', '.'))
+        if width <= 0 or width > 1000:
+            await update.message.reply_text("❌ Ширина должна быть от 0 до 1000 м")
+            return REBAR_WIDTH
+
+        context.user_data['rebar_width'] = width
+        await update.message.reply_text(
+            f"✅ Ширина: {width} м\n\n"
+            "🔧 Шаг 3 из 6\n\n"
+            "Введите **высоту (толщину)** элемента в метрах:",
+            parse_mode='Markdown'
+        )
+        return REBAR_HEIGHT
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return REBAR_WIDTH
+
+
+async def rebar_height(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить высоту"""
+    try:
+        height = float(update.message.text.replace(',', '.'))
+        if height <= 0 or height > 10:
+            await update.message.reply_text("❌ Высота должна быть от 0 до 10 м")
+            return REBAR_HEIGHT
+
+        context.user_data['rebar_height'] = height
+
+        # Кнопки выбора диаметра
+        keyboard = [
+            [InlineKeyboardButton("Ø8", callback_data="rebar_diam_8"),
+             InlineKeyboardButton("Ø10", callback_data="rebar_diam_10"),
+             InlineKeyboardButton("Ø12", callback_data="rebar_diam_12")],
+            [InlineKeyboardButton("Ø14", callback_data="rebar_diam_14"),
+             InlineKeyboardButton("Ø16", callback_data="rebar_diam_16"),
+             InlineKeyboardButton("Ø18", callback_data="rebar_diam_18")],
+            [InlineKeyboardButton("Ø20", callback_data="rebar_diam_20"),
+             InlineKeyboardButton("Ø22", callback_data="rebar_diam_22"),
+             InlineKeyboardButton("Ø25", callback_data="rebar_diam_25")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"✅ Высота: {height} м\n\n"
+            "🔧 Шаг 4 из 6\n\n"
+            "Выберите **диаметр арматуры** (мм):",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return REBAR_DIAMETER
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return REBAR_HEIGHT
+
+
+async def rebar_diameter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить диаметр"""
+    query = update.callback_query
+    await query.answer()
+
+    diameter = int(query.data.replace("rebar_diam_", ""))
+    context.user_data['rebar_diameter'] = diameter
+
+    await query.edit_message_text(
+        f"✅ Диаметр: Ø{diameter} мм\n\n"
+        "🔧 Шаг 5 из 6\n\n"
+        "Введите **шаг арматуры** в мм:\n\n"
+        "_Например: 200 (для шага 20 см)_",
+        parse_mode='Markdown'
+    )
+    return REBAR_SPACING
+
+
+async def rebar_spacing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить шаг"""
+    try:
+        spacing = float(update.message.text.replace(',', '.'))
+        if spacing <= 0 or spacing > 1000:
+            await update.message.reply_text("❌ Шаг должен быть от 0 до 1000 мм")
+            return REBAR_SPACING
+
+        context.user_data['rebar_spacing'] = spacing
+
+        # Кнопки выбора типа элемента
+        keyboard = [
+            [InlineKeyboardButton("Плита (slab)", callback_data="rebar_type_slab")],
+            [InlineKeyboardButton("Балка (beam)", callback_data="rebar_type_beam")],
+            [InlineKeyboardButton("Колонна (column)", callback_data="rebar_type_column")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"✅ Шаг: {spacing} мм\n\n"
+            "🔧 Шаг 6 из 6\n\n"
+            "Выберите **тип элемента**:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return REBAR_TYPE
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return REBAR_SPACING
+
+
+async def rebar_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Рассчитать арматуру"""
+    query = update.callback_query
+    await query.answer()
+
+    element_type = query.data.replace("rebar_type_", "")
+
+    # Получаем параметры
+    length = context.user_data['rebar_length']
+    width = context.user_data['rebar_width']
+    height = context.user_data['rebar_height']
+    diameter = context.user_data['rebar_diameter']
+    spacing = context.user_data['rebar_spacing']
+
+    if CALCULATORS_AVAILABLE:
+        result = calculate_reinforcement(length, width, height, diameter, spacing, element_type)
+        formatted_result = format_calculator_result("reinforcement", result)
+
+        type_names = {"slab": "Плита", "beam": "Балка", "column": "Колонна"}
+
+        await query.edit_message_text(
+            f"✅ **РЕЗУЛЬТАТ РАСЧЁТА АРМАТУРЫ**\n\n"
+            f"{formatted_result}\n\n"
+            f"📋 Параметры:\n"
+            f"• Длина: {length} м\n"
+            f"• Ширина: {width} м\n"
+            f"• Высота: {height} м\n"
+            f"• Диаметр: Ø{diameter} мм\n"
+            f"• Шаг: {spacing} мм\n"
+            f"• Тип: {type_names.get(element_type, element_type)}",
+            parse_mode='Markdown'
+        )
+    else:
+        await query.edit_message_text("❌ Модуль калькуляторов недоступен.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+def create_rebar_calculator_handler():
+    """Создать ConversationHandler для калькулятора арматуры"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(rebar_start, pattern="^calc_reinforcement$")
+        ],
+        states={
+            REBAR_LENGTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, rebar_length)],
+            REBAR_WIDTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, rebar_width)],
+            REBAR_HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, rebar_height)],
+            REBAR_DIAMETER: [CallbackQueryHandler(rebar_diameter, pattern="^rebar_diam_")],
+            REBAR_SPACING: [MessageHandler(filters.TEXT & ~filters.COMMAND, rebar_spacing)],
+            REBAR_TYPE: [CallbackQueryHandler(rebar_calculate, pattern="^rebar_type_")],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="rebar_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
+
+
+# ========================================
+# КАЛЬКУЛЯТОР ОПАЛУБКИ - ConversationHandler
+# ========================================
+
+async def formwork_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало диалога для калькулятора опалубки"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "📐 **КАЛЬКУЛЯТОР ОПАЛУБКИ**\n\n"
+            "Шаг 1 из 3\n\n"
+            "Введите **площадь опалубки** в м²:\n\n"
+            "_Например: 150_",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "📐 **КАЛЬКУЛЯТОР ОПАЛУБКИ**\n\n"
+            "Шаг 1 из 3\n\n"
+            "Введите **площадь опалубки** в м²:",
+            parse_mode='Markdown'
+        )
+    return FORMWORK_AREA
+
+
+async def formwork_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить площадь"""
+    try:
+        area = float(update.message.text.replace(',', '.'))
+        if area <= 0 or area > 100000:
+            await update.message.reply_text("❌ Площадь должна быть от 0 до 100000 м²")
+            return FORMWORK_AREA
+
+        context.user_data['formwork_area'] = area
+        await update.message.reply_text(
+            f"✅ Площадь: {area} м²\n\n"
+            "📐 Шаг 2 из 3\n\n"
+            "Введите **срок эксплуатации** в днях:\n\n"
+            "_Например: 30_",
+            parse_mode='Markdown'
+        )
+        return FORMWORK_DURATION
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return FORMWORK_AREA
+
+
+async def formwork_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить срок"""
+    try:
+        duration = int(update.message.text.replace(',', '.'))
+        if duration <= 0 or duration > 365:
+            await update.message.reply_text("❌ Срок должен быть от 1 до 365 дней")
+            return FORMWORK_DURATION
+
+        context.user_data['formwork_duration'] = duration
+
+        # Кнопки типа опалубки
+        keyboard = [
+            [InlineKeyboardButton("Щитовая (panel)", callback_data="formwork_type_panel")],
+            [InlineKeyboardButton("Стеновая (wall)", callback_data="formwork_type_wall")],
+            [InlineKeyboardButton("Универсальная (universal)", callback_data="formwork_type_universal")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"✅ Срок: {duration} дней\n\n"
+            "📐 Шаг 3 из 3\n\n"
+            "Выберите **тип опалубки**:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return FORMWORK_TYPE
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return FORMWORK_DURATION
+
+
+async def formwork_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Рассчитать опалубку"""
+    query = update.callback_query
+    await query.answer()
+
+    formwork_type = query.data.replace("formwork_type_", "")
+
+    area = context.user_data['formwork_area']
+    duration = context.user_data['formwork_duration']
+
+    if CALCULATORS_AVAILABLE:
+        result = calculate_formwork(area, duration, formwork_type)
+        formatted_result = format_calculator_result("formwork", result)
+
+        type_names = {"panel": "Щитовая", "wall": "Стеновая", "universal": "Универсальная"}
+
+        await query.edit_message_text(
+            f"✅ **РЕЗУЛЬТАТ РАСЧЁТА ОПАЛУБКИ**\n\n"
+            f"{formatted_result}\n\n"
+            f"📋 Параметры:\n"
+            f"• Площадь: {area} м²\n"
+            f"• Срок: {duration} дней\n"
+            f"• Тип: {type_names.get(formwork_type, formwork_type)}",
+            parse_mode='Markdown'
+        )
+    else:
+        await query.edit_message_text("❌ Модуль калькуляторов недоступен.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+def create_formwork_calculator_handler():
+    """Создать ConversationHandler для калькулятора опалубки"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(formwork_start, pattern="^calc_formwork$")
+        ],
+        states={
+            FORMWORK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, formwork_area)],
+            FORMWORK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, formwork_duration)],
+            FORMWORK_TYPE: [CallbackQueryHandler(formwork_calculate, pattern="^formwork_type_")],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="formwork_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
+
+
+# ========================================
+# КАЛЬКУЛЯТОР ЭЛЕКТРОСНАБЖЕНИЯ - ConversationHandler
+# ========================================
+
+async def elec_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало диалога для калькулятора электроснабжения"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "⚡ **КАЛЬКУЛЯТОР ЭЛЕКТРОСНАБЖЕНИЯ**\n\n"
+            "Шаг 1 из 5\n\n"
+            "Введите **количество кранов** (шт):\n\n"
+            "_Например: 2_",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "⚡ **КАЛЬКУЛЯТОР ЭЛЕКТРОСНАБЖЕНИЯ**\n\n"
+            "Шаг 1 из 5\n\n"
+            "Введите **количество кранов** (шт):",
+            parse_mode='Markdown'
+        )
+    return ELEC_CRANE
+
+
+async def elec_crane(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить количество кранов"""
+    try:
+        crane_count = int(update.message.text.replace(',', '.'))
+        if crane_count < 0 or crane_count > 100:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 100")
+            return ELEC_CRANE
+
+        context.user_data['elec_crane'] = crane_count
+        await update.message.reply_text(
+            f"✅ Краны: {crane_count} шт\n\n"
+            "⚡ Шаг 2 из 5\n\n"
+            "Введите **количество насосов** (шт):",
+            parse_mode='Markdown'
+        )
+        return ELEC_PUMP
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return ELEC_CRANE
+
+
+async def elec_pump(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить количество насосов"""
+    try:
+        pump_count = int(update.message.text.replace(',', '.'))
+        if pump_count < 0 or pump_count > 100:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 100")
+            return ELEC_PUMP
+
+        context.user_data['elec_pump'] = pump_count
+        await update.message.reply_text(
+            f"✅ Насосы: {pump_count} шт\n\n"
+            "⚡ Шаг 3 из 5\n\n"
+            "Введите **количество сварочных аппаратов** (шт):",
+            parse_mode='Markdown'
+        )
+        return ELEC_WELDER
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return ELEC_PUMP
+
+
+async def elec_welder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить количество сварочных"""
+    try:
+        welder_count = int(update.message.text.replace(',', '.'))
+        if welder_count < 0 or welder_count > 100:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 100")
+            return ELEC_WELDER
+
+        context.user_data['elec_welder'] = welder_count
+        await update.message.reply_text(
+            f"✅ Сварочные: {welder_count} шт\n\n"
+            "⚡ Шаг 4 из 5\n\n"
+            "Введите **количество обогревателей** (шт):",
+            parse_mode='Markdown'
+        )
+        return ELEC_HEATER
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return ELEC_WELDER
+
+
+async def elec_heater(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить количество обогревателей"""
+    try:
+        heater_count = int(update.message.text.replace(',', '.'))
+        if heater_count < 0 or heater_count > 100:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 100")
+            return ELEC_HEATER
+
+        context.user_data['elec_heater'] = heater_count
+        await update.message.reply_text(
+            f"✅ Обогреватели: {heater_count} шт\n\n"
+            "⚡ Шаг 5 из 5\n\n"
+            "Введите **количество бытовок** (шт):",
+            parse_mode='Markdown'
+        )
+        return ELEC_CABIN
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return ELEC_HEATER
+
+
+async def elec_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Рассчитать электроснабжение"""
+    try:
+        cabin_count = int(update.message.text.replace(',', '.'))
+        if cabin_count < 0 or cabin_count > 100:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 100")
+            return ELEC_CABIN
+
+        crane_count = context.user_data['elec_crane']
+        pump_count = context.user_data['elec_pump']
+        welder_count = context.user_data['elec_welder']
+        heater_count = context.user_data['elec_heater']
+
+        if CALCULATORS_AVAILABLE:
+            result = calculate_electrical(crane_count, pump_count, welder_count, heater_count, cabin_count)
+            formatted_result = format_calculator_result("electrical", result)
+
+            await update.message.reply_text(
+                f"✅ **РЕЗУЛЬТАТ РАСЧЁТА ЭЛЕКТРОСНАБЖЕНИЯ**\n\n"
+                f"{formatted_result}\n\n"
+                f"📋 Параметры:\n"
+                f"• Краны: {crane_count} шт\n"
+                f"• Насосы: {pump_count} шт\n"
+                f"• Сварочные: {welder_count} шт\n"
+                f"• Обогреватели: {heater_count} шт\n"
+                f"• Бытовки: {cabin_count} шт",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text("❌ Модуль калькуляторов недоступен.")
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return ELEC_CABIN
+
+
+def create_electrical_calculator_handler():
+    """Создать ConversationHandler для калькулятора электроснабжения"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(elec_start, pattern="^calc_electrical$")
+        ],
+        states={
+            ELEC_CRANE: [MessageHandler(filters.TEXT & ~filters.COMMAND, elec_crane)],
+            ELEC_PUMP: [MessageHandler(filters.TEXT & ~filters.COMMAND, elec_pump)],
+            ELEC_WELDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, elec_welder)],
+            ELEC_HEATER: [MessageHandler(filters.TEXT & ~filters.COMMAND, elec_heater)],
+            ELEC_CABIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, elec_calculate)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="electrical_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
+
+
+# ========================================
+# КАЛЬКУЛЯТОР ВОДОСНАБЖЕНИЯ - ConversationHandler
+# ========================================
+
+async def water_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало диалога для калькулятора водоснабжения"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "💧 **КАЛЬКУЛЯТОР ВОДОСНАБЖЕНИЯ**\n\n"
+            "Шаг 1 из 2\n\n"
+            "Введите **количество рабочих** (чел):\n\n"
+            "_Например: 50_",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "💧 **КАЛЬКУЛЯТОР ВОДОСНАБЖЕНИЯ**\n\n"
+            "Шаг 1 из 2\n\n"
+            "Введите **количество рабочих** (чел):",
+            parse_mode='Markdown'
+        )
+    return WATER_WORKERS
+
+
+async def water_workers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить количество рабочих"""
+    try:
+        workers = int(update.message.text.replace(',', '.'))
+        if workers <= 0 or workers > 10000:
+            await update.message.reply_text("❌ Количество должно быть от 1 до 10000")
+            return WATER_WORKERS
+
+        context.user_data['water_workers'] = workers
+        await update.message.reply_text(
+            f"✅ Рабочие: {workers} чел\n\n"
+            "💧 Шаг 2 из 2\n\n"
+            "Введите **количество замесов бетона в день**:\n\n"
+            "_Например: 10_",
+            parse_mode='Markdown'
+        )
+        return WATER_BATCHES
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return WATER_WORKERS
+
+
+async def water_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Рассчитать водоснабжение"""
+    try:
+        batches = int(update.message.text.replace(',', '.'))
+        if batches < 0 or batches > 1000:
+            await update.message.reply_text("❌ Количество должно быть от 0 до 1000")
+            return WATER_BATCHES
+
+        workers = context.user_data['water_workers']
+
+        if CALCULATORS_AVAILABLE:
+            result = calculate_water(workers, batches)
+            formatted_result = format_calculator_result("water", result)
+
+            await update.message.reply_text(
+                f"✅ **РЕЗУЛЬТАТ РАСЧЁТА ВОДОСНАБЖЕНИЯ**\n\n"
+                f"{formatted_result}\n\n"
+                f"📋 Параметры:\n"
+                f"• Рабочие: {workers} чел\n"
+                f"• Замесов бетона в день: {batches}",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text("❌ Модуль калькуляторов недоступен.")
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    except ValueError:
+        await update.message.reply_text("❌ Введите целое число")
+        return WATER_BATCHES
+
+
+def create_water_calculator_handler():
+    """Создать ConversationHandler для калькулятора водоснабжения"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(water_start, pattern="^calc_water$")
+        ],
+        states={
+            WATER_WORKERS: [MessageHandler(filters.TEXT & ~filters.COMMAND, water_workers)],
+            WATER_BATCHES: [MessageHandler(filters.TEXT & ~filters.COMMAND, water_calculate)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="water_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
+
+
+# ========================================
+# КАЛЬКУЛЯТОР ЗИМНЕГО ПРОГРЕВА - ConversationHandler
+# ========================================
+
+async def winter_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало диалога для калькулятора зимнего прогрева"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "❄️ **КАЛЬКУЛЯТОР ЗИМНЕГО ПРОГРЕВА**\n\n"
+            "Шаг 1 из 3\n\n"
+            "Введите **объём бетона** в м³:\n\n"
+            "_Например: 50_",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "❄️ **КАЛЬКУЛЯТОР ЗИМНЕГО ПРОГРЕВА**\n\n"
+            "Шаг 1 из 3\n\n"
+            "Введите **объём бетона** в м³:",
+            parse_mode='Markdown'
+        )
+    return WINTER_VOLUME
+
+
+async def winter_volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить объём бетона"""
+    try:
+        volume = float(update.message.text.replace(',', '.'))
+        if volume <= 0 or volume > 10000:
+            await update.message.reply_text("❌ Объём должен быть от 0 до 10000 м³")
+            return WINTER_VOLUME
+
+        context.user_data['winter_volume'] = volume
+        await update.message.reply_text(
+            f"✅ Объём: {volume} м³\n\n"
+            "❄️ Шаг 2 из 3\n\n"
+            "Введите **температуру воздуха** (°C):\n\n"
+            "_Например: -15_",
+            parse_mode='Markdown'
+        )
+        return WINTER_TEMP
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return WINTER_VOLUME
+
+
+async def winter_temp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получить температуру"""
+    try:
+        temp = float(update.message.text.replace(',', '.'))
+        if temp > 5 or temp < -50:
+            await update.message.reply_text("❌ Температура должна быть от -50 до +5 °C")
+            return WINTER_TEMP
+
+        context.user_data['winter_temp'] = temp
+
+        # Кнопки метода прогрева
+        keyboard = [
+            [InlineKeyboardButton("Электроды (electrode)", callback_data="winter_method_electrode")],
+            [InlineKeyboardButton("Провод (wire)", callback_data="winter_method_wire")],
+            [InlineKeyboardButton("Термомат (thermomat)", callback_data="winter_method_thermomat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"✅ Температура: {temp} °C\n\n"
+            "❄️ Шаг 3 из 3\n\n"
+            "Выберите **метод прогрева**:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return WINTER_METHOD
+    except ValueError:
+        await update.message.reply_text("❌ Введите число")
+        return WINTER_TEMP
+
+
+async def winter_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Рассчитать зимний прогрев"""
+    query = update.callback_query
+    await query.answer()
+
+    method = query.data.replace("winter_method_", "")
+
+    volume = context.user_data['winter_volume']
+    temp = context.user_data['winter_temp']
+
+    if CALCULATORS_AVAILABLE:
+        result = calculate_winter_heating(volume, temp, method)
+        formatted_result = format_calculator_result("winter_heating", result)
+
+        method_names = {"electrode": "Электроды", "wire": "Провод ПНСВ", "thermomat": "Термоматы"}
+
+        await query.edit_message_text(
+            f"✅ **РЕЗУЛЬТАТ РАСЧЁТА ЗИМНЕГО ПРОГРЕВА**\n\n"
+            f"{formatted_result}\n\n"
+            f"📋 Параметры:\n"
+            f"• Объём бетона: {volume} м³\n"
+            f"• Температура: {temp} °C\n"
+            f"• Метод: {method_names.get(method, method)}",
+            parse_mode='Markdown'
+        )
+    else:
+        await query.edit_message_text("❌ Модуль калькуляторов недоступен.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+def create_winter_calculator_handler():
+    """Создать ConversationHandler для калькулятора зимнего прогрева"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(winter_start, pattern="^calc_winter_heating$")
+        ],
+        states={
+            WINTER_VOLUME: [MessageHandler(filters.TEXT & ~filters.COMMAND, winter_volume)],
+            WINTER_TEMP: [MessageHandler(filters.TEXT & ~filters.COMMAND, winter_temp)],
+            WINTER_METHOD: [CallbackQueryHandler(winter_calculate, pattern="^winter_method_")],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="winter_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
