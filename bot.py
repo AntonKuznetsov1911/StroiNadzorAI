@@ -139,6 +139,42 @@ except ImportError:
     DATABASE_AVAILABLE = False
     logger.warning("⚠️ PostgreSQL не доступен, используется JSON")
 
+# Улучшения v3.0
+try:
+    from improvements_v3 import (
+        create_answer_buttons,
+        create_quick_actions_menu,
+        create_calculators_menu,
+        create_regulations_category_menu,
+        create_region_selection_menu,
+        get_improved_help_text,
+        REGULATIONS_CATEGORIES,
+        CALCULATORS,
+        REGIONS
+    )
+    IMPROVEMENTS_V3_AVAILABLE = True
+    logger.info("✅ Модуль улучшений v3.0 загружен")
+except ImportError:
+    IMPROVEMENTS_V3_AVAILABLE = False
+    logger.warning("⚠️ Модуль improvements_v3.py не найден")
+
+# Калькуляторы
+try:
+    from calculators import (
+        calculate_concrete,
+        calculate_reinforcement,
+        calculate_formwork,
+        calculate_electrical,
+        calculate_water,
+        calculate_winter_heating,
+        format_calculator_result
+    )
+    CALCULATORS_AVAILABLE = True
+    logger.info("✅ Модуль калькуляторов загружен (6 калькуляторов)")
+except ImportError:
+    CALCULATORS_AVAILABLE = False
+    logger.warning("⚠️ Модуль calculators.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -2437,8 +2473,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await update.message.reply_text(f"(продолжение {i+1}/{len(parts)})\n\n{part}")
         else:
+            # Создаём интерактивные кнопки под ответом (v3.0)
+            reply_markup = None
+            if IMPROVEMENTS_V3_AVAILABLE:
+                reply_markup = create_answer_buttons()
+
             # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
-            await update.message.reply_text(result)
+            await update.message.reply_text(result, reply_markup=reply_markup)
 
         logger.info(f"Question answered for user {update.effective_user.id} by Claude")
 
@@ -2536,6 +2577,59 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
 
+# === НОВЫЕ КОМАНДЫ v3.0 ===
+
+async def calculators_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /calculators - Показать меню калькуляторов"""
+    if not CALCULATORS_AVAILABLE:
+        await update.message.reply_text(
+            "⚠️ Модуль калькуляторов недоступен.\n\nОбратитесь к администратору."
+        )
+        return
+
+    calc_text = """🧮 **СТРОИТЕЛЬНЫЕ КАЛЬКУЛЯТОРЫ v3.0**
+
+Доступные калькуляторы:
+
+🏗️ **Бетон** - Объём, класс, прочность, стоимость
+🔧 **Арматура** - Вес, метры, процент армирования
+📦 **Опалубка** - Оборачиваемость, количество комплектов
+⚡ **Электроснабжение** - Мощность для стройплощадки
+💧 **Водоснабжение** - Расход воды на объекте
+❄️ **Зимний прогрев** - Прогрев бетона при минусовой температуре
+
+Выберите калькулятор из меню ниже:"""
+
+    if IMPROVEMENTS_V3_AVAILABLE:
+        keyboard = create_calculators_menu()
+        await update.message.reply_text(calc_text, parse_mode='Markdown', reply_markup=keyboard)
+    else:
+        await update.message.reply_text(calc_text, parse_mode='Markdown')
+
+
+async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /region - Выбор региона"""
+    if not IMPROVEMENTS_V3_AVAILABLE:
+        await update.message.reply_text(
+            "⚠️ Функция региональных настроек недоступна."
+        )
+        return
+
+    region_text = """📍 **РЕГИОНАЛЬНЫЕ НАСТРОЙКИ**
+
+Выберите ваш регион для учёта климатических особенностей:
+
+• Климатические коэффициенты
+• Температурные зоны
+• Сейсмичность
+• Стоимость работ
+
+Выберите регион из списка:"""
+
+    keyboard = create_region_selection_menu()
+    await update.message.reply_text(region_text, parse_mode='Markdown', reply_markup=keyboard)
+
+
 # === ГЛАВНАЯ ФУНКЦИЯ ===
 
 def main():
@@ -2586,6 +2680,10 @@ def main():
     application.add_handler(CommandHandler("estimating", estimating_command))
     application.add_handler(CommandHandler("legal", legal_command))
     application.add_handler(CommandHandler("management", management_command))
+
+    # Новые команды v3.0
+    application.add_handler(CommandHandler("calculators", calculators_command))
+    application.add_handler(CommandHandler("region", region_command))
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
