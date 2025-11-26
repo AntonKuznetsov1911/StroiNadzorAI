@@ -247,6 +247,22 @@ except ImportError:
     DEFECTS_GALLERY_AVAILABLE = False
     logger.warning("⚠️ Модуль defect_gallery.py не найден")
 
+# Управление историей v3.5
+try:
+    from history_manager import (
+        history_command,
+        stats_command,
+        search_command,
+        export_command,
+        clear_history_command,
+        handle_history_callback
+    )
+    HISTORY_MANAGER_AVAILABLE = True
+    logger.info("✅ Управление историей v3.5 загружено (поиск + экспорт)")
+except ImportError:
+    HISTORY_MANAGER_AVAILABLE = False
+    logger.warning("⚠️ Модуль history_manager.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1355,11 +1371,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /legal - Юридические вопросы и претензии
    /management - Управление проектами
 
-**🔍 РАБОТА С ИСТОРИЕЙ:**
-   /history - Последние 5 сообщений
-   /stats - Статистика использования
-   /search <запрос> - Поиск по истории
-   /export - Экспорт в PDF/Word
+**🔍 РАБОТА С ИСТОРИЕЙ v3.5:**
+   /history - Последние 5 диалогов + кнопки действий
+   /stats - Подробная статистика использования
+   /search <запрос> - Поиск по истории диалогов
+   /export - Экспорт истории (TXT/Markdown)
    /clear - Очистить историю
 
 **💡 УМНЫЕ ФУНКЦИИ v3.4:**
@@ -3038,6 +3054,17 @@ def main():
         # Обработчик callback для навигации по галерее
         application.add_handler(CallbackQueryHandler(handle_defect_callback, pattern="^def"))
         logger.info("✅ Галерея дефектов v3.4 зарегистрирована")
+
+    # === УПРАВЛЕНИЕ ИСТОРИЕЙ v3.5 ===
+    if HISTORY_MANAGER_AVAILABLE:
+        application.add_handler(CommandHandler("history", history_command))
+        application.add_handler(CommandHandler("stats", stats_command))
+        application.add_handler(CommandHandler("search", search_command))
+        application.add_handler(CommandHandler("export", export_command))
+        application.add_handler(CommandHandler("clear", clear_history_command))
+        # Обработчик callback для работы с историей
+        application.add_handler(CallbackQueryHandler(handle_history_callback, pattern="^hist_|^export_|^clear_"))
+        logger.info("✅ Управление историей v3.5 зарегистрировано (5 команд)")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
