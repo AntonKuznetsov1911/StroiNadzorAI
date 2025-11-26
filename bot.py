@@ -200,6 +200,33 @@ except ImportError:
     VOICE_HANDLER_AVAILABLE = False
     logger.warning("⚠️ Модуль voice_handler.py не найден")
 
+# Шаблоны документов v3.2
+try:
+    from document_templates import (
+        templates_command,
+        handle_template_selection,
+        create_templates_menu
+    )
+    TEMPLATES_AVAILABLE = True
+    logger.info("✅ Шаблоны документов v3.2 загружены")
+except ImportError:
+    TEMPLATES_AVAILABLE = False
+    logger.warning("⚠️ Модуль document_templates.py не найден")
+
+# Режимы работы по ролям v3.2
+try:
+    from role_modes import (
+        role_command,
+        handle_role_selection,
+        get_user_role,
+        get_role_system_prompt
+    )
+    ROLES_AVAILABLE = True
+    logger.info("✅ Режимы работы по ролям v3.2 загружены")
+except ImportError:
+    ROLES_AVAILABLE = False
+    logger.warning("⚠️ Модуль role_modes.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -2117,8 +2144,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом... \n\nВы можете не ждать, я пришлю уведомление 😉")
 
     try:
-        # Профессиональный промпт с актуальными требованиями 2025
-        system_prompt = f"""**РОЛЬ И МИССИЯ:**
+        # Проверяем выбранную роль пользователя (v3.2)
+        if ROLES_AVAILABLE:
+            user_role = get_user_role(context)
+            system_prompt = get_role_system_prompt(user_role)
+        else:
+            # Стандартный промпт если модуль ролей недоступен
+            system_prompt = f"""**РОЛЬ И МИССИЯ:**
 Вы — универсальный AI-помощник по строительству в России с 20-летним опытом. Ваша задача — помогать:
 • **Новичкам**: объяснять простым языком основы (что такое СНиП, как читать чертежи, зачем нужен ППР)
 • **Прорабам и мастерам**: решать практические вопросы на площадке (технология работ, охрана труда, закрытие объёмов)
@@ -2835,6 +2867,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
+    # === ОБРАБОТЧИКИ v3.2 ===
+
+    # Обработчики шаблонов документов
+    elif query.data.startswith("template_"):
+        if TEMPLATES_AVAILABLE:
+            template_id = query.data.replace("template_", "")
+            await handle_template_selection(update, context, template_id)
+        else:
+            await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
+
+    # Обработчики выбора роли
+    elif query.data.startswith("role_"):
+        if ROLES_AVAILABLE:
+            role_id = query.data.replace("role_", "")
+            await handle_role_selection(update, context, role_id)
+        else:
+            await query.edit_message_text("⚠️ Модуль ролей недоступен.")
+
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ошибок"""
@@ -2948,6 +2998,15 @@ def main():
     # Новые команды v3.0
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
+
+    # === НОВЫЕ КОМАНДЫ v3.2 ===
+    if TEMPLATES_AVAILABLE:
+        application.add_handler(CommandHandler("templates", templates_command))
+        logger.info("✅ Команда /templates зарегистрирована")
+
+    if ROLES_AVAILABLE:
+        application.add_handler(CommandHandler("role", role_command))
+        logger.info("✅ Команда /role зарегистрирована")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.1 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
