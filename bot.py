@@ -175,6 +175,31 @@ except ImportError:
     CALCULATORS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculators.py не найден")
 
+# Интерактивные обработчики калькуляторов v3.1
+try:
+    from calculator_handlers import (
+        create_concrete_calculator_handler,
+        quick_concrete
+    )
+    CALCULATOR_HANDLERS_AVAILABLE = True
+    logger.info("✅ Интерактивные калькуляторы v3.1 загружены")
+except ImportError:
+    CALCULATOR_HANDLERS_AVAILABLE = False
+    logger.warning("⚠️ Модуль calculator_handlers.py не найден")
+
+# Обработчик голосовых сообщений v3.1
+try:
+    from voice_handler import (
+        handle_voice,
+        handle_audio,
+        get_voice_info
+    )
+    VOICE_HANDLER_AVAILABLE = True
+    logger.info("✅ Обработчик голосовых сообщений v3.1 загружен")
+except ImportError:
+    VOICE_HANDLER_AVAILABLE = False
+    logger.warning("⚠️ Модуль voice_handler.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -2924,8 +2949,23 @@ def main():
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
 
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.1 ===
+    if CALCULATOR_HANDLERS_AVAILABLE:
+        # ConversationHandler для калькулятора бетона (приоритет выше callback)
+        application.add_handler(create_concrete_calculator_handler())
+        # Быстрая команда для расчёта одной строкой
+        application.add_handler(CommandHandler("calc_concrete", quick_concrete))
+        logger.info("✅ Интерактивный калькулятор бетона зарегистрирован")
+
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    # === ГОЛОСОВЫЕ СООБЩЕНИЯ v3.1 ===
+    if VOICE_HANDLER_AVAILABLE:
+        application.add_handler(MessageHandler(filters.VOICE, handle_voice))
+        application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
+        logger.info("✅ Обработчики голосовых сообщений зарегистрированы")
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     # Регистрируем обработчик кнопок
