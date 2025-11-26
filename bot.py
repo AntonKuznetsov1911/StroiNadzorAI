@@ -263,6 +263,18 @@ except ImportError:
     HISTORY_MANAGER_AVAILABLE = False
     logger.warning("⚠️ Модуль history_manager.py не найден")
 
+# Сохранённые расчёты v3.6
+try:
+    from saved_calculations import (
+        saved_command,
+        handle_saved_callback
+    )
+    SAVED_CALCS_AVAILABLE = True
+    logger.info("✅ Сохранённые расчёты v3.6 загружены")
+except ImportError:
+    SAVED_CALCS_AVAILABLE = False
+    logger.warning("⚠️ Модуль saved_calculations.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1378,12 +1390,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /export - Экспорт истории (TXT/Markdown)
    /clear - Очистить историю
 
-**💡 УМНЫЕ ФУНКЦИИ v3.4:**
+**💡 УМНЫЕ ФУНКЦИИ v3.6:**
    /calculators - 6 интерактивных калькуляторов
+   /saved - Сохранённые расчёты калькуляторов
    /defects - Галерея типичных дефектов (12 дефектов)
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
-   /recommendations - Персональные рекомендации
 
 **Примеры вопросов:**
 📌 Какие требования к прочности бетона класса B25?
@@ -3065,6 +3077,13 @@ def main():
         # Обработчик callback для работы с историей
         application.add_handler(CallbackQueryHandler(handle_history_callback, pattern="^hist_|^export_|^clear_"))
         logger.info("✅ Управление историей v3.5 зарегистрировано (5 команд)")
+
+    # === СОХРАНЁННЫЕ РАСЧЁТЫ v3.6 ===
+    if SAVED_CALCS_AVAILABLE:
+        application.add_handler(CommandHandler("saved", saved_command))
+        # Обработчик callback для сохранённых расчётов
+        application.add_handler(CallbackQueryHandler(handle_saved_callback, pattern="^saved_"))
+        logger.info("✅ Сохранённые расчёты v3.6 зарегистрированы")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
