@@ -23,7 +23,8 @@ from config.settings import settings
 from src.database import get_db
 from src.database.models import User, Request, RequestType, UserRole, DefectSeverity
 from src.services.rate_limiter import get_rate_limiter
-from src.services.openai_service import get_openai_service
+from src.services.claude_service import get_claude_service
+from src.services.openai_service import get_openai_service  # Только для voice transcription
 from src.services.pdf_service import get_pdf_service
 from src.services.excel_service import get_excel_service
 from src.cache import get_cache
@@ -36,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 # Сервисы
 rate_limiter = get_rate_limiter()
-openai_service = get_openai_service()
+claude_service = get_claude_service()  # Основной AI сервис
+openai_service = get_openai_service()  # Только для voice transcription (fallback)
 pdf_service = get_pdf_service()
 excel_service = get_excel_service()
 cache = get_cache()
@@ -201,6 +203,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Отправьте геопозицию с фото
    • Дефекты привяжутся к карте
    • История проверок по адресам
+
+**🔬 НОВЫЕ ПРОДВИНУТЫЕ КОМАНДЫ:**
+
+**7️⃣ /analyze - Детальный анализ:**
+   • Инженерный анализ конструкций
+   • Проверка по нормативам
+   • Расчет несущей способности
+   • Пример: `/analyze плита толщина=200мм класс=B25`
+
+**8️⃣ /compare - Сравнение:**
+   • Сравнение материалов/технологий
+   • Плюсы и минусы
+   • Стоимость и области применения
+   • Пример: `/compare газобетон vs кирпич`
+
+**9️⃣ /calculate - Расчеты:**
+   • Строительные расчеты
+   • Объемы материалов
+   • Несущая способность
+   • Пример: `/calculate бетон плита=6x4м толщина=200мм`
 
 **База знаний:**
 • 13 строительных нормативов
@@ -629,8 +651,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from_cache = True
             logger.info(f"Photo response from cache for user {user.telegram_id}")
         else:
-            # Анализ через OpenAI
-            analysis = await openai_service.analyze_photo(photo_base64, caption)
+            # Анализ через Claude AI с RAG и контекстом
+            analysis = await claude_service.analyze_photo(photo_base64, caption, user.id, db)
             from_cache = False
 
             # Сохраняем в кеш
@@ -731,8 +753,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from_cache = True
             logger.info(f"Text response from cache for user {user.telegram_id}")
         else:
-            # Анализ через OpenAI
-            answer = await openai_service.analyze_text_question(question)
+            # Анализ через Claude AI с RAG и контекстом
+            answer = await claude_service.analyze_text_question(question, user.id, db)
             from_cache = False
 
             # Сохраняем в кеш
@@ -823,9 +845,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Отправляем распознанный текст
         await update.message.reply_text(f"📝 Распознано: \"{transcribed_text}\"\n\nОбрабатываю ваш вопрос...")
 
-        # Обрабатываем как текстовый вопрос
+        # Обрабатываем как текстовый вопрос через Claude AI
         start_time = time.time()
-        answer = await openai_service.analyze_text_question(transcribed_text)
+        answer = await claude_service.analyze_text_question(transcribed_text, user.id, db)
         processing_time = time.time() - start_time
 
         # Сохраняем в БД
@@ -1010,6 +1032,294 @@ async def generate_pdf_report(update: Update, context: ContextTypes.DEFAULT_TYPE
         db.close()
 
 
+async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Детальный анализ конструкции по параметрам
+    /analyze <тип конструкции> <параметры>
+    """
+    db = next(get_db())
+    telegram_user = update.effective_user
+    user = get_or_create_user(db, telegram_user)
+
+    # Проверка rate limit
+    allowed, error_message = check_rate_limit(user)
+    if not allowed:
+        await update.message.reply_text(error_message)
+        return
+
+    # Получаем параметры
+    args = context.args
+    if not args:
+        help_text = """
+🔍 **ДЕТАЛЬНЫЙ АНАЛИЗ КОНСТРУКЦИЙ**
+
+**Как использовать:**
+`/analyze <конструкция> <параметры>`
+
+**Примеры:**
+
+1. **Плита перекрытия:**
+`/analyze плита толщина=200мм класс=B25 пролет=6м`
+
+2. **Колонна:**
+`/analyze колонна сечение=400x400 высота=3.5м нагрузка=500кН`
+
+3. **Фундамент:**
+`/analyze фундамент тип=ленточный глубина=1.8м грунт=суглинок`
+
+4. **Стена:**
+`/analyze стена материал=кирпич толщина=380мм высота=3м`
+
+**Что получите:**
+✅ Проверка по нормативам (СП, ГОСТ)
+✅ Расчет несущей способности
+✅ Выявление проблем и рисков
+✅ Рекомендации по улучшению
+"""
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Формируем вопрос для Claude
+    analysis_request = " ".join(args)
+    question = f"""Выполни ДЕТАЛЬНЫЙ ИНЖЕНЕРНЫЙ АНАЛИЗ конструкции:
+
+{analysis_request}
+
+Требуется:
+1. 📋 ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ - проверь все параметры по нормативам
+2. 🔍 ПРОВЕРКА ПРОЧНОСТИ - расчеты несущей способности
+3. ⚠️ ВЫЯВЛЕНИЕ РИСКОВ - потенциальные проблемы
+4. 📐 СООТВЕТСТВИЕ СП/ГОСТ - конкретные пункты нормативов
+5. 💡 РЕКОМЕНДАЦИИ - что улучшить/изменить
+
+Дай развернутый ответ с расчетами и ссылками на нормативы."""
+
+    # Обрабатываем через Claude
+    await update.message.reply_text("🔍 Выполняю детальный инженерный анализ...")
+
+    start_time = time.time()
+    answer = await claude_service.analyze_text_question(question, user.id, db)
+    processing_time = time.time() - start_time
+
+    # Сохраняем в БД
+    request = Request(
+        user_id=user.id,
+        request_type=RequestType.TEXT,
+        message_text=analysis_request,
+        response_text=answer,
+        processing_time=processing_time
+    )
+    db.add(request)
+    db.commit()
+
+    # Отправляем результат
+    await update.message.reply_text(
+        answer,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    logger.info(f"Analysis completed for user {user.telegram_id} in {processing_time:.2f}s")
+
+
+async def compare_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Сравнение материалов/технологий
+    /compare <A> vs <B>
+    """
+    db = next(get_db())
+    telegram_user = update.effective_user
+    user = get_or_create_user(db, telegram_user)
+
+    # Проверка rate limit
+    allowed, error_message = check_rate_limit(user)
+    if not allowed:
+        await update.message.reply_text(error_message)
+        return
+
+    # Получаем параметры
+    args = context.args
+    if not args or 'vs' not in ' '.join(args).lower():
+        help_text = """
+⚖️ **СРАВНЕНИЕ МАТЕРИАЛОВ И ТЕХНОЛОГИЙ**
+
+**Как использовать:**
+`/compare <A> vs <B>`
+
+**Примеры:**
+
+1. **Материалы:**
+`/compare газобетон vs кирпич`
+
+2. **Технологии:**
+`/compare монолит vs сборный железобетон`
+
+3. **Системы:**
+`/compare плитный фундамент vs ленточный`
+
+4. **Отделка:**
+`/compare штукатурка vs гипсокартон`
+
+**Что получите:**
+✅ Технические характеристики обоих вариантов
+✅ Плюсы и минусы каждого
+✅ Стоимость и трудозатраты
+✅ Области применения
+✅ Рекомендации по выбору
+"""
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Формируем вопрос для Claude
+    comparison_request = " ".join(args)
+    question = f"""Сделай ПРОФЕССИОНАЛЬНОЕ СРАВНЕНИЕ:
+
+{comparison_request}
+
+Формат ответа:
+
+**1️⃣ ПЕРВЫЙ ВАРИАНТ**
+- Технические характеристики
+- Плюсы
+- Минусы
+- Стоимость
+- Области применения
+
+**2️⃣ ВТОРОЙ ВАРИАНТ**
+- Технические характеристики
+- Плюсы
+- Минусы
+- Стоимость
+- Области применения
+
+**📊 СРАВНИТЕЛЬНАЯ ТАБЛИЦА**
+| Параметр | Вариант 1 | Вариант 2 |
+
+**💡 ИТОГОВЫЕ РЕКОМЕНДАЦИИ**
+Когда выбрать первый, когда второй
+
+Опирайся на СП, ГОСТ, СНиП и практический опыт."""
+
+    # Обрабатываем через Claude
+    await update.message.reply_text("⚖️ Провожу сравнительный анализ...")
+
+    start_time = time.time()
+    answer = await claude_service.analyze_text_question(question, user.id, db)
+    processing_time = time.time() - start_time
+
+    # Сохраняем в БД
+    request = Request(
+        user_id=user.id,
+        request_type=RequestType.TEXT,
+        message_text=comparison_request,
+        response_text=answer,
+        processing_time=processing_time
+    )
+    db.add(request)
+    db.commit()
+
+    # Отправляем результат
+    await update.message.reply_text(
+        answer,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    logger.info(f"Comparison completed for user {user.telegram_id} in {processing_time:.2f}s")
+
+
+async def calculate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Строительные расчеты
+    /calculate <тип расчета> <параметры>
+    """
+    db = next(get_db())
+    telegram_user = update.effective_user
+    user = get_or_create_user(db, telegram_user)
+
+    # Проверка rate limit
+    allowed, error_message = check_rate_limit(user)
+    if not allowed:
+        await update.message.reply_text(error_message)
+        return
+
+    # Получаем параметры
+    args = context.args
+    if not args:
+        help_text = """
+🧮 **СТРОИТЕЛЬНЫЕ РАСЧЕТЫ**
+
+**Как использовать:**
+`/calculate <тип расчета> <параметры>`
+
+**Примеры:**
+
+1. **Материалы:**
+`/calculate кирпич стена=10м высота=3м толщина=0.38м`
+
+2. **Бетон:**
+`/calculate бетон плита=6x4м толщина=200мм`
+
+3. **Арматура:**
+`/calculate арматура балка=длина5м сечение=300x500`
+
+4. **Нагрузка:**
+`/calculate нагрузка перекрытие полезная=300кг/м2 собственная=400кг/м2`
+
+5. **Теплопотери:**
+`/calculate теплопотери стена=площадь100м2 материал=кирпич`
+
+**Что получите:**
+✅ Точные расчеты по формулам СП/ГОСТ
+✅ Объемы материалов
+✅ Несущая способность
+✅ Стоимость (ориентировочная)
+✅ Рекомендации
+"""
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Формируем вопрос для Claude
+    calculation_request = " ".join(args)
+    question = f"""Выполни ИНЖЕНЕРНЫЙ РАСЧЕТ:
+
+{calculation_request}
+
+Требования к расчету:
+1. 📐 ФОРМУЛЫ - укажи используемые формулы из СП/ГОСТ
+2. 🔢 ПОДРОБНЫЕ ВЫЧИСЛЕНИЯ - покажи все шаги расчета
+3. 📊 ИТОГОВЫЕ ЗНАЧЕНИЯ - конкретные числа с единицами измерения
+4. ⚠️ ЗАПАС ПРОЧНОСТИ - проверка коэффициентов надежности
+5. 💰 ПРИМЕРНАЯ СТОИМОСТЬ - если применимо
+6. 📚 НОРМАТИВНАЯ БАЗА - ссылки на конкретные пункты СП
+
+Расчет должен быть ТОЧНЫМ и ПРОВЕРЯЕМЫМ!"""
+
+    # Обрабатываем через Claude
+    await update.message.reply_text("🧮 Выполняю инженерные расчеты...")
+
+    start_time = time.time()
+    answer = await claude_service.analyze_text_question(question, user.id, db)
+    processing_time = time.time() - start_time
+
+    # Сохраняем в БД
+    request = Request(
+        user_id=user.id,
+        request_type=RequestType.TEXT,
+        message_text=calculation_request,
+        response_text=answer,
+        processing_time=processing_time
+    )
+    db.add(request)
+    db.commit()
+
+    # Отправляем результат
+    await update.message.reply_text(
+        answer,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    logger.info(f"Calculation completed for user {user.telegram_id} in {processing_time:.2f}s")
+
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ошибок"""
     logger.error(f"Update {update} caused error {context.error}", exc_info=context.error)
@@ -1035,6 +1345,11 @@ def setup_handlers(application: Application):
     application.add_handler(CommandHandler("premium", premium_command))
     application.add_handler(CommandHandler("report", report_command))
     application.add_handler(CommandHandler("admin", admin_command))
+
+    # Новые продвинутые команды
+    application.add_handler(CommandHandler("analyze", analyze_command))
+    application.add_handler(CommandHandler("compare", compare_command))
+    application.add_handler(CommandHandler("calculate", calculate_command))
 
     # Сообщения
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

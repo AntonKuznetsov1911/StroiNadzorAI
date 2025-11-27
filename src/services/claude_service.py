@@ -315,6 +315,108 @@ class ClaudeServiceV2:
         logger.warning("Voice transcription not available with Claude, need separate service")
         raise NotImplementedError("Voice transcription requires separate service")
 
+    # ===== МЕТОДЫ ДЛЯ СОВМЕСТИМОСТИ С СУЩЕСТВУЮЩИМ КОДОМ =====
+
+    async def analyze_text_question(
+        self,
+        question: str,
+        user_id: Optional[int] = None,
+        db: Optional[Session] = None
+    ) -> str:
+        """
+        Анализ текстового вопроса (совместимость с openai_service)
+
+        Args:
+            question: Вопрос пользователя
+            user_id: ID пользователя (опционально)
+            db: Database session (опционально)
+
+        Returns:
+            str: Ответ
+        """
+        if db and user_id:
+            return await self.analyze_with_rag(db, user_id, question)
+        else:
+            # Без контекста - простой запрос
+            try:
+                knowledge_context = get_knowledge_context(question)
+                system_prompt = self.expert_system_prompt.format(
+                    normatives_context=knowledge_context
+                )
+
+                response = await self.async_client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": question}]
+                )
+
+                return response.content[0].text
+            except Exception as e:
+                logger.error(f"Error in analyze_text_question: {e}")
+                raise
+
+    async def analyze_photo(
+        self,
+        photo_base64: str,
+        caption: Optional[str] = None,
+        user_id: Optional[int] = None,
+        db: Optional[Session] = None
+    ) -> str:
+        """
+        Анализ фотографии (совместимость с openai_service)
+
+        Args:
+            photo_base64: Фото в base64
+            caption: Подпись к фото
+            user_id: ID пользователя (опционально)
+            db: Database session (опционально)
+
+        Returns:
+            str: Анализ
+        """
+        if db and user_id:
+            return await self.analyze_photo_with_context(db, user_id, photo_base64, caption)
+        else:
+            # Без контекста - простой анализ
+            try:
+                knowledge_context = get_knowledge_context(caption or "анализ конструкций дефекты")
+                photo_prompt = self.expert_system_prompt.format(
+                    normatives_context=knowledge_context
+                )
+
+                user_message = caption if caption else "Проанализируй это фото с точки зрения строительных норм. Найди дефекты и дай рекомендации."
+
+                messages = [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": photo_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": user_message
+                        }
+                    ]
+                }]
+
+                response = await self.async_client.messages.create(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=photo_prompt,
+                    messages=messages
+                )
+
+                return response.content[0].text
+            except Exception as e:
+                logger.error(f"Error in analyze_photo: {e}")
+                raise
+
 
 # Singleton
 _claude_service_instance: Optional[ClaudeServiceV2] = None
