@@ -14,7 +14,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -3055,8 +3055,6 @@ async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def setup_bot_menu(application):
     """Установка постоянного меню команд бота"""
-    from telegram import BotCommand
-
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
