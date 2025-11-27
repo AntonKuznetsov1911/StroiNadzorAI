@@ -2765,13 +2765,87 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "regulations":
-        await regulations_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await regulations_command(adapted_update, context)
     elif query.data == "examples":
-        await examples_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await examples_command(adapted_update, context)
     elif query.data == "help":
-        await help_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await help_command(adapted_update, context)
     elif query.data == "stats":
-        await stats_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await stats_command(adapted_update, context)
+    elif query.data == "calculators_menu":
+        # Кнопка "Калькуляторы" из главного меню
+        if CALCULATORS_AVAILABLE and IMPROVEMENTS_V3_AVAILABLE:
+            keyboard = create_calculators_menu()
+            await query.edit_message_text(
+                "🧮 **СТРОИТЕЛЬНЫЕ КАЛЬКУЛЯТОРЫ**\n\n"
+                "Выберите калькулятор:",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль калькуляторов недоступен.")
+    elif query.data == "faq_menu":
+        # Кнопка "Частые вопросы" из главного меню
+        if FAQ_AVAILABLE:
+            # Создаём адаптированный update для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=query.message
+            )
+            await faq_command(adapted_update, context)
+        else:
+            await query.edit_message_text("⚠️ Модуль FAQ недоступен.")
+    elif query.data == "templates":
+        # Кнопка "Шаблоны" из главного меню
+        if TEMPLATES_AVAILABLE:
+            keyboard = []
+            for template_id, info in DOCUMENT_TEMPLATES.items():
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=info["name"],
+                        callback_data=f"template_{template_id}"
+                    )
+                ])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "📄 **ШАБЛОНЫ ДОКУМЕНТОВ**\n\n"
+                "Выберите тип документа для генерации:",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
+    elif query.data == "role":
+        # Кнопка "Выбрать роль" из главного меню
+        if ROLES_AVAILABLE:
+            # Создаём адаптированный update для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=query.message
+            )
+            await role_command(adapted_update, context)
+        else:
+            await query.edit_message_text("⚠️ Модуль ролей недоступен.")
     elif query.data == "clear_confirm":
         # Подтверждение очистки истории
         user_id = update.effective_user.id
