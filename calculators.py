@@ -3,7 +3,7 @@
 """
 
 import math
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 # ========================================
 # 1. КАЛЬКУЛЯТОР БЕТОНА
@@ -14,55 +14,180 @@ def calculate_concrete(
     width: float,   # ширина, м
     height: float,  # высота/толщина, м
     concrete_class: str = "B25",  # класс бетона
-    wastage: float = 5.0  # процент запаса
+    wastage: float = 5.0,  # процент запаса на потери
+    temperature: float = 20,  # температура воздуха, °C
+    humidity: float = 60,  # влажность воздуха, %
+    concrete_type: str = "heavy",  # тип бетона: heavy, lightweight, cellular
+    pumping_distance: float = 0,  # расстояние подачи по трубам, м
+    additives: bool = False  # использование добавок
 ) -> Dict:
     """
-    Расчёт объёма бетона и параметров
+    Расчёт объёма бетона с учётом всех факторов
 
     Returns:
         dict с результатами расчёта
     """
-    # Объём бетона
+    # Проверки корректности данных
+    if length <= 0 or width <= 0 or height <= 0:
+        return {"error": "Размеры должны быть положительными"}
+    if not (0 <= wastage <= 50):
+        return {"error": "Запас должен быть от 0 до 50%"}
+    if not (-50 <= temperature <= 50):
+        return {"error": "Температура должна быть от -50 до +50°C"}
+    if not (0 <= humidity <= 100):
+        return {"error": "Влажность должна быть от 0 до 100%"}
+
+    # Базовый объём
     volume = length * width * height  # м³
 
-    # Объём с учётом запаса
-    volume_with_wastage = volume * (1 + wastage / 100)
+    # Коэффициент усадки бетона
+    shrinkage_coefficient = 1.015  # 1.5% усадка
 
-    # Прочность по классам
+    # Коэффициент потерь при транспортировке
+    transport_loss = 0.02  # 2%
+
+    # Коэффициент потерь при укладке
+    laying_loss = 0.03  # 3%
+
+    # Дополнительные потери при перекачке
+    pumping_loss = min(0.05, pumping_distance * 0.001) if pumping_distance > 0 else 0
+
+    # Температурный коэффициент
+    if temperature < 5:
+        temp_coefficient = 1.1  # Увеличение расхода при холоде
+    elif temperature > 30:
+        temp_coefficient = 1.05  # Увеличение расхода при жаре
+    else:
+        temp_coefficient = 1.0
+
+    # Коэффициент влажности
+    if humidity < 40:
+        humidity_coefficient = 1.05  # Сухой воздух - больше воды
+    elif humidity > 80:
+        humidity_coefficient = 0.95  # Влажный воздух - меньше воды
+    else:
+        humidity_coefficient = 1.0
+
+    # Общий коэффициент запаса
+    total_wastage_coefficient = (1 + wastage / 100) * shrinkage_coefficient * \
+                               (1 + transport_loss) * (1 + laying_loss) * \
+                               (1 + pumping_loss) * temp_coefficient * humidity_coefficient
+
+    volume_with_wastage = volume * total_wastage_coefficient
+
+    # Прочность бетона по классам (ГОСТ 26633-2015)
     strength_map = {
-        "B7.5": 100,
-        "B12.5": 150,
-        "B15": 200,
-        "B20": 250,
-        "B22.5": 300,
-        "B25": 350,
-        "B30": 400,
-        "B35": 450,
-        "B40": 500
+        "B7.5": {"strength": 98, "cement_min": 160, "cement_max": 200},
+        "B12.5": {"strength": 164, "cement_min": 200, "cement_max": 250},
+        "B15": {"strength": 196, "cement_min": 220, "cement_max": 280},
+        "B20": {"strength": 262, "cement_min": 250, "cement_max": 320},
+        "B22.5": {"strength": 294, "cement_min": 270, "cement_max": 340},
+        "B25": {"strength": 327, "cement_min": 290, "cement_max": 370},
+        "B30": {"strength": 393, "cement_min": 320, "cement_max": 410},
+        "B35": {"strength": 458, "cement_min": 350, "cement_max": 450},
+        "B40": {"strength": 524, "cement_min": 380, "cement_max": 490}
     }
 
-    strength = strength_map.get(concrete_class, 350)
+    concrete_data = strength_map.get(concrete_class, strength_map["B25"])
 
-    # Рекомендации по осадке конуса
+    # Расход цемента (кг/м³) с учётом типа бетона
+    cement_density_map = {
+        "heavy": concrete_data["cement_min"] + (concrete_data["cement_max"] - concrete_data["cement_min"]) * 0.5,
+        "lightweight": concrete_data["cement_min"] * 0.8,
+        "cellular": concrete_data["cement_min"] * 0.6
+    }
+
+    cement_per_m3 = cement_density_map.get(concrete_type, concrete_data["cement_min"])
+    total_cement = volume_with_wastage * cement_per_m3
+
+    # Расход воды (л/м³) по В/Ц отношению
+    water_cement_ratio = 0.5 if concrete_class in ["B25", "B30"] else 0.45
+    if additives:
+        water_cement_ratio *= 0.9  # Добавки позволяют уменьшить воду
+
+    water_per_m3 = cement_per_m3 * water_cement_ratio * 1000  # л/м³
+    total_water = volume_with_wastage * water_per_m3
+
+    # Расход щебня и песка (кг/м³)
+    gravel_per_m3 = 1200 if concrete_type == "heavy" else 800
+    sand_per_m3 = 650 if concrete_type == "heavy" else 400
+
+    total_gravel = volume_with_wastage * gravel_per_m3
+    total_sand = volume_with_wastage * sand_per_m3
+
+    # Осадка конуса (СП 70.13330.2012)
     cone_slump_recommendations = {
-        "П1": "1-5 см (жёсткий, для фундаментов)",
-        "П2": "5-10 см (пластичный, универсальный)",
-        "П3": "10-15 см (литой, для колонн)",
-        "П4": "15-20 см (текучий, для сложных форм)"
+        "П1": "1-5 см (жёсткий бетон, фундаменты)",
+        "П2": "5-10 см (пластичный бетон, универсальный)",
+        "П3": "10-15 см (литой бетон, колонны)",
+        "П4": "15-20 см (текучий бетон, сложные формы)",
+        "П5": "21-25 см (самоуплотняющийся бетон)"
     }
+
+    # Время укладки и твердения (СП 70.13330.2012)
+    curing_time = {
+        "normal": "7-28 суток при +20°C",
+        "accelerated": "3-7 суток с добавками",
+        "winter": "14-28 суток с прогревом"
+    }
+
+    # Испытания (ГОСТ 10180-2012)
+    tests_required = max(3, math.ceil(volume_with_wastage / 50))  # Минимум 3 серии
+
+    # Стоимость (ориентировочная)
+    cost_per_m3 = {
+        "heavy": 4500,
+        "lightweight": 3800,
+        "cellular": 3200
+    }
+    cost_per_m3_base = cost_per_m3.get(concrete_type, 4500)
+    total_cost = volume_with_wastage * cost_per_m3_base
 
     result = {
-        "volume": round(volume, 2),
-        "volume_with_wastage": round(volume_with_wastage, 2),
+        "volume": round(volume, 3),
+        "volume_with_wastage": round(volume_with_wastage, 3),
         "concrete_class": concrete_class,
-        "strength": strength,  # кг/см²
-        "wastage_percent": wastage,
+        "strength": concrete_data["strength"],
+        "concrete_type": concrete_type,
+        "temperature": temperature,
+        "humidity": humidity,
+        "pumping_distance": pumping_distance,
+        "additives": additives,
+
+        # Материалы
+        "cement_total": round(total_cement, 0),
+        "cement_per_m3": round(cement_per_m3, 0),
+        "water_total": round(total_water, 0),
+        "water_per_m3": round(water_per_m3, 0),
+        "gravel_total": round(total_gravel, 0),
+        "gravel_per_m3": round(gravel_per_m3, 0),
+        "sand_total": round(total_sand, 0),
+        "sand_per_m3": round(sand_per_m3, 0),
+
+        # Технические параметры
+        "water_cement_ratio": round(water_cement_ratio, 3),
         "cone_slump_recommendations": cone_slump_recommendations,
-        "water_cement_ratio": "0.5-0.6 для B25",
-        "cement_consumption": f"{volume_with_wastage * 350:.0f} кг (350 кг/м³)",
-        "tests_required": math.ceil(volume_with_wastage / 100),  # 1 серия на 100 м³
-        "cost_estimate_min": round(volume_with_wastage * 4000, 2),  # мин 4000 руб/м³
-        "cost_estimate_max": round(volume_with_wastage * 6000, 2)   # макс 6000 руб/м³
+        "curing_time": curing_time,
+
+        # Качество и испытания
+        "tests_required": tests_required,
+        "sampling_frequency": f"Каждые {max(10, math.floor(volume_with_wastage / 5))} м³",
+
+        # Стоимость
+        "cost_per_m3": cost_per_m3_base,
+        "total_cost": round(total_cost, 2),
+
+        # Коэффициенты
+        "shrinkage_coefficient": round(shrinkage_coefficient, 3),
+        "transport_loss": round(transport_loss, 3),
+        "laying_loss": round(laying_loss, 3),
+        "pumping_loss": round(pumping_loss, 3),
+        "temp_coefficient": round(temp_coefficient, 3),
+        "humidity_coefficient": round(humidity_coefficient, 3),
+        "total_coefficient": round(total_wastage_coefficient, 3),
+
+        # Нормативы
+        "standards": "СП 70.13330.2012, ГОСТ 26633-2015, ГОСТ 10180-2012"
     }
 
     return result
@@ -77,67 +202,179 @@ def calculate_reinforcement(
     width: float,   # ширина элемента, м
     height: float,  # высота элемента, м
     bar_diameter: int = 12,  # диаметр стержня, мм
-    spacing: int = 200,  # шаг стержней, мм
-    element_type: str = "slab"  # тип элемента: slab, beam, column
+    spacing_longitudinal: int = 200,  # шаг продольной арматуры, мм
+    spacing_transverse: int = 200,  # шаг поперечной арматуры, мм
+    element_type: str = "slab",  # тип элемента: slab, beam, column, foundation
+    reinforcement_class: str = "A500C",  # класс арматуры
+    protective_layer: int = 20,  # защитный слой бетона, мм
+    concrete_cover_top: int = 20,  # защитный слой сверху, мм
+    concrete_cover_bottom: int = 20,  # защитный слой снизу, мм
+    concrete_cover_sides: int = 20  # защитный слой по бокам, мм
 ) -> Dict:
     """
-    Расчёт арматуры для ЖБ конструкций
+    Расчёт арматуры для ЖБ конструкций по СП 63.13330.2018
 
     Returns:
         dict с результатами расчёта
     """
-    # Погонные метры стержней
-    if element_type == "slab":
-        # Плита: сетка в 2 слоя (верхний и нижний)
-        rows = int(width * 1000 / spacing) + 1
-        bars_per_direction = rows * length
-        total_meters = bars_per_direction * 2 * 2  # 2 направления * 2 слоя
+    # Проверки корректности данных
+    if length <= 0 or width <= 0 or height <= 0:
+        return {"error": "Размеры должны быть положительными"}
+    if bar_diameter not in [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32]:
+        return {"error": "Диаметр должен быть стандартным: 6-32 мм"}
+    if spacing_longitudinal < 50 or spacing_transverse < 50:
+        return {"error": "Шаг арматуры минимум 50 мм"}
+    if protective_layer < bar_diameter:
+        return {"error": f"Защитный слой минимум {bar_diameter} мм"}
 
-    elif element_type == "beam":
-        # Балка: продольная + хомуты
-        longitudinal = length * 4  # 4 стержня продольных
-        stirrups_count = int(length * 1000 / spacing)
-        stirrups_length = 2 * (width + height) * stirrups_count / 1000
-        total_meters = longitudinal + stirrups_length
+    # Плотность стали (ГОСТ 380-2005)
+    steel_density = 7850  # кг/м³
 
-    elif element_type == "column":
-        # Колонна: продольная + хомуты
-        longitudinal = height * 4  # 4 угловых стержня
-        stirrups_count = int(height * 1000 / spacing)
-        stirrups_length = 2 * (length + width) * stirrups_count / 1000
-        total_meters = longitudinal + stirrups_length
+    # Диаметр в метрах для расчётов
+    d_m = bar_diameter / 1000
+    area_per_bar = math.pi * (d_m / 2) ** 2  # м²
+    weight_per_meter = area_per_bar * steel_density  # кг/м
+
+    # Расчёт в зависимости от типа элемента
+    if element_type == "slab":  # Монолитная плита
+        # Учитываем защитный слой
+        net_width = width - 2 * (protective_layer / 1000)
+        net_length = length - 2 * (protective_layer / 1000)
+
+        # Расчёт стержней в одном направлении
+        bars_in_width = math.ceil(net_width * 1000 / spacing_longitudinal) + 1
+        bars_in_length = math.ceil(net_length * 1000 / spacing_longitudinal) + 1
+
+        # Два слоя сетки (верхний и нижний)
+        total_longitudinal = (bars_in_width * length + bars_in_length * width) * 2
+
+        # Поперечная арматура (хомуты или распределительная)
+        transverse_bars = (bars_in_width * width + bars_in_length * length) * 2
+        total_transverse = transverse_bars
+
+        total_meters = total_longitudinal + total_transverse
+
+    elif element_type == "beam":  # Балка
+        # Продольная арматура (обычно 2-4 стержня)
+        longitudinal_bars = 4  # типичный случай
+        longitudinal_length = length * longitudinal_bars
+
+        # Хомуты (поперечная арматура)
+        stirrups_per_meter = 1000 / spacing_transverse
+        perimeter = 2 * ((width - 2*protective_layer/1000) + (height - 2*protective_layer/1000))
+        stirrup_length = perimeter + 0.15  # + 15 см на загибы
+
+        transverse_length = stirrups_per_meter * length * stirrup_length
+
+        total_meters = longitudinal_length + transverse_length
+
+    elif element_type == "column":  # Колонна
+        # Продольная арматура (4-8 стержней по углам + промежуточные)
+        longitudinal_bars = 8 if width > 0.4 else 4  # Зависит от размера
+        longitudinal_length = height * longitudinal_bars
+
+        # Хомуты
+        stirrups_per_meter = 1000 / spacing_transverse
+        perimeter = 2 * ((width - 2*protective_layer/1000) + (length - 2*protective_layer/1000))
+        stirrup_length = perimeter + 0.15
+
+        transverse_length = stirrups_per_meter * height * stirrup_length
+
+        total_meters = longitudinal_length + transverse_length
+
+    elif element_type == "foundation":  # Фундамент
+        # Простая сетка в основании
+        net_width = width - 2 * (protective_layer / 1000)
+        net_length = length - 2 * (protective_layer / 1000)
+
+        bars_in_width = math.ceil(net_width * 1000 / spacing_longitudinal) + 1
+        bars_in_length = math.ceil(net_length * 1000 / spacing_longitudinal) + 1
+
+        # Один слой сетки
+        total_meters = bars_in_width * length + bars_in_length * width
 
     else:
-        total_meters = 0
+        return {"error": "Неподдерживаемый тип элемента"}
 
-    # Вес арматуры
-    # Масса 1м стержня = π * (d/2)² * ρ, где ρ = 7850 кг/м³ для стали
-    weight_per_meter = math.pi * (bar_diameter / 2000) ** 2 * 7850  # кг/м
+    # Общий вес
     total_weight = total_meters * weight_per_meter
 
-    # Нормативы
-    protective_layer = {
-        "slab": f"{bar_diameter + 10} мм (мин {bar_diameter + 10} мм)",
-        "beam": f"{bar_diameter + 15} мм (мин {bar_diameter + 15} мм)",
-        "column": f"{bar_diameter + 20} мм (мин {bar_diameter + 20} мм)"
+    # Процент армирования (ГОСТ 27751-2014)
+    concrete_volume = length * width * height
+    reinforcement_ratio = (total_weight / (concrete_volume * 2500)) * 100  # 2500 кг/м³ - плотность бетона
+
+    # Нахлёст арматуры (СП 63.13330.2018)
+    overlap_length = {
+        "A240": 40 * bar_diameter,
+        "A400": 35 * bar_diameter,
+        "A500": 30 * bar_diameter,
+        "A500C": 25 * bar_diameter
+    }.get(reinforcement_class, 35 * bar_diameter)
+
+    # Анкеровка (СП 63.13330.2018)
+    anchorage_length = {
+        "straight": 25 * bar_diameter,
+        "hook": 15 * bar_diameter,
+        "plate": 10 * bar_diameter
     }
+
+    # Стоимость (ориентировочная)
+    cost_per_kg = {
+        "A240": 45,
+        "A400": 55,
+        "A500": 65,
+        "A500C": 70
+    }.get(reinforcement_class, 60)
+
+    total_cost = total_weight * cost_per_kg
+
+    # Минимальный процент армирования
+    min_reinforcement_ratio = {
+        "slab": 0.1,
+        "beam": 0.15,
+        "column": 0.25,
+        "foundation": 0.1
+    }.get(element_type, 0.1)
+
+    # Проверка на минимальное армирование
+    reinforcement_ok = reinforcement_ratio >= min_reinforcement_ratio
 
     result = {
         "element_type": element_type,
-        "bar_diameter": bar_diameter,  # мм
-        "spacing": spacing,  # мм
+        "dimensions": f"{length}×{width}×{height} м",
+        "bar_diameter": bar_diameter,
+        "reinforcement_class": reinforcement_class,
+        "spacing_longitudinal": spacing_longitudinal,
+        "spacing_transverse": spacing_transverse,
+        "protective_layer": protective_layer,
+
+        # Расчёты
         "total_meters": round(total_meters, 2),
-        "weight_per_meter": round(weight_per_meter, 3),
-        "total_weight": round(total_weight, 2),  # кг
-        "protective_layer": protective_layer.get(element_type, "20-30 мм"),
-        "reinforcement_ratio": f"{(total_weight / (length * width * height * 2500)) * 100:.2f}%",
-        "cost_estimate": round(total_weight * 80, 2),  # ~80 руб/кг
+        "weight_per_meter": round(weight_per_meter, 4),
+        "total_weight": round(total_weight, 2),
+        "reinforcement_ratio": round(reinforcement_ratio, 2),
+        "min_reinforcement_ratio": min_reinforcement_ratio,
+        "reinforcement_ok": reinforcement_ok,
+
+        # Нормативы
+        "overlap_length": overlap_length,
+        "anchorage_length": anchorage_length,
+
+        # Стоимость
+        "cost_per_kg": cost_per_kg,
+        "total_cost": round(total_cost, 2),
+
+        # Рекомендации
         "recommendations": {
-            "class": "A500C (горячекатаная)",
-            "welding": "Допускается для A500C",
-            "overlap": f"40 * {bar_diameter} = {40 * bar_diameter} мм",
-            "anchorage": f"30 * {bar_diameter} = {30 * bar_diameter} мм"
-        }
+            "min_spacing": f"Мин шаг: {bar_diameter * 2.5:.0f} мм",
+            "max_spacing": "Макс шаг: 400 мм для плит, 300 мм для балок",
+            "protective_layer_min": f"Мин защитный слой: {bar_diameter} мм",
+            "lap_welding": "Сварка нахлёстов для A500C разрешена",
+            "corrosion_protection": "Антикоррозионное покрытие при эксплуатации в агрессивных средах"
+        },
+
+        # Стандарты
+        "standards": "СП 63.13330.2018, ГОСТ 27751-2014, ГОСТ 380-2005"
     }
 
     return result
@@ -836,6 +1073,28 @@ def format_calculator_result(calc_type: str, result: Dict) -> str:
 
 
 # ========================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ========================================
+
+def validate_positive(value: float, field_name: str) -> Union[Dict, None]:
+    """Проверка положительного значения"""
+    if value <= 0:
+        return {"error": f"{field_name} должно быть положительным"}
+    return None
+
+def validate_range(value: float, min_val: float, max_val: float, field_name: str) -> Union[Dict, None]:
+    """Проверка диапазона значения"""
+    if not (min_val <= value <= max_val):
+        return {"error": f"{field_name} должно быть от {min_val} до {max_val}"}
+    return None
+
+def validate_list(value: str, allowed_values: list, field_name: str) -> Union[Dict, None]:
+    """Проверка значения из списка"""
+    if value not in allowed_values:
+        return {"error": f"{field_name} должно быть одним из: {', '.join(allowed_values)}"}
+    return None
+
+# ========================================
 # 7. УНИВЕРСАЛЬНЫЙ МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР
 # ========================================
 
@@ -950,79 +1209,194 @@ def format_math_result(result: Dict) -> str:
 def calculate_brick(
     length: float,  # длина стены, м
     height: float,   # высота стены, м
-    thickness: float = 0.25,  # толщина стены, м (0.12, 0.25, 0.38, 0.51)
+    thickness: float = 0.25,  # толщина стены, м (0.12, 0.25, 0.38, 0.51, 0.64)
     brick_type: str = "single",  # single, double, one_and_half
-    openings_area: float = 0,  # площадь проёмов, м²
-    mortar_thickness: float = 0.01  # толщина шва, м
+    openings_count: int = 0,  # количество проёмов
+    opening_width: float = 1.2,  # средняя ширина проёма, м
+    opening_height: float = 2.0,  # средняя высота проёма, м
+    mortar_type: str = "cement",  # cement, lime, mixed
+    mortar_thickness: float = 10,  # толщина шва, мм
+    temperature: float = 20,  # температура воздуха, °C
+    wastage: float = 8.0  # процент запаса на бой и подрезку
 ) -> Dict:
     """
-    Расчёт количества кирпича для кладки
-    
+    Расчёт кирпичной кладки по ГОСТ 530-2012
+
     Returns:
         dict с результатами расчёта
     """
-    # Размеры кирпича (стандарт): 250×120×65 мм
+    # Проверки корректности данных
+    if length <= 0 or height <= 0 or thickness <= 0:
+        return {"error": "Размеры должны быть положительными"}
+    if thickness not in [0.12, 0.25, 0.38, 0.51, 0.64]:
+        return {"error": "Толщина должна быть стандартной: 0.12, 0.25, 0.38, 0.51 или 0.64 м"}
+    if openings_count < 0 or opening_width <= 0 or opening_height <= 0:
+        return {"error": "Параметры проёмов должны быть положительными"}
+    if not (0 <= wastage <= 50):
+        return {"error": "Запас должен быть от 0 до 50%"}
+    if mortar_thickness not in [8, 10, 12, 15]:
+        return {"error": "Толщина шва должна быть 8, 10, 12 или 15 мм"}
+
+    # Размеры кирпича (ГОСТ 530-2012)
     brick_sizes = {
         "single": {"length": 0.25, "width": 0.12, "height": 0.065},  # одинарный
         "one_and_half": {"length": 0.25, "width": 0.12, "height": 0.088},  # полуторный
         "double": {"length": 0.25, "width": 0.12, "height": 0.138}  # двойной
     }
-    
+
     brick = brick_sizes.get(brick_type, brick_sizes["single"])
-    
+
     # Площадь стены
     wall_area = length * height
-    # Площадь без проёмов
+
+    # Площадь проёмов
+    openings_area = openings_count * opening_width * opening_height
+
+    # Чистая площадь кладки
     net_area = wall_area - openings_area
-    
-    # Количество кирпичей на 1 м² (с учётом швов)
-    # Для кладки в 1 кирпич (0.25 м)
-    if thickness == 0.12:  # полкирпича
-        bricks_per_m2 = 1 / (brick["length"] * brick["height"])
-    elif thickness == 0.25:  # 1 кирпич
-        bricks_per_m2 = 1 / (brick["length"] * brick["height"]) * 2
-    elif thickness == 0.38:  # 1.5 кирпича
-        bricks_per_m2 = 1 / (brick["length"] * brick["height"]) * 3
-    elif thickness == 0.51:  # 2 кирпича
-        bricks_per_m2 = 1 / (brick["length"] * brick["height"]) * 4
+
+    # Расчёт кирпичей на 1 м² кладки
+    # Учитываем швы и перевязку
+    brick_length_with_mortar = brick["length"] + (mortar_thickness / 1000)
+    brick_height_with_mortar = brick["height"] + (mortar_thickness / 1000)
+
+    # Количество кирпичей в зависимости от толщины кладки
+    thickness_multipliers = {
+        0.12: 0.5,  # полкирпича
+        0.25: 1,    # один кирпич
+        0.38: 1.5,  # полтора кирпича
+        0.51: 2,    # два кирпича
+        0.64: 2.5   # два с половиной кирпича
+    }
+
+    bricks_per_m2 = thickness_multipliers.get(thickness, 1) / (brick_length_with_mortar * brick_height_with_mortar)
+
+    # Коэффициент на неполномерные кирпичи и отходы
+    waste_coefficient = 1 + wastage / 100
+
+    # Температурный коэффициент (холод увеличивает бой)
+    if temperature < 5:
+        temp_coefficient = 1.05
+    elif temperature < 0:
+        temp_coefficient = 1.1
     else:
-        bricks_per_m2 = 1 / (brick["length"] * brick["height"]) * (thickness / 0.12)
-    
-    # С учётом швов (примерно -5%)
-    bricks_per_m2 = bricks_per_m2 * 0.95
-    
+        temp_coefficient = 1.0
+
+    total_coefficient = waste_coefficient * temp_coefficient
+
     # Общее количество кирпичей
-    total_bricks = math.ceil(net_area * bricks_per_m2)
-    # Запас 5-10%
-    total_bricks_with_reserve = math.ceil(total_bricks * 1.08)
-    
-    # Расход раствора (примерно 0.25 м³ на 1 м² стены)
-    mortar_per_m2 = 0.25 * (thickness / 0.25)
-    mortar_volume = net_area * mortar_per_m2
-    
+    total_bricks = math.ceil(net_area * bricks_per_m2 * total_coefficient)
+
+    # Расход раствора (м³ на 1 м² кладки)
+    # Зависит от толщины шва и типа раствора
+    mortar_base = {
+        8: 0.02,   # 8 мм шов
+        10: 0.025, # 10 мм шов
+        12: 0.03,  # 12 мм шов
+        15: 0.037  # 15 мм шов
+    }
+
+    mortar_per_m2 = mortar_base.get(mortar_thickness, 0.025) * (thickness / 0.25)
+
+    # Тип раствора влияет на расход
+    mortar_type_coefficients = {
+        "cement": 1.0,    # цементный
+        "lime": 1.1,      # известковый (больше воды)
+        "mixed": 1.05     # смешанный
+    }
+
+    mortar_coefficient = mortar_type_coefficients.get(mortar_type, 1.0)
+    mortar_per_m2 *= mortar_coefficient
+
+    total_mortar = net_area * mortar_per_m2
+
+    # Количество мешков раствора (25 кг = ~0.016 м³)
+    bags_per_m3 = 1 / 0.016  # мешков на 1 м³
+    total_bags = math.ceil(total_mortar * bags_per_m3)
+
+    # Стоимость (ориентировочная)
+    brick_cost_per_piece = {
+        "single": 12,
+        "one_and_half": 15,
+        "double": 18
+    }.get(brick_type, 15)
+
+    mortar_cost_per_bag = 250  # руб/мешок 25 кг
+
+    total_cost = (total_bricks * brick_cost_per_piece) + (total_bags * mortar_cost_per_bag)
+
+    # Вес материалов
+    brick_weight_per_piece = {
+        "single": 3.5,      # кг
+        "one_and_half": 4.0,
+        "double": 5.0
+    }.get(brick_type, 4.0)
+
+    total_weight = total_bricks * brick_weight_per_piece
+
     result = {
-        "wall_area": round(wall_area, 2),
-        "openings_area": openings_area,
-        "net_area": round(net_area, 2),
+        "wall_dimensions": f"{length}×{height} м",
         "thickness": thickness,
         "brick_type": brick_type,
-        "bricks_per_m2": round(bricks_per_m2, 0),
+        "brick_size": f"{brick['length']*1000:.0f}×{brick['width']*1000:.0f}×{brick['height']*1000:.0f} мм",
+
+        # Проёмы
+        "openings_count": openings_count,
+        "opening_dimensions": f"{opening_width}×{opening_height} м",
+        "openings_area": round(openings_area, 2),
+
+        # Площади
+        "wall_area": round(wall_area, 2),
+        "net_area": round(net_area, 2),
+
+        # Кирпич
+        "bricks_per_m2": round(bricks_per_m2, 1),
         "total_bricks": total_bricks,
-        "total_bricks_with_reserve": total_bricks_with_reserve,
-        "mortar_volume": round(mortar_volume, 2),
-        "mortar_bags": math.ceil(mortar_volume * 1.3),  # 1 м³ = 1.3 мешка по 50 кг
-        "cost_estimate": round(total_bricks_with_reserve * 15, 2),  # ~15 руб/кирпич
+        "brick_weight_per_piece": brick_weight_per_piece,
+        "total_weight": round(total_weight, 0),
+
+        # Раствор
+        "mortar_type": mortar_type,
+        "mortar_thickness": mortar_thickness,
+        "mortar_per_m2": round(mortar_per_m2, 3),
+        "total_mortar": round(total_mortar, 2),
+        "total_bags": total_bags,
+
+        # Условия
+        "temperature": temperature,
+        "wastage_percent": wastage,
+
+        # Стоимость
+        "brick_cost_per_piece": brick_cost_per_piece,
+        "mortar_cost_per_bag": mortar_cost_per_bag,
+        "total_cost": round(total_cost, 2),
+
+        # Нормативы и рекомендации
         "recommendations": {
             "brick_types": {
-                "single": "Одинарный (250×120×65) - для внутренних стен",
-                "one_and_half": "Полуторный (250×120×88) - универсальный",
-                "double": "Двойной (250×120×138) - быстрее кладка"
+                "single": "Одинарный - для внутренних стен, перегородок",
+                "one_and_half": "Полуторный - универсальный, для несущих стен",
+                "double": "Двойной - для быстрой кладки, но тяжелее"
             },
-            "mortar": "Цементно-песчаный раствор М100-М150",
-            "wastage": "Запас 8% на бой и подрезку"
-        }
+            "mortar_types": {
+                "cement": "Цементный М100-М150 - для влажных помещений",
+                "lime": "Известковый М50-М75 - для сухих помещений",
+                "mixed": "Смешанный - оптимальный баланс цена/качество"
+            },
+            "joint_thickness": f"Шов {mortar_thickness} мм - стандартный",
+            "max_wall_height": "Макс высота кладки без армирования: 4-6 м",
+            "curing_time": "Время выдержки раствора: 7-14 дней"
+        },
+
+        # Коэффициенты
+        "waste_coefficient": round(waste_coefficient, 3),
+        "temp_coefficient": round(temp_coefficient, 3),
+        "total_coefficient": round(total_coefficient, 3),
+
+        # Стандарты
+        "standards": "ГОСТ 530-2012, ГОСТ 28013-98, СП 15.13330.2012"
     }
-    
+
     return result
 
 
@@ -1035,59 +1409,173 @@ def calculate_tile(
     width: float,   # ширина помещения, м
     tile_length: float = 0.3,  # длина плитки, м
     tile_width: float = 0.3,   # ширина плитки, м
-    wastage: float = 10.0,  # процент запаса на подрезку
-    grout_width: float = 0.002  # ширина шва, м
+    layout_type: str = "straight",  # straight, diagonal, offset
+    wastage_base: float = 10.0,  # базовый процент запаса
+    grout_width: float = 2,  # ширина шва, мм
+    surface_type: str = "floor",  # floor, wall
+    tile_type: str = "ceramic",  # ceramic, porcelain, natural_stone
+    adhesive_type: str = "cement"  # cement, polymer, epoxy
 ) -> Dict:
     """
-    Расчёт количества плитки
-    
+    Расчёт плитки по СП 71.13330.2017
+
     Returns:
         dict с результатами расчёта
     """
+    # Проверки корректности данных
+    error = validate_positive(length, "Длина помещения") or \
+            validate_positive(width, "Ширина помещения") or \
+            validate_positive(tile_length, "Длина плитки") or \
+            validate_positive(tile_width, "Ширина плитки") or \
+            validate_range(grout_width, 1, 10, "Ширина шва") or \
+            validate_list(layout_type, ["straight", "diagonal", "offset"], "Тип укладки") or \
+            validate_list(surface_type, ["floor", "wall"], "Тип поверхности") or \
+            validate_list(tile_type, ["ceramic", "porcelain", "natural_stone"], "Тип плитки")
+    if error:
+        return error
+
     # Площадь помещения
     room_area = length * width
-    
+
     # Площадь одной плитки
     tile_area = tile_length * tile_width
-    
-    # Количество плиток без запаса
-    tiles_needed = math.ceil(room_area / tile_area)
-    
-    # С запасом на подрезку
-    tiles_with_wastage = math.ceil(tiles_needed * (1 + wastage / 100))
-    
-    # Расход клея (примерно 4-6 кг/м²)
-    adhesive_per_m2 = 5  # кг/м²
-    adhesive_total = math.ceil(room_area * adhesive_per_m2)
-    
-    # Расход затирки (примерно 0.5-1 кг/м²)
-    grout_per_m2 = 0.75  # кг/м²
-    grout_total = round(room_area * grout_per_m2, 1)
-    
-    # Периметр для плинтуса (если нужен)
+
+    # Коэффициент на тип укладки
+    layout_coefficients = {
+        "straight": 1.0,    # прямая укладка
+        "diagonal": 1.15,   # диагональная (больше отходов)
+        "offset": 1.08      # со смещением
+    }
+
+    # Коэффициент на тип поверхности
+    surface_coefficients = {
+        "floor": 1.0,       # пол
+        "wall": 1.05        # стена (больше подрезки)
+    }
+
+    # Базовое количество плиток
+    tiles_base = room_area / tile_area
+
+    # Применяем коэффициенты
+    layout_coeff = layout_coefficients.get(layout_type, 1.0)
+    surface_coeff = surface_coefficients.get(surface_type, 1.0)
+
+    # Итоговый запас
+    total_wastage = wastage_base * layout_coeff * surface_coeff
+
+    # Финальное количество
+    tiles_needed = math.ceil(tiles_base)
+    tiles_with_wastage = math.ceil(tiles_base * (1 + total_wastage / 100))
+
+    # Расход клея (кг/м²) по типу
+    adhesive_consumption = {
+        "cement": {"floor": 4.5, "wall": 3.5},    # цементный
+        "polymer": {"floor": 2.5, "wall": 2.0},   # полимерный
+        "epoxy": {"floor": 3.0, "wall": 2.5}      # эпоксидный
+    }
+
+    adhesive_per_m2 = adhesive_consumption.get(adhesive_type, {}).get(surface_type, 4.0)
+    adhesive_total = room_area * adhesive_per_m2
+
+    # Расход затирки (кг/м²)
+    # Зависит от ширины шва и типа плитки
+    grout_base = {
+        "ceramic": 0.6,
+        "porcelain": 0.5,
+        "natural_stone": 0.8
+    }
+
+    grout_per_m2 = grout_base.get(tile_type, 0.6) * (grout_width / 2)  # ширина шва влияет
+    grout_total = room_area * grout_per_m2
+
+    # Периметр для расчёта плинтуса/бордюра
     perimeter = 2 * (length + width)
-    
+
+    # Стоимость (руб/м²) по типу плитки
+    tile_cost_per_m2 = {
+        "ceramic": 800,
+        "porcelain": 1200,
+        "natural_stone": 2500
+    }.get(tile_type, 1000)
+
+    adhesive_cost_per_kg = {
+        "cement": 25,
+        "polymer": 80,
+        "epoxy": 150
+    }.get(adhesive_type, 30)
+
+    grout_cost_per_kg = 50  # руб/кг
+
+    # Общая стоимость
+    tile_cost = tiles_with_wastage * tile_area * tile_cost_per_m2
+    adhesive_cost = adhesive_total * adhesive_cost_per_kg
+    grout_cost = grout_total * grout_cost_per_kg
+
+    total_cost = tile_cost + adhesive_cost + grout_cost
+
     result = {
+        "room_dimensions": f"{length}×{width} м",
         "room_area": round(room_area, 2),
         "tile_size": f"{tile_length*1000:.0f}×{tile_width*1000:.0f} мм",
         "tile_area": round(tile_area, 3),
+        "tile_type": tile_type,
+        "layout_type": layout_type,
+        "surface_type": surface_type,
+
+        # Расчёты плитки
         "tiles_needed": tiles_needed,
         "tiles_with_wastage": tiles_with_wastage,
-        "wastage_percent": wastage,
-        "adhesive_kg": adhesive_total,
+        "wastage_percent": round(total_wastage, 1),
+
+        # Материалы
+        "adhesive_type": adhesive_type,
+        "adhesive_kg": round(adhesive_total, 1),
         "adhesive_bags": math.ceil(adhesive_total / 25),  # мешки по 25 кг
-        "grout_kg": grout_total,
-        "grout_bags": math.ceil(grout_total / 2.5),  # мешки по 2.5 кг
+
+        "grout_width": grout_width,
+        "grout_kg": round(grout_total, 1),
+        "grout_bags": math.ceil(grout_total / 2),  # мешки по 2 кг
+
+        # Дополнительно
         "perimeter": round(perimeter, 2),
-        "cost_estimate": round(tiles_with_wastage * 500, 2),  # ~500 руб/м²
+
+        # Стоимость
+        "tile_cost_per_m2": tile_cost_per_m2,
+        "adhesive_cost_per_kg": adhesive_cost_per_kg,
+        "grout_cost_per_kg": grout_cost_per_kg,
+        "total_cost": round(total_cost, 2),
+
+        # Коэффициенты
+        "layout_coefficient": layout_coeff,
+        "surface_coefficient": surface_coeff,
+        "total_wastage_coefficient": round(1 + total_wastage / 100, 3),
+
+        # Рекомендации
         "recommendations": {
-            "wastage": f"Запас {wastage}% на подрезку и бой",
-            "adhesive": "Клей для плитки (цементный или полимерный)",
-            "grout": "Затирка для швов (цементная или эпоксидная)",
-            "layout": "Рекомендуется диагональная укладка +15% к запасу"
-        }
+            "layout_types": {
+                "straight": "Прямая укладка - минимальные отходы",
+                "diagonal": "Диагональная - декоративно, но +15% отходов",
+                "offset": "Со смещением - компромисс цена/вид"
+            },
+            "tile_types": {
+                "ceramic": "Керамическая - универсальная, доступная",
+                "porcelain": "Керамогранит - прочная, влагостойкая",
+                "natural_stone": "Натуральный камень - премиум, тяжёлая"
+            },
+            "adhesive_types": {
+                "cement": "Цементный - для большинства случаев",
+                "polymer": "Полимерный - для сложных поверхностей",
+                "epoxy": "Эпоксидный - для влажных помещений"
+            },
+            "grout_width": f"Шов {grout_width} мм - стандартный для такого размера плитки",
+            "curing_time": "Время высыхания клея: 24-48 часов",
+            "maintenance": "Затирка швов через 7-10 дней после укладки"
+        },
+
+        # Стандарты
+        "standards": "СП 71.13330.2017, ГОСТ 27180-2019"
     }
-    
+
     return result
 
 
@@ -1097,64 +1585,182 @@ def calculate_tile(
 
 def calculate_paint(
     area: float,  # площадь поверхности, м²
-    paint_type: str = "water",  # water, oil, latex
+    paint_type: str = "water",  # water, oil, latex, acrylic, silicate
+    surface_type: str = "smooth",  # smooth, rough, porous, textured
     layers: int = 2,  # количество слоёв
-    surface_type: str = "smooth"  # smooth, rough, porous
+    primer_needed: bool = True,  # нужна ли грунтовка
+    temperature: float = 20,  # температура воздуха, °C
+    humidity: float = 60,  # влажность воздуха, %
+    surface_condition: str = "prepared"  # prepared, unprepared, damaged
 ) -> Dict:
     """
-    Расчёт расхода краски
-    
+    Расчёт краски по СП 71.13330.2017
+
     Returns:
-        dict с результатами расчёта
+        dict с результатми расчёта
     """
-    # Расход краски на 1 м² в зависимости от типа (л/м²)
-    paint_consumption = {
-        "water": {"smooth": 0.1, "rough": 0.12, "porous": 0.15},  # водоэмульсионная
-        "oil": {"smooth": 0.12, "rough": 0.15, "porous": 0.18},  # масляная
-        "latex": {"smooth": 0.08, "rough": 0.1, "porous": 0.12}  # латексная
+    # Проверки корректности данных
+    error = validate_positive(area, "Площадь") or \
+            validate_range(layers, 1, 5, "Количество слоёв") or \
+            validate_range(temperature, -10, 40, "Температура") or \
+            validate_range(humidity, 0, 100, "Влажность") or \
+            validate_list(paint_type, ["water", "oil", "latex", "acrylic", "silicate"], "Тип краски") or \
+            validate_list(surface_type, ["smooth", "rough", "porous", "textured"], "Тип поверхности") or \
+            validate_list(surface_condition, ["prepared", "unprepared", "damaged"], "Состояние поверхности")
+    if error:
+        return error
+
+    # Базовый расход краски (л/м² на один слой)
+    base_consumption = {
+        "water": {
+            "smooth": 0.08, "rough": 0.12, "porous": 0.16, "textured": 0.14
+        },
+        "oil": {
+            "smooth": 0.10, "rough": 0.15, "porous": 0.20, "textured": 0.18
+        },
+        "latex": {
+            "smooth": 0.06, "rough": 0.09, "porous": 0.12, "textured": 0.10
+        },
+        "acrylic": {
+            "smooth": 0.07, "rough": 0.11, "porous": 0.14, "textured": 0.12
+        },
+        "silicate": {
+            "smooth": 0.15, "rough": 0.20, "porous": 0.25, "textured": 0.22
+        }
     }
-    
-    base_consumption = paint_consumption.get(paint_type, paint_consumption["water"])
-    consumption_per_m2 = base_consumption.get(surface_type, base_consumption["smooth"])
-    
-    # Общий расход с учётом слоёв
-    total_consumption = area * consumption_per_m2 * layers
-    
-    # Запас 10%
-    total_with_reserve = total_consumption * 1.1
-    
-    # Количество банок (обычно 2.5 л или 10 л)
-    cans_2_5l = math.ceil(total_with_reserve / 2.5)
-    cans_10l = math.ceil(total_with_reserve / 10)
-    
-    # Расход грунтовки (примерно 0.1 л/м²)
-    primer_consumption = area * 0.1
-    primer_cans = math.ceil(primer_consumption / 2.5)
-    
+
+    consumption_per_layer = base_consumption.get(paint_type, {}).get(surface_type, 0.12)
+
+    # Коэффициенты условий
+    # Температура влияет на расход
+    if temperature < 10:
+        temp_coeff = 1.15  # холод - больше краски
+    elif temperature > 30:
+        temp_coeff = 1.10  # жара - быстрее сохнет
+    else:
+        temp_coeff = 1.0
+
+    # Влажность влияет на впитываемость
+    if humidity > 70:
+        humidity_coeff = 1.05  # влажность - меньше впитывается
+    elif humidity < 30:
+        humidity_coeff = 1.10  # сухость - больше впитывается
+    else:
+        humidity_coeff = 1.0
+
+    # Состояние поверхности
+    condition_coeff = {
+        "prepared": 1.0,    # подготовленная
+        "unprepared": 1.2,  # неподготовленная
+        "damaged": 1.3      # повреждённая
+    }.get(surface_condition, 1.0)
+
+    # Итоговый коэффициент на слой
+    consumption_per_layer *= temp_coeff * humidity_coeff * condition_coeff
+
+    # Общий расход
+    total_consumption = area * consumption_per_layer * layers
+
+    # Запас на потери (10-15%)
+    wastage_coeff = 1.12
+    total_with_reserve = total_consumption * wastage_coeff
+
+    # Расход грунтовки (если нужна)
+    if primer_needed:
+        primer_consumption_per_m2 = {
+            "smooth": 0.08,
+            "rough": 0.12,
+            "porous": 0.15,
+            "textured": 0.10
+        }.get(surface_type, 0.10)
+
+        primer_total = area * primer_consumption_per_m2 * 1.05  # +5% запас
+        primer_cans = math.ceil(primer_total / 2.5)  # банки по 2.5 л
+    else:
+        primer_total = 0
+        primer_cans = 0
+
+    # Упаковка краски
+    can_sizes = [0.9, 2.5, 5, 10, 20]  # стандартные размеры
+
+    # Оптимальный размер банки
+    optimal_can = 2.5  # 2.5 л - наиболее распространённый
+    cans_needed = math.ceil(total_with_reserve / optimal_can)
+
+    # Стоимость (руб/л)
+    paint_cost_per_liter = {
+        "water": 180,
+        "oil": 250,
+        "latex": 300,
+        "acrylic": 350,
+        "silicate": 400
+    }.get(paint_type, 250)
+
+    primer_cost_per_liter = 200
+
+    paint_cost = total_with_reserve * paint_cost_per_liter
+    primer_cost = primer_total * primer_cost_per_liter if primer_needed else 0
+
+    total_cost = paint_cost + primer_cost
+
     result = {
         "area": area,
         "paint_type": paint_type,
         "surface_type": surface_type,
+        "surface_condition": surface_condition,
         "layers": layers,
-        "consumption_per_m2": round(consumption_per_m2, 3),
+        "primer_needed": primer_needed,
+        "temperature": temperature,
+        "humidity": humidity,
+
+        # Расход краски
+        "consumption_per_layer": round(consumption_per_layer, 3),
         "total_consumption": round(total_consumption, 2),
         "total_with_reserve": round(total_with_reserve, 2),
-        "cans_2_5l": cans_2_5l,
-        "cans_10l": cans_10l,
-        "primer_liters": round(primer_consumption, 1),
+        "cans_needed": cans_needed,
+        "can_size": optimal_can,
+
+        # Расход грунтовки
+        "primer_liters": round(primer_total, 2),
         "primer_cans": primer_cans,
-        "cost_estimate": round(total_with_reserve * 300, 2),  # ~300 руб/л
+
+        # Стоимость
+        "paint_cost_per_liter": paint_cost_per_liter,
+        "primer_cost_per_liter": primer_cost_per_liter,
+        "paint_cost": round(paint_cost, 2),
+        "primer_cost": round(primer_cost, 2),
+        "total_cost": round(total_cost, 2),
+
+        # Коэффициенты
+        "temp_coefficient": round(temp_coeff, 3),
+        "humidity_coefficient": round(humidity_coeff, 3),
+        "condition_coefficient": round(condition_coeff, 3),
+        "wastage_coefficient": wastage_coeff,
+        "total_coefficient": round(temp_coeff * humidity_coeff * condition_coeff * wastage_coeff, 3),
+
+        # Рекомендации
         "recommendations": {
             "paint_types": {
-                "water": "Водоэмульсионная - для внутренних работ",
-                "oil": "Масляная - для наружных работ",
-                "latex": "Латексная - влагостойкая, для ванных"
+                "water": "Водоэмульсионная - экологичная, для сухих помещений",
+                "oil": "Масляная - прочная, для влажных помещений",
+                "latex": "Латексная - эластичная, для стен и потолков",
+                "acrylic": "Акриловая - универсальная, быстро сохнет",
+                "silicate": "Силикатная - паропроницаемая, для фасадов"
             },
-            "primer": "Грунтовка обязательна для пористых поверхностей",
-            "layers": f"Рекомендуется {layers} слоя для качественного покрытия"
-        }
+            "surface_preparation": {
+                "prepared": "Шлифовка, обеспыливание - минимальный расход",
+                "unprepared": "Необработанная поверхность - +20% расход",
+                "damaged": "Повреждённая поверхность - +30% расход"
+            },
+            "application_conditions": f"Оптимальная температура: 15-25°C, влажность: 40-60%",
+            "drying_time": "Время высыхания между слоями: 2-4 часа",
+            "safety": "Работать в проветриваемом помещении, использовать СИЗ"
+        },
+
+        # Стандарты
+        "standards": "СП 71.13330.2017, ГОСТ 28196-2019"
     }
-    
+
     return result
 
 
