@@ -3175,26 +3175,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             projects = get_user_projects(user_id)
             current_project = context.user_data.get("current_project")
 
-            keyboard = []
-
-            # Кнопка создания нового проекта
-            keyboard.append([
-                InlineKeyboardButton("➕ Создать новый проект", callback_data="proj_create")
-            ])
-
-            # Список существующих проектов
-            if projects:
-                keyboard.append([
-                    InlineKeyboardButton("────────────────", callback_data="ignore")
-                ])
-                for proj in projects:
-                    emoji = "✅ " if proj == current_project else "📁 "
-                    keyboard.append([
-                        InlineKeyboardButton(
-                            text=f"{emoji}{proj}",
-                            callback_data=f"proj_open_{proj}"
-                        )
-                    ])
+            keyboard = [
+                [InlineKeyboardButton("➕ Создать новый проект", callback_data="proj_create"),
+                 InlineKeyboardButton("📂 Мои проекты", callback_data="proj_list")]
+            ]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -3206,6 +3190,55 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             status_text += f"Всего проектов: {len(projects)}\n\n"
             status_text += "Выберите действие:"
+
+            await query.edit_message_text(
+                status_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "proj_list":
+        # Список всех проектов пользователя
+        if PROJECTS_AVAILABLE:
+            user_id = update.effective_user.id
+            projects = get_user_projects(user_id)
+            current_project = context.user_data.get("current_project")
+
+            keyboard = []
+
+            if not projects:
+                keyboard.append([
+                    InlineKeyboardButton("➕ Создать первый проект", callback_data="proj_create")
+                ])
+            else:
+                # Список существующих проектов
+                for proj in projects:
+                    emoji = "✅ " if proj == current_project else "📁 "
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            text=f"{emoji}{proj}",
+                            callback_data=f"proj_open_{proj}"
+                        )
+                    ])
+
+            # Кнопка назад
+            keyboard.append([
+                InlineKeyboardButton("« Назад к меню проектов", callback_data="project_menu")
+            ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            status_text = f"**📂 МОИ ПРОЕКТЫ**\n\n"
+            if current_project:
+                status_text += f"✅ Активный: **{current_project}**\n\n"
+
+            if projects:
+                status_text += f"Всего проектов: {len(projects)}\n\n"
+                status_text += "Выберите проект для работы:"
+            else:
+                status_text += "У вас пока нет проектов.\n\n"
+                status_text += "Создайте первый проект для начала работы!"
 
             await query.edit_message_text(
                 status_text,
