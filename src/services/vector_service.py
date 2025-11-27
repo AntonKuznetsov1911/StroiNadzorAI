@@ -225,6 +225,23 @@ class VectorService:
 
         return chunks
 
+    def clear_all(self):
+        """Очистить все коллекции"""
+        for name, collection in self.collections.items():
+            try:
+                # Delete collection and recreate
+                self.client.delete_collection(name=collection.name)
+                logger.info(f"Cleared collection: {name}")
+            except Exception as e:
+                logger.warning(f"Could not clear collection {name}: {e}")
+
+        # Recreate collections
+        self.collections = {
+            'snip': self._get_or_create_collection('construction_snip'),
+            'gost': self._get_or_create_collection('construction_gost'),
+            'sp': self._get_or_create_collection('construction_sp'),
+        }
+
     def get_collection_stats(self) -> Dict[str, int]:
         """Получить статистику по коллекциям"""
         stats = {}
