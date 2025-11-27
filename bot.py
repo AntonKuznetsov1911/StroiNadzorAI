@@ -1385,9 +1385,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message += "Попробуйте отправить фото дефекта или задать вопрос! 👇"
 
     keyboard = [
-        [InlineKeyboardButton("📚 Список нормативов", callback_data="regulations")],
-        [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples")],
-        [InlineKeyboardButton("📊 Статистика", callback_data="stats"),
+        [InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu"),
+         InlineKeyboardButton("📚 Нормативы", callback_data="regulations")],
+        [InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu"),
+         InlineKeyboardButton("🔍 Галерея дефектов", callback_data="defects")],
+        [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
+         InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
+        [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples"),
          InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3049,6 +3053,32 @@ async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === ГЛАВНАЯ ФУНКЦИЯ ===
 
+async def setup_bot_menu(application):
+    """Установка постоянного меню команд бота"""
+    from telegram import BotCommand
+
+    commands = [
+        BotCommand("start", "🏠 Главное меню"),
+        BotCommand("help", "📖 Справка по всем командам"),
+        BotCommand("calculators", "🧮 Калькуляторы (6 шт)"),
+        BotCommand("regulations", "📚 Нормативы (27 документов)"),
+        BotCommand("faq", "❓ Частые вопросы"),
+        BotCommand("defects", "🔍 Галерея дефектов"),
+        BotCommand("templates", "📋 Шаблоны документов"),
+        BotCommand("role", "👔 Выбрать роль"),
+        BotCommand("history", "📜 История диалогов"),
+        BotCommand("stats", "📊 Статистика"),
+        BotCommand("hse", "🦺 Охрана труда"),
+        BotCommand("technology", "🏗️ Технология строительства"),
+        BotCommand("estimating", "💰 Сметное дело"),
+        BotCommand("legal", "⚖️ Юридические вопросы"),
+        BotCommand("management", "📈 Управление проектами"),
+    ]
+
+    await application.bot.set_my_commands(commands)
+    logger.info("✅ Меню команд бота установлено")
+
+
 def main():
     """Запуск бота"""
     import asyncio
@@ -3181,6 +3211,9 @@ def main():
 
     # Регистрируем обработчик ошибок
     application.add_error_handler(error_handler)
+
+    # Устанавливаем меню команд бота
+    loop.run_until_complete(setup_bot_menu(application))
 
     # Запускаем бота
     logger.info("Bot is running... Press Ctrl+C to stop")

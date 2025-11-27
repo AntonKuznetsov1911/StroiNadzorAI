@@ -933,7 +933,7 @@ async def water_calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         workers = context.user_data['water_workers']
 
         if CALCULATORS_AVAILABLE:
-            result = calculate_water(workers, batches)
+            result = calculate_water(workers=workers, mixers_per_day=batches)
             formatted_result = format_calculator_result("water", result)
 
             await update.message.reply_text(
