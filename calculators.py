@@ -571,3 +571,111 @@ def format_calculator_result(calc_type: str, result: Dict) -> str:
 
     # Fallback для неизвестных типов
     return "Результат: " + str(result)
+
+
+# ========================================
+# 7. УНИВЕРСАЛЬНЫЙ МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР
+# ========================================
+
+def calculate_math_expression(expression: str) -> Dict:
+    """
+    Вычислить математическое выражение
+    
+    Args:
+        expression: строка с математическим выражением
+        
+    Returns:
+        dict с результатом вычисления
+    """
+    import re
+    
+    # Безопасная обработка выражения
+    try:
+        # Заменяем запятые на точки
+        expression = expression.replace(',', '.')
+        
+        # Удаляем все символы кроме цифр, операторов, скобок и точки
+        # Разрешаем: +, -, *, /, ^, **, (, ), ., числа, пробелы
+        safe_chars = r'[0-9+\-*/.()^ \s]'
+        cleaned = ''.join(re.findall(safe_chars, expression))
+        
+        # Заменяем ^ на ** для возведения в степень
+        cleaned = cleaned.replace('^', '**')
+        
+        # Проверяем на опасные функции (eval может выполнить любой код)
+        dangerous = ['import', 'exec', 'eval', '__', 'open', 'file']
+        if any(d in expression.lower() for d in dangerous):
+            return {
+                "success": False,
+                "error": "Недопустимые символы в выражении",
+                "expression": expression
+            }
+        
+        # Вычисляем выражение
+        result = eval(cleaned)
+        
+        # Форматируем результат
+        if isinstance(result, float):
+            # Округляем до 10 знаков после запятой
+            if abs(result) < 1e-10:
+                result = 0.0
+            else:
+                result = round(result, 10)
+        
+        return {
+            "success": True,
+            "expression": expression,
+            "result": result,
+            "formatted": f"{result:,.10f}".rstrip('0').rstrip('.') if isinstance(result, float) else str(result)
+        }
+        
+    except ZeroDivisionError:
+        return {
+            "success": False,
+            "error": "Деление на ноль",
+            "expression": expression
+        }
+    except SyntaxError as e:
+        return {
+            "success": False,
+            "error": f"Синтаксическая ошибка: {str(e)}",
+            "expression": expression
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Ошибка вычисления: {str(e)}",
+            "expression": expression
+        }
+
+
+def format_math_result(result: Dict) -> str:
+    """
+    Форматировать результат математического калькулятора
+    
+    Args:
+        result: результат из calculate_math_expression
+        
+    Returns:
+        отформатированный текст
+    """
+    if result.get("success"):
+        return f"""🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**
+
+📝 **Выражение:**
+`{result['expression']}`
+
+✅ **Результат:**
+`{result['formatted']}`
+
+💡 **Подсказка:** Используйте кнопки для ввода или введите выражение вручную"""
+    else:
+        return f"""🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**
+
+❌ **Ошибка:**
+{result.get('error', 'Неизвестная ошибка')}
+
+📝 **Выражение:**
+`{result.get('expression', '')}`
+
+💡 **Попробуйте ещё раз**"""

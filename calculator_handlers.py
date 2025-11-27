@@ -25,7 +25,9 @@ try:
         calculate_electrical,
         calculate_water,
         calculate_winter_heating,
-        format_calculator_result
+        format_calculator_result,
+        calculate_math_expression,
+        format_math_result
     )
     CALCULATORS_AVAILABLE = True
 except ImportError:
@@ -56,6 +58,9 @@ except ImportError:
 
 # Калькулятор зимнего прогрева
 (WINTER_VOLUME, WINTER_TEMP, WINTER_METHOD) = range(21, 24)
+
+# Универсальный математический калькулятор
+(MATH_EXPRESSION, MATH_RESULT) = range(24, 26)
 
 
 # ========================================
@@ -1103,3 +1108,240 @@ def create_winter_calculator_handler():
         per_chat=True,
         per_user=True
     )
+# ========================================
+# УНИВЕРСАЛЬНЫЙ МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР
+# ========================================
+
+async def math_calculator_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало работы с математическим калькулятором"""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        context.user_data['math_expression'] = ""
+        
+        keyboard = create_math_keyboard()
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**\n\n"
+            "📝 **Выражение:**\n"
+            "`0`\n\n"
+            "💡 Используйте кнопки для ввода или отправьте выражение текстом\n\n"
+            "**Примеры:**\n"
+            "• `2 + 2`\n"
+            "• `10 * 5.5`\n"
+            "• `(100 + 50) / 2`\n"
+            "• `2^3` (2 в степени 3)\n"
+            "• `3.14 * 2`",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return MATH_EXPRESSION
+    else:
+        await update.message.reply_text(
+            "🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**\n\n"
+            "Введите математическое выражение или используйте /calc_math для интерактивного режима",
+            parse_mode='Markdown'
+        )
+        return MATH_EXPRESSION
+
+
+def create_math_keyboard():
+    """Создать клавиатуру математического калькулятора"""
+    return [
+        [
+            InlineKeyboardButton("C", callback_data="math_clear"),
+            InlineKeyboardButton("⌫", callback_data="math_backspace"),
+            InlineKeyboardButton("÷", callback_data="math_/"),
+            InlineKeyboardButton("×", callback_data="math_*")
+        ],
+        [
+            InlineKeyboardButton("7", callback_data="math_7"),
+            InlineKeyboardButton("8", callback_data="math_8"),
+            InlineKeyboardButton("9", callback_data="math_9"),
+            InlineKeyboardButton("-", callback_data="math_-")
+        ],
+        [
+            InlineKeyboardButton("4", callback_data="math_4"),
+            InlineKeyboardButton("5", callback_data="math_5"),
+            InlineKeyboardButton("6", callback_data="math_6"),
+            InlineKeyboardButton("+", callback_data="math_+")
+        ],
+        [
+            InlineKeyboardButton("1", callback_data="math_1"),
+            InlineKeyboardButton("2", callback_data="math_2"),
+            InlineKeyboardButton("3", callback_data="math_3"),
+            InlineKeyboardButton("=", callback_data="math_=")
+        ],
+        [
+            InlineKeyboardButton("0", callback_data="math_0"),
+            InlineKeyboardButton(".", callback_data="math_."),
+            InlineKeyboardButton("(", callback_data="math_("),
+            InlineKeyboardButton(")", callback_data="math_)")
+        ],
+        [
+            InlineKeyboardButton("^", callback_data="math_^"),
+            InlineKeyboardButton("√", callback_data="math_sqrt"),
+            InlineKeyboardButton("π", callback_data="math_pi"),
+            InlineKeyboardButton("e", callback_data="math_e")
+        ],
+        [
+            InlineKeyboardButton("✅ Вычислить", callback_data="math_calculate"),
+            InlineKeyboardButton("❌ Отмена", callback_data="math_cancel")
+        ]
+    ]
+
+
+async def math_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий кнопок калькулятора"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data.replace("math_", "")
+    expression = context.user_data.get('math_expression', '')
+    
+    if data == "clear":
+        expression = ""
+    elif data == "backspace":
+        expression = expression[:-1] if expression else ""
+    elif data == "=" or data == "calculate":
+        if expression:
+            if CALCULATORS_AVAILABLE:
+                result = calculate_math_expression(expression)
+                formatted = format_math_result(result)
+                
+                keyboard = create_math_keyboard()
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    formatted,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                
+                if result.get("success"):
+                    context.user_data['math_expression'] = str(result['formatted'])
+                else:
+                    context.user_data['math_expression'] = expression
+            else:
+                await query.edit_message_text("❌ Модуль калькуляторов недоступен.")
+        else:
+            await query.answer("Введите выражение", show_alert=True)
+        return MATH_EXPRESSION
+    elif data == "cancel":
+        context.user_data.clear()
+        await query.edit_message_text("❌ Калькулятор закрыт.\n\nИспользуйте /calculators для нового расчёта.")
+        return ConversationHandler.END
+    elif data == "sqrt":
+        expression += "**(1/2)"
+    elif data == "pi":
+        expression += "3.14159265359"
+    elif data == "e":
+        expression += "2.71828182846"
+    else:
+        expression += data
+    
+    context.user_data['math_expression'] = expression
+    
+    keyboard = create_math_keyboard()
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    display_expr = expression if expression else "0"
+    
+    await query.edit_message_text(
+        f"🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**\n\n"
+        f"📝 **Выражение:**\n"
+        f"`{display_expr}`\n\n"
+        f"💡 Используйте кнопки для ввода или отправьте выражение текстом",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    return MATH_EXPRESSION
+
+
+async def math_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка текстового ввода выражения"""
+    expression = update.message.text.strip()
+    
+    if CALCULATORS_AVAILABLE:
+        result = calculate_math_expression(expression)
+        formatted = format_math_result(result)
+        
+        if result.get("success"):
+            context.user_data['math_expression'] = str(result['formatted'])
+        else:
+            context.user_data['math_expression'] = expression
+        
+        keyboard = create_math_keyboard()
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            formatted,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text("❌ Модуль калькуляторов недоступен.")
+    
+    return MATH_EXPRESSION
+
+
+def create_math_calculator_handler():
+    """Создать ConversationHandler для математического калькулятора"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(math_calculator_start, pattern="^calc_math$")
+        ],
+        states={
+            MATH_EXPRESSION: [
+                CallbackQueryHandler(math_button_handler, pattern="^math_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, math_text_handler)
+            ],
+        },
+        fallbacks=[
+            CommandHandler('cancel', cancel),
+            CallbackQueryHandler(lambda u, c: ConversationHandler.END, pattern="^math_cancel$")
+        ],
+        name="math_calculator",
+        persistent=False,
+        per_message=False,
+        per_chat=True,
+        per_user=True
+    )
+
+
+async def quick_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Быстрый расчёт математического выражения"""
+    try:
+        if not context.args:
+            await update.message.reply_text(
+                "🧮 **МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР**\n\n"
+                "**Формат:**\n"
+                "`/calc_math выражение`\n\n"
+                "**Примеры:**\n"
+                "• `/calc_math 2+2`\n"
+                "• `/calc_math 10*5.5`\n"
+                "• `/calc_math (100+50)/2`\n"
+                "• `/calc_math 2^3`\n\n"
+                "Или используйте `/calculators` для интерактивного режима",
+                parse_mode='Markdown'
+            )
+            return
+        
+        expression = " ".join(context.args)
+        
+        if CALCULATORS_AVAILABLE:
+            result = calculate_math_expression(expression)
+            formatted = format_math_result(result)
+            
+            await update.message.reply_text(formatted, parse_mode='Markdown')
+        else:
+            await update.message.reply_text("❌ Модуль калькуляторов недоступен.")
+    
+    except Exception as e:
+        logger.error(f"Error in quick_math: {e}")
+        await update.message.reply_text(
+            f"❌ Ошибка: {str(e)}\n\nПроверьте формат выражения."
+        )
+
