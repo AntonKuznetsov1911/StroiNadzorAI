@@ -1,6 +1,6 @@
 """
 Telegram бот СтройНадзорAI - AI консультант по строительным нормативам
-С поддержкой анализа фотографий дефектов
+С поддержкой технического анализа фотографий
 """
 
 import os
@@ -232,21 +232,6 @@ try:
 except ImportError:
     ROLES_AVAILABLE = False
     logger.warning("⚠️ Модуль role_modes.py не найден")
-
-# Галерея дефектов v3.4
-try:
-    from defect_gallery import (
-        defects_command,
-        handle_defect_callback,
-        get_defect_count,
-        DEFECT_CATEGORIES
-    )
-    DEFECTS_GALLERY_AVAILABLE = True
-    defect_count = get_defect_count()
-    logger.info(f"✅ Галерея дефектов v3.4 загружена ({defect_count} дефектов в базе)")
-except ImportError:
-    DEFECTS_GALLERY_AVAILABLE = False
-    logger.warning("⚠️ Модуль defect_gallery.py не найден")
 
 # Управление историей v3.5
 try:
@@ -552,13 +537,8 @@ def extract_tags_from_message(content: str) -> list:
         if reg_code in content:
             tags.append(f"норматив:{reg_code}")
 
-    # Извлекаем типы дефектов
-    defect_keywords = {
-        'трещина': 'дефект:трещина',
-        'коррозия': 'дефект:коррозия',
-        'отслоение': 'дефект:отслоение',
-        'деформация': 'дефект:деформация',
-        'протечка': 'дефект:протечка',
+    # Извлекаем ключевые слова
+    keywords = {
         'бетон': 'материал:бетон',
         'арматура': 'материал:арматура',
         'фундамент': 'конструкция:фундамент',
@@ -568,7 +548,7 @@ def extract_tags_from_message(content: str) -> list:
     }
 
     content_lower = content.lower()
-    for keyword, tag in defect_keywords.items():
+    for keyword, tag in keywords.items():
         if keyword in content_lower:
             tags.append(tag)
 
@@ -674,13 +654,6 @@ def get_recommendations(user_id: int) -> dict:
                     'title': REGULATIONS[reg_code]['title'],
                     'reason': f'Вы часто обращались к этому нормативу ({count} раз)'
                 })
-        elif tag.startswith('дефект:'):
-            defect_type = tag.split(':')[1]
-            recommendations.append({
-                'type': 'defect_guide',
-                'defect': defect_type,
-                'reason': f'Вы интересовались дефектами типа "{defect_type}"'
-            })
 
     # Популярные темы
     popular_topics = []
@@ -811,88 +784,6 @@ def export_history_to_docx(user_id: int) -> BytesIO:
     buffer.seek(0)
     return buffer
 
-
-# === БАЗА ТИПОВЫХ ДЕФЕКТОВ ===
-
-DEFECT_DATABASE = {
-    'трещина': {
-        'types': {
-            'усадочная': {
-                'description': 'Вертикальная трещина, возникающая при усадке бетона',
-                'критичность': 'низкая',
-                'норматив': 'СП 63.13330.2018',
-                'допустимая_ширина': '0.1-0.3 мм'
-            },
-            'температурная': {
-                'description': 'Трещина от температурных деформаций',
-                'критичность': 'средняя',
-                'норматив': 'СП 63.13330.2018',
-                'допустимая_ширина': '0.2-0.4 мм'
-            },
-            'силовая': {
-                'description': 'Трещина от превышения нагрузки',
-                'критичность': 'высокая',
-                'норматив': 'СП 63.13330.2018',
-                'допустимая_ширина': '0.1-0.2 мм'
-            }
-        },
-        'методы_устранения': [
-            'Инъектирование эпоксидными смолами',
-            'Усиление внешними композитными материалами',
-            'Устройство обойм'
-        ]
-    },
-    'коррозия': {
-        'types': {
-            'арматуры': {
-                'description': 'Коррозия стальной арматуры в бетоне',
-                'критичность': 'высокая',
-                'норматив': 'СП 28.13330.2017',
-                'признаки': 'Ржавые потеки, отслоение защитного слоя'
-            },
-            'металлоконструкций': {
-                'description': 'Коррозия стальных конструкций',
-                'критичность': 'высокая',
-                'норматив': 'СП 28.13330.2017',
-                'признаки': 'Ржавчина, утонение элементов'
-            }
-        },
-        'методы_устранения': [
-            'Механическая очистка',
-            'Антикоррозионная защита',
-            'Усиление конструкций'
-        ]
-    },
-    'отслоение': {
-        'types': {
-            'защитного_слоя': {
-                'description': 'Отслоение защитного слоя бетона',
-                'критичность': 'высокая',
-                'норматив': 'СП 13-102-2003',
-                'причины': 'Коррозия арматуры, некачественный бетон'
-            },
-            'штукатурки': {
-                'description': 'Отслоение штукатурного слоя',
-                'критичность': 'средняя',
-                'норматив': 'СП 71.13330.2017',
-                'причины': 'Плохая адгезия, влажность'
-            }
-        },
-        'методы_устранения': [
-            'Удаление отслоившихся участков',
-            'Восстановление защитного слоя',
-            'Грунтование поверхности'
-        ]
-    }
-}
-
-def get_defect_info(defect_type: str) -> dict:
-    """Получить информацию о дефекте из базы"""
-    defect_lower = defect_type.lower()
-    for key in DEFECT_DATABASE.keys():
-        if key in defect_lower:
-            return DEFECT_DATABASE[key]
-    return None
 
 
 # === СИСТЕМА УВЕДОМЛЕНИЙ О НОРМАТИВАХ ===
@@ -1387,16 +1278,6 @@ REGULATIONS = {
 }
 
 
-# Дефекты для распознавания
-DEFECT_CATEGORIES = {
-    "crack": {"name": "Трещина", "severity": "critical", "regulation": "СП 63.13330.2018"},
-    "corrosion": {"name": "Коррозия", "severity": "major", "regulation": "СП 28.13330.2017"},
-    "spalling": {"name": "Отслоение", "severity": "major", "regulation": "СП 13-102-2003"},
-    "deformation": {"name": "Деформация", "severity": "critical", "regulation": "СП 22.13330.2016"},
-    "leak": {"name": "Протечка", "severity": "major", "regulation": "СП 70.13330.2012"},
-}
-
-
 # === КОМАНДЫ ===
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1414,8 +1295,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔍 *Мои возможности:*
 
 📸 *Анализ фотографий*
-   • Отправьте фото дефекта
-   • Я определю тип, критичность
+   • Отправьте фото строительного объекта
+   • Я проведу техническую экспертизу
    • Дам рекомендации по нормативам
 
 💬 *Консультации с памятью*
@@ -1466,13 +1347,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 """
 
-    welcome_message += "Попробуйте отправить фото дефекта или задать вопрос! 👇"
+    # Показываем активный проект (если есть)
+    if PROJECTS_AVAILABLE:
+        current_project = context.user_data.get("current_project")
+        if current_project:
+            welcome_message += f"📁 *Активный проект:* {current_project}\n"
+            welcome_message += "_(все диалоги сохраняются в проект)_\n\n"
+
+    welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
     keyboard = [
-        [InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu"),
-         InlineKeyboardButton("📚 Нормативы", callback_data="regulations")],
-        [InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu"),
-         InlineKeyboardButton("🔍 Галерея дефектов", callback_data="defects")],
+        [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
+         InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
+        [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
+         InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu")],
         [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
          InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
         [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples"),
@@ -1488,7 +1376,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """📖 *ПОДРОБНАЯ СПРАВКА - СтройНадзорAI v2.3*
 
 *1️⃣ Анализ фотографий:*
-   • Отправьте фото дефекта
+   • Отправьте фото объекта
    • Можно добавить подпись с вопросом
    • Я проанализирую изображение и дам рекомендации
 
@@ -1528,7 +1416,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 *💡 УМНЫЕ ФУНКЦИИ v3.6:*
    /calculators - 6 интерактивных калькуляторов
    /saved - Сохранённые расчёты калькуляторов
-   /defects - Галерея типичных дефектов (12 дефектов)
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
 
@@ -1576,7 +1463,7 @@ async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Допустимые деформации перекрытий
 • Как проверить качество кирпичной кладки?
 
-**О дефектах:**
+**Анализ фотографий:**
 • Трещина шириной 0.3 мм - критична ли она?
 • Как оценить степень коррозии арматуры?
 • Что делать при обнаружении отслоения штукатурки?
@@ -1611,7 +1498,7 @@ async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Ссылаться на предыдущие обсуждения
 • Развивать одну тему в нескольких сообщениях
 
-Просто напишите свой вопрос или отправьте фото дефекта! 📸"""
+Просто напишите свой вопрос или отправьте фото объекта! 📸"""
 
     await update.message.reply_text(examples_text, parse_mode='Markdown')
 
@@ -1776,17 +1663,12 @@ async def recommendations_command(update: Update, context: ContextTypes.DEFAULT_
             if rec['type'] == 'related_regulation':
                 response += f"📚 [{rec['code']}]({REGULATIONS[rec['code']]['url']}) - {rec['title']}\n"
                 response += f"_{rec['reason']}_\n\n"
-            elif rec['type'] == 'defect_guide':
-                defect = rec['defect'].capitalize()
-                response += f"🔍 Справочник по дефекту: {defect}\n"
-                response += f"_{rec['reason']}_\n\n"
 
     if recs['popular_topics']:
         response += "\n**Ваши популярные темы:**\n\n"
         for topic in recs['popular_topics']:
             emoji_map = {
                 'норматив': '📄',
-                'дефект': '⚠️',
                 'материал': '🧱',
                 'конструкция': '🏗️'
             }
@@ -1794,66 +1676,6 @@ async def recommendations_command(update: Update, context: ContextTypes.DEFAULT_
             response += f"{emoji} {topic['topic'].capitalize()} - {topic['mentions']} упоминаний\n"
 
     await update.message.reply_text(response, parse_mode='Markdown', disable_web_page_preview=True)
-
-
-async def defects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /defects - справочник дефектов"""
-    if not context.args:
-        text = """🔍 **Справочник дефектов**
-
-**Доступные типы дефектов:**
-
-⚠️ **Трещины**
-   • Усадочные
-   • Температурные
-   • Силовые (от перегрузки)
-
-🦠 **Коррозия**
-   • Коррозия арматуры
-   • Коррозия металлоконструкций
-
-🔻 **Отслоение**
-   • Отслоение защитного слоя бетона
-   • Отслоение штукатурки
-
-**Использование:**
-`/defects трещина` - информация о трещинах
-`/defects коррозия` - информация о коррозии
-`/defects отслоение` - информация об отслоении"""
-
-        await update.message.reply_text(text, parse_mode='Markdown')
-        return
-
-    defect_query = " ".join(context.args).lower()
-    defect_info = get_defect_info(defect_query)
-
-    if not defect_info:
-        await update.message.reply_text(
-            f"❌ Информация о дефекте «{defect_query}» не найдена.\n\n"
-            "Используйте `/defects` без параметров для списка доступных дефектов.",
-            parse_mode='Markdown'
-        )
-        return
-
-    response = f"🔍 **Справочник: {defect_query.capitalize()}**\n\n"
-
-    if 'types' in defect_info:
-        response += "**Типы:**\n\n"
-        for type_name, type_data in defect_info['types'].items():
-            response += f"• **{type_name.capitalize()}**\n"
-            response += f"  {type_data['description']}\n"
-            response += f"  Критичность: {type_data['критичность']}\n"
-            response += f"  Норматив: {type_data['норматив']}\n"
-            if 'допустимая_ширина' in type_data:
-                response += f"  Допустимая ширина: {type_data['допустимая_ширина']}\n"
-            response += "\n"
-
-    if 'методы_устранения' in defect_info:
-        response += "**Методы устранения:**\n\n"
-        for i, method in enumerate(defect_info['методы_устранения'], 1):
-            response += f"{i}. {method}\n"
-
-    await update.message.reply_text(response, parse_mode='Markdown')
 
 
 async def updates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2233,18 +2055,149 @@ async def new_project_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     result = create_project(user_id, project_name)
 
     if result["success"]:
+        context.user_data["current_project"] = project_name
         await update.message.reply_text(
-            f"✅ Проект **{project_name}** создан!\n\n"
-            "Теперь вы можете:\n"
-            "• Загружать файлы: отправьте файл с подписью\n"
-            "• Просмотреть проект: `/projects`",
+            f"✅ Проект **{project_name}** создан и активирован!\n\n"
+            "📌 Все ваши вопросы и ответы теперь сохраняются в проект.\n\n"
+            "Доступные команды:\n"
+            "• `/project_info` - информация о проекте\n"
+            "• `/project_log` - журнал работы\n"
+            "• `/set_project` - переключить проект\n"
+            "• `/projects` - список проектов",
             parse_mode="Markdown"
         )
-        context.user_data["current_project"] = project_name
     else:
         await update.message.reply_text(
             f"❌ Ошибка создания проекта:\n{result.get('error', '')}"
         )
+
+
+async def set_project_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /set_project - установить активный проект"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    user_id = update.effective_user.id
+    projects = get_user_projects(user_id)
+
+    if not projects:
+        await update.message.reply_text(
+            "📁 У вас нет проектов.\n\n"
+            "Создайте новый: `/new_project Название`",
+            parse_mode="Markdown"
+        )
+        return
+
+    if context.args:
+        # Установить проект по названию
+        project_name = " ".join(context.args)
+        if project_name in projects:
+            context.user_data["current_project"] = project_name
+            project = load_project(user_id, project_name)
+            await update.message.reply_text(
+                f"✅ Активный проект: **{project_name}**\n\n"
+                f"{project.get_log_summary()}\n\n"
+                "Все вопросы и ответы сохраняются в этот проект.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(f"❌ Проект '{project_name}' не найден.")
+    else:
+        # Показать меню выбора
+        keyboard = []
+        for proj in projects:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📁 {proj}",
+                    callback_data=f"setproj_{proj}"
+                )
+            ])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        current = context.user_data.get("current_project", "Не выбран")
+        await update.message.reply_text(
+            f"**ВЫБОР АКТИВНОГО ПРОЕКТА**\n\n"
+            f"Текущий проект: {current}\n\n"
+            "Выберите проект для работы:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+
+
+async def project_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /project_info - информация об активном проекте"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    current_project_name = context.user_data.get("current_project")
+    if not current_project_name:
+        await update.message.reply_text(
+            "❌ Нет активного проекта.\n\n"
+            "Выберите проект: `/set_project`",
+            parse_mode="Markdown"
+        )
+        return
+
+    user_id = update.effective_user.id
+    project = load_project(user_id, current_project_name)
+
+    if not project:
+        await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
+    info = project.get_project_summary()
+    log_summary = project.get_log_summary()
+
+    await update.message.reply_text(
+        f"{info}\n\n"
+        f"📊 **Журнал работы:** {log_summary}",
+        parse_mode="Markdown"
+    )
+
+
+async def project_log_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /project_log - журнал работы над проектом"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    current_project_name = context.user_data.get("current_project")
+    if not current_project_name:
+        await update.message.reply_text(
+            "❌ Нет активного проекта.\n\n"
+            "Выберите проект: `/set_project`",
+            parse_mode="Markdown"
+        )
+        return
+
+    user_id = update.effective_user.id
+    project = load_project(user_id, current_project_name)
+
+    if not project:
+        await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
+    log = project.get_conversation_log()
+
+    if not log:
+        await update.message.reply_text("📋 Журнал работы пуст")
+        return
+
+    # Показываем последние 10 записей
+    recent_log = log[-10:]
+    response = f"📋 **ЖУРНАЛ: {current_project_name}**\n\n"
+    response += f"Всего записей: {len(log)}\n"
+    response += f"Показаны последние {len(recent_log)} записей:\n\n"
+
+    for i, entry in enumerate(recent_log, 1):
+        timestamp = entry["timestamp"][:16].replace("T", " ")
+        question = entry.get("question", "")[:50]
+        response += f"{i}. {timestamp}\n   Q: {question}...\n\n"
+
+    response += "\n💡 Для экспорта полного журнала используйте `/export_project`"
+
+    await update.message.reply_text(response, parse_mode="Markdown")
 
 
 # === ОБРАБОТКА СООБЩЕНИЙ ===
@@ -2280,9 +2233,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = update.message.caption or ""
 
         # Формируем профессиональный промпт для Claude 3.5 Sonnet
-        system_prompt = """Вы — ведущий инженер-эксперт по техническому надзору в строительстве с 20-летним стажем работы на крупных объектах России. Ваша специализация: объективная экспертиза конструкций, диагностика дефектов, нормативный контроль.
-
-💡 У бота есть галерея типичных дефектов с подробным описанием - пользователь может открыть её командой /defects
+        system_prompt = """Вы — ведущий инженер-эксперт по техническому надзору в строительстве с 20-летним стажем работы на крупных объектах России. Ваша специализация: объективная экспертиза конструкций, техническая диагностика, нормативный контроль.
 
 🎯 ТРЕБОВАНИЯ К АНАЛИЗУ:
 
@@ -2463,18 +2414,15 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка загрузки файлов в проект"""
-    if not PROJECTS_AVAILABLE:
-        await update.message.reply_text("⚠️ Управление проектами недоступно")
-        return
-
+    """Обработка загрузки файлов с анализом и экспертным заключением"""
     user_id = update.effective_user.id
     current_project_name = context.user_data.get("current_project")
 
-    if not current_project_name:
+    # Если нет активного проекта - предлагаем создать
+    if not PROJECTS_AVAILABLE or not current_project_name:
         await update.message.reply_text(
-            "📁 Сначала выберите или создайте проект:\n"
-            "`/projects` или `/new_project Название`",
+            "📁 Для анализа документов создайте или выберите проект:\n"
+            "Нажмите кнопку **📁 Проект** в главном меню",
             parse_mode="Markdown"
         )
         return
@@ -2485,41 +2433,215 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Скачиваем файл
         file = await update.message.document.get_file()
-        file_path = f"temp_{user_id}_{update.message.document.file_name}"
+        file_name = update.message.document.file_name
+        file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
 
         description = update.message.caption or ""
         file_type = update.message.document.mime_type or "unknown"
 
+        # Определяем тип документа
+        is_pdf = file_name.lower().endswith('.pdf') or 'pdf' in file_type.lower()
+
+        # Сообщение о начале анализа
+        thinking_msg = await update.message.reply_text(
+            f"📄 Получен документ: **{file_name}**\n\n"
+            f"⏳ Анализирую документ...",
+            parse_mode="Markdown"
+        )
+
+        # Анализируем PDF
+        expert_opinion = None
+        if is_pdf:
+            try:
+                # Извлекаем текст из PDF
+                import PyPDF2
+                pdf_text = ""
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    num_pages = len(pdf_reader.pages)
+
+                    # Читаем максимум первые 10 страниц
+                    max_pages = min(num_pages, 10)
+                    for page_num in range(max_pages):
+                        page = pdf_reader.pages[page_num]
+                        pdf_text += page.extract_text() + "\n"
+
+                # Ограничиваем размер текста
+                pdf_text = pdf_text[:15000]  # ~3000 токенов
+
+                if pdf_text.strip():
+                    # Формируем промпт для анализа
+                    analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
+
+📋 **ЗАДАЧА:** Проанализируйте предоставленный строительный документ и дайте экспертное заключение.
+
+{'📝 **ЗАПРОС ПОЛЬЗОВАТЕЛЯ:** ' + description if description else ''}
+
+🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
+
+1. **ИДЕНТИФИКАЦИЯ ДОКУМЕНТА:**
+   • Определите тип документа (проект, смета, акт, заключение, экспертиза, и т.д.)
+   • Укажите основные реквизиты (если есть)
+   • Определите объект строительства
+
+2. **СОДЕРЖАНИЕ:**
+   • Кратко опишите основное содержание (3-5 пунктов)
+   • Выделите ключевые технические решения
+   • Укажите применённые нормативы
+
+3. **ЭКСПЕРТНАЯ ОЦЕНКА:**
+   • Соответствие актуальным нормативам 2024-2025
+   • Выявленные проблемы или несоответствия (если есть)
+   • Что требует особого внимания
+
+4. **РЕКОМЕНДАЦИИ:**
+   • Что нужно проверить дополнительно
+   • Какие документы могут потребоваться
+   • Практические советы по применению
+
+**ВАЖНО:**
+- Если документ частично нечитаем - укажите это
+- Ссылайтесь на конкретные СП/ГОСТ с пунктами
+- Будьте объективны и конкретны
+
+---
+
+📄 **ТЕКСТ ДОКУМЕНТА:**
+
+{pdf_text}"""
+
+                    # Отправляем на анализ Claude
+                    client = get_anthropic_client()
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: call_claude_with_retry(
+                            client,
+                            model="claude-sonnet-4-5-20250929",
+                            max_tokens=3000,
+                            system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
+                            messages=[{"role": "user", "content": analysis_prompt}],
+                            temperature=0.3
+                        )
+                    )
+                    expert_opinion = response.content[0].text
+
+                    # Сохраняем анализ в проект
+                    if expert_opinion:
+                        project.add_conversation_entry(
+                            f"[ДОКУМЕНТ] {file_name}" + (f": {description}" if description else ""),
+                            expert_opinion,
+                            "document_analysis"
+                        )
+
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа PDF установите библиотеку PyPDF2:\n`pip install PyPDF2`"
+            except Exception as e:
+                logger.error(f"Ошибка анализа PDF: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать PDF: {str(e)}"
+
+        # Сохраняем файл в проект
         result = project.add_file(file_path, file_type, description)
 
+        # Удаляем временный файл
         import os
         os.remove(file_path)
 
+        # Удаляем сообщение "анализирую"
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+
+        # Формируем ответ
+        response_text = f"✅ **Документ добавлен в проект:** {current_project_name}\n\n"
+        response_text += f"📄 **Файл:** {file_name}\n"
+
         if result["success"]:
             file_info = result["file_info"]
-            await update.message.reply_text(
-                f"✅ Файл добавлен в проект **{current_project_name}**\n\n"
-                f"📄 {file_info['original_name']}\n"
-                f"💾 Размер: {file_info['size_bytes'] / 1024:.1f} КБ\n"
-                f"📝 {description or 'Без описания'}",
-                parse_mode="Markdown"
-            )
+            response_text += f"💾 **Размер:** {file_info['size_bytes'] / 1024:.1f} КБ\n"
+            if description:
+                response_text += f"📝 **Описание:** {description}\n"
+
+        # Добавляем экспертное заключение
+        if expert_opinion and is_pdf:
+            response_text += f"\n{'='*40}\n\n"
+            response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
+
+        # Отправляем ответ частями если нужно
+        max_length = 4000
+        if len(response_text) > max_length:
+            parts = [response_text[i:i+max_length] for i in range(0, len(response_text), max_length)]
+            for part in parts:
+                await update.message.reply_text(part, parse_mode="Markdown")
         else:
-            await update.message.reply_text(
-                f"❌ Ошибка добавления файла:\n{result.get('error', '')}"
-            )
+            await update.message.reply_text(response_text, parse_mode="Markdown")
 
     except Exception as e:
-        logger.error(f"Ошибка обработки файла: {e}")
-        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка обработки документа: {e}")
+        await update.message.reply_text(f"❌ Ошибка обработки: {str(e)}")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
     user_id = update.effective_user.id
     question = update.message.text
+
+    # Проверка ожидания названия проекта
+    if context.user_data.get("waiting_for_project_name"):
+        context.user_data["waiting_for_project_name"] = False
+        project_name = question.strip()
+
+        if PROJECTS_AVAILABLE:
+            result = create_project(user_id, project_name)
+            if result["success"]:
+                context.user_data["current_project"] = project_name
+
+                keyboard = [[InlineKeyboardButton("« К проектам", callback_data="project_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await update.message.reply_text(
+                    f"✅ **Проект создан:** {project_name}\n\n"
+                    "📌 Проект активирован!\n"
+                    "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
+                    "Можете начинать работу!",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
+        return
+
+    # Проверка ожидания заметки
+    if context.user_data.get("waiting_for_note"):
+        project_name = context.user_data["waiting_for_note"]
+        context.user_data["waiting_for_note"] = None
+        note_text = question.strip()
+
+        if PROJECTS_AVAILABLE:
+            project = load_project(user_id, project_name)
+            if project:
+                # Сохраняем заметку как отдельную запись
+                project.add_conversation_entry(
+                    f"[ЗАМЕТКА] {note_text[:50]}...",
+                    note_text,
+                    "note"
+                )
+
+                keyboard = [[InlineKeyboardButton("« К проекту", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await update.message.reply_text(
+                    f"✅ Заметка добавлена в проект **{project_name}**",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
 
     # Проверка rate limit
     if not check_rate_limit(user_id):
@@ -2877,6 +2999,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
 
+        # Сохраняем в активный проект (если есть)
+        if PROJECTS_AVAILABLE:
+            current_project_name = context.user_data.get("current_project")
+            if current_project_name:
+                try:
+                    project = load_project(user_id, current_project_name)
+                    if project:
+                        project.add_conversation_entry(question, answer, "qa")
+                        logger.info(f"✅ Диалог сохранён в проект: {current_project_name}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка сохранения в проект: {e}")
+
         # Определяем упомянутые нормативы
         mentioned_regs = []
         for reg_code in REGULATIONS.keys():
@@ -2953,13 +3087,166 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "regulations":
-        await regulations_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await regulations_command(adapted_update, context)
     elif query.data == "examples":
-        await examples_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await examples_command(adapted_update, context)
     elif query.data == "help":
-        await help_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await help_command(adapted_update, context)
     elif query.data == "stats":
-        await stats_command(update, context)
+        # Создаём адаптированный update для вызова команды
+        adapted_update = Update(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await stats_command(adapted_update, context)
+    elif query.data == "calculators_menu":
+        # Кнопка "Калькуляторы" из главного меню
+        if CALCULATORS_AVAILABLE and IMPROVEMENTS_V3_AVAILABLE:
+            keyboard = create_calculators_menu()
+            await query.edit_message_text(
+                "🧮 **СТРОИТЕЛЬНЫЕ КАЛЬКУЛЯТОРЫ**\n\n"
+                "Выберите калькулятор:",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль калькуляторов недоступен.")
+    elif query.data == "faq_menu":
+        # Кнопка "Частые вопросы" из главного меню
+        if FAQ_AVAILABLE:
+            # Создаём адаптированный update для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=query.message
+            )
+            await faq_command(adapted_update, context)
+        else:
+            await query.edit_message_text("⚠️ Модуль FAQ недоступен.")
+    elif query.data == "templates":
+        # Кнопка "Шаблоны" из главного меню
+        if TEMPLATES_AVAILABLE:
+            keyboard = []
+            for template_id, info in DOCUMENT_TEMPLATES.items():
+                keyboard.append([
+                    InlineKeyboardButton(
+                        text=info["name"],
+                        callback_data=f"template_{template_id}"
+                    )
+                ])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "📄 **ШАБЛОНЫ ДОКУМЕНТОВ**\n\n"
+                "Выберите тип документа для генерации:",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
+    elif query.data == "role":
+        # Кнопка "Выбрать роль" из главного меню
+        if ROLES_AVAILABLE:
+            # Создаём адаптированный update для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=query.message
+            )
+            await role_command(adapted_update, context)
+        else:
+            await query.edit_message_text("⚠️ Модуль ролей недоступен.")
+    elif query.data == "project_menu":
+        # Кнопка "Проект" из главного меню
+        if PROJECTS_AVAILABLE:
+            user_id = update.effective_user.id
+            projects = get_user_projects(user_id)
+            current_project = context.user_data.get("current_project")
+
+            keyboard = [
+                [InlineKeyboardButton("➕ Создать новый проект", callback_data="proj_create"),
+                 InlineKeyboardButton("📂 Мои проекты", callback_data="proj_list")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            status_text = f"**📁 УПРАВЛЕНИЕ ПРОЕКТАМИ**\n\n"
+            if current_project:
+                status_text += f"✅ Активный проект: **{current_project}**\n\n"
+            else:
+                status_text += "Активный проект: _не выбран_\n\n"
+
+            status_text += f"Всего проектов: {len(projects)}\n\n"
+            status_text += "Выберите действие:"
+
+            await query.edit_message_text(
+                status_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "proj_list":
+        # Список всех проектов пользователя
+        if PROJECTS_AVAILABLE:
+            user_id = update.effective_user.id
+            projects = get_user_projects(user_id)
+            current_project = context.user_data.get("current_project")
+
+            keyboard = []
+
+            if not projects:
+                keyboard.append([
+                    InlineKeyboardButton("➕ Создать первый проект", callback_data="proj_create")
+                ])
+            else:
+                # Список существующих проектов
+                for proj in projects:
+                    emoji = "✅ " if proj == current_project else "📁 "
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            text=f"{emoji}{proj}",
+                            callback_data=f"proj_open_{proj}"
+                        )
+                    ])
+
+            # Кнопка назад
+            keyboard.append([
+                InlineKeyboardButton("« Назад к меню проектов", callback_data="project_menu")
+            ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            status_text = f"**📂 МОИ ПРОЕКТЫ**\n\n"
+            if current_project:
+                status_text += f"✅ Активный: **{current_project}**\n\n"
+
+            if projects:
+                status_text += f"Всего проектов: {len(projects)}\n\n"
+                status_text += "Выберите проект для работы:"
+            else:
+                status_text += "У вас пока нет проектов.\n\n"
+                status_text += "Создайте первый проект для начала работы!"
+
+            await query.edit_message_text(
+                status_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
     elif query.data == "clear_confirm":
         # Подтверждение очистки истории
         user_id = update.effective_user.id
@@ -3278,6 +3565,266 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("⚠️ Модуль ролей недоступен.")
 
+    # Обработчики выбора проекта
+    elif query.data.startswith("setproj_"):
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("setproj_", "")
+            user_id = update.effective_user.id
+            context.user_data["current_project"] = project_name
+            project = load_project(user_id, project_name)
+            await query.edit_message_text(
+                f"✅ Активный проект установлен: **{project_name}**\n\n"
+                f"{project.get_log_summary()}\n\n"
+                "📌 Все ваши вопросы и ответы теперь сохраняются в этот проект.",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "proj_create":
+        # Создание нового проекта через диалог
+        if PROJECTS_AVAILABLE:
+            await query.edit_message_text(
+                "📝 **СОЗДАНИЕ ПРОЕКТА**\n\n"
+                "Введите название проекта:\n\n"
+                "_Например: Реконструкция ТЦ Мега, Строительство жилого дома, Ремонт моста_",
+                parse_mode="Markdown"
+            )
+            context.user_data["waiting_for_project_name"] = True
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_open_"):
+        # Открытие существующего проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_open_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                context.user_data["current_project"] = project_name
+
+                # Создаём меню проекта
+                keyboard = [
+                    [InlineKeyboardButton("📊 Информация", callback_data=f"proj_info_{project_name}"),
+                     InlineKeyboardButton("📋 Журнал", callback_data=f"proj_log_{project_name}")],
+                    [InlineKeyboardButton("📁 Файлы", callback_data=f"proj_files_{project_name}"),
+                     InlineKeyboardButton("📝 Добавить заметку", callback_data=f"proj_note_{project_name}")],
+                    [InlineKeyboardButton("📦 Экспорт проекта", callback_data=f"proj_export_{project_name}")],
+                    [InlineKeyboardButton("« Назад к проектам", callback_data="project_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                info_text = f"📁 **ПРОЕКТ: {project_name}**\n\n"
+                info_text += f"✅ Проект активирован\n\n"
+                info_text += f"{project.get_log_summary()}\n\n"
+                info_text += "Что вы хотите сделать?"
+
+                await query.edit_message_text(
+                    info_text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_info_"):
+        # Информация о проекте
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_info_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                info = project.get_project_summary()
+                log_summary = project.get_log_summary()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    f"{info}\n\n📊 **Журнал работы:** {log_summary}",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_log_"):
+        # Журнал проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_log_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                log = project.get_conversation_log()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                if not log:
+                    await query.edit_message_text(
+                        "📋 Журнал работы пуст",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    # Последние 10 записей
+                    recent_log = log[-10:]
+                    response = f"📋 **ЖУРНАЛ: {project_name}**\n\n"
+                    response += f"Всего записей: {len(log)}\n"
+                    response += f"Последние {len(recent_log)} записей:\n\n"
+
+                    for i, entry in enumerate(recent_log, 1):
+                        timestamp = entry["timestamp"][:16].replace("T", " ")
+                        question = entry.get("question", "")[:40]
+                        response += f"{i}. {timestamp}\n   Q: {question}...\n\n"
+
+                    await query.edit_message_text(
+                        response,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_files_"):
+        # Файлы проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_files_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                files = project.list_files()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                if not files:
+                    await query.edit_message_text(
+                        "📁 В проекте пока нет файлов\n\n"
+                        "Отправьте файл с подписью для добавления в проект",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    response = f"📁 **ФАЙЛЫ ПРОЕКТА: {project_name}**\n\n"
+                    response += f"Всего файлов: {len(files)}\n\n"
+
+                    for i, file_info in enumerate(files, 1):
+                        name = file_info["original_name"]
+                        size_mb = file_info["size_bytes"] / 1024 / 1024
+                        file_type = file_info["type"]
+                        response += f"{i}. {name}\n"
+                        response += f"   Тип: {file_type} | Размер: {size_mb:.2f} МБ\n\n"
+
+                    await query.edit_message_text(
+                        response,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_note_"):
+        # Добавление заметки
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_note_", "")
+            await query.edit_message_text(
+                f"📝 **ДОБАВЛЕНИЕ ЗАМЕТКИ**\n\n"
+                f"Проект: {project_name}\n\n"
+                "Введите текст заметки:",
+                parse_mode="Markdown"
+            )
+            context.user_data["waiting_for_note"] = project_name
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_export_"):
+        # Экспорт проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_export_", "")
+            user_id = update.effective_user.id
+
+            await query.edit_message_text("⏳ Подготавливаю экспорт проекта...")
+
+            try:
+                project = load_project(user_id, project_name)
+                if project:
+                    # Экспортируем проект в JSON
+                    export_data = {
+                        "project_name": project_name,
+                        "metadata": project.metadata,
+                        "exported_at": datetime.now().isoformat()
+                    }
+
+                    # Создаём текстовый файл для экспорта
+                    export_text = f"📁 ПРОЕКТ: {project_name}\n"
+                    export_text += f"Экспортирован: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+                    export_text += "=" * 50 + "\n\n"
+
+                    # Информация о проекте
+                    export_text += f"{project.get_project_summary()}\n\n"
+                    export_text += "=" * 50 + "\n\n"
+
+                    # Журнал работы
+                    log = project.get_conversation_log()
+                    export_text += f"📋 ЖУРНАЛ РАБОТЫ ({len(log)} записей)\n\n"
+
+                    for i, entry in enumerate(log, 1):
+                        timestamp = entry["timestamp"][:16].replace("T", " ")
+                        question = entry.get("question", "")
+                        answer = entry.get("answer", "")
+                        export_text += f"═══ Запись #{i} ═══\n"
+                        export_text += f"⏰ {timestamp}\n\n"
+                        export_text += f"❓ ВОПРОС:\n{question}\n\n"
+                        export_text += f"💬 ОТВЕТ:\n{answer}\n\n"
+                        export_text += "-" * 50 + "\n\n"
+
+                    # Список файлов
+                    files = project.list_files()
+                    if files:
+                        export_text += "=" * 50 + "\n\n"
+                        export_text += f"📁 ФАЙЛЫ ПРОЕКТА ({len(files)})\n\n"
+                        for file_info in files:
+                            export_text += f"• {file_info['original_name']}\n"
+                            export_text += f"  Тип: {file_info['type']}\n"
+                            export_text += f"  Размер: {file_info['size_bytes'] / 1024 / 1024:.2f} МБ\n"
+                            export_text += f"  Добавлен: {file_info['added_at'][:16]}\n\n"
+
+                    # Отправляем файл
+                    from io import BytesIO
+                    buffer = BytesIO(export_text.encode('utf-8'))
+                    buffer.seek(0)
+                    filename = f"{project_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+
+                    await query.message.reply_document(
+                        document=buffer,
+                        filename=filename,
+                        caption=f"📦 Экспорт проекта: **{project_name}**\n\n"
+                                f"Записей: {len(log)} | Файлов: {len(files)}",
+                        parse_mode="Markdown"
+                    )
+
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
+                    await query.edit_message_text(
+                        "✅ Проект экспортирован!",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await query.edit_message_text("❌ Ошибка загрузки проекта")
+            except Exception as e:
+                logger.error(f"Ошибка экспорта проекта: {e}")
+                await query.edit_message_text(f"❌ Ошибка экспорта: {str(e)}")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "ignore":
+        # Игнорируем разделитель
+        await query.answer()
+
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ошибок"""
@@ -3347,7 +3894,6 @@ async def setup_bot_menu(application):
         BotCommand("calculators", "🧮 Калькуляторы (6 шт)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("faq", "❓ Частые вопросы"),
-        BotCommand("defects", "🔍 Галерея дефектов"),
         BotCommand("templates", "📄 Шаблоны документов"),
         BotCommand("projects", "📁 Мои проекты"),
         BotCommand("role", "👔 Выбрать роль"),
@@ -3400,7 +3946,6 @@ def main():
     application.add_handler(CommandHandler("export", export_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("recommendations", recommendations_command))
-    application.add_handler(CommandHandler("defects", defects_command))
     application.add_handler(CommandHandler("updates", updates_command))
     # Команды для актуальных требований 2025
     application.add_handler(CommandHandler("requirements2025", requirements2025_command))
@@ -3425,18 +3970,14 @@ def main():
     if PROJECTS_AVAILABLE:
         application.add_handler(CommandHandler("projects", projects_command))
         application.add_handler(CommandHandler("new_project", new_project_command))
-        logger.info("✅ Команды /projects и /new_project зарегистрированы")
+        application.add_handler(CommandHandler("set_project", set_project_command))
+        application.add_handler(CommandHandler("project_info", project_info_command))
+        application.add_handler(CommandHandler("project_log", project_log_command))
+        logger.info("✅ Команды управления проектами зарегистрированы (5 команд)")
 
     if ROLES_AVAILABLE:
         application.add_handler(CommandHandler("role", role_command))
         logger.info("✅ Команда /role зарегистрирована")
-
-    # === ГАЛЕРЕЯ ДЕФЕКТОВ v3.4 ===
-    if DEFECTS_GALLERY_AVAILABLE:
-        application.add_handler(CommandHandler("defects", defects_command))
-        # Обработчик callback для навигации по галерее
-        application.add_handler(CallbackQueryHandler(handle_defect_callback, pattern="^def"))
-        logger.info("✅ Галерея дефектов v3.4 зарегистрирована")
 
     # === УПРАВЛЕНИЕ ИСТОРИЕЙ v3.5 ===
     if HISTORY_MANAGER_AVAILABLE:
