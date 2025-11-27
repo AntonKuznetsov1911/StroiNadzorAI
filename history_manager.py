@@ -204,6 +204,44 @@ def get_recent_history(user_id: int, limit: int = 5) -> list:
     return history[-limit:] if history else []
 
 
+def format_history_summary(user_id: int, limit: int = 5) -> str:
+    """
+    Сформировать краткое текстовое резюме истории пользователя.
+
+    Args:
+        user_id: ID пользователя.
+        limit: Количество последних сообщений для вывода.
+
+    Returns:
+        Строка с кратким описанием последних диалогов или уведомление об отсутствии данных.
+    """
+    history = load_user_history(user_id)
+
+    if not history:
+        return "История диалогов пуста."
+
+    recent = history[-limit:]
+    summary_lines = [
+        f"История пользователя {user_id}",
+        f"Последние {len(recent)} диалог(ов):"
+    ]
+
+    for idx, msg in enumerate(recent, 1):
+        timestamp = msg.get('timestamp', 'Неизвестно')
+        user_msg = msg.get('user', '').strip() or '—'
+        assistant_msg = msg.get('assistant', '').strip() or '—'
+
+        user_preview = (user_msg[:120] + "...") if len(user_msg) > 120 else user_msg
+        assistant_preview = (assistant_msg[:120] + "...") if len(assistant_msg) > 120 else assistant_msg
+
+        summary_lines.append(f"{idx}. [{timestamp}]")
+        summary_lines.append(f"   ❓ {user_preview}")
+        summary_lines.append(f"   🤖 {assistant_preview}")
+
+    summary_lines.append(f"Всего сообщений: {len(history)}")
+    return "\n".join(summary_lines)
+
+
 def clear_user_history(user_id: int) -> bool:
     """Очистить историю пользователя"""
     history_file = get_user_history_file(user_id)

@@ -2,7 +2,11 @@
 Тестирование всех модулей бота v3.8
 """
 import sys
-sys.path.insert(0, 'C:/Users/PC/StroiNadzorAI')
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 print("=" * 60)
 print("ТЕСТИРОВАНИЕ ВСЕХ МОДУЛЕЙ БОТА v3.8")
