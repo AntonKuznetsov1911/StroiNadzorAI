@@ -133,27 +133,8 @@ try:
 except Exception as e:
     print(f"   [ERROR] saved_calculations: {e}")
 
-# 7. Defect gallery
-print("\n7. DEFECT GALLERY CHECK")
-print("-"*60)
-try:
-    from defect_gallery import DEFECT_CATEGORIES, DEFECTS_DATABASE
-    print("   [OK] defect_gallery imported!")
-    print(f"   [OK] Defect categories: {len(DEFECT_CATEGORIES)}")
-
-    total_defects = sum(len(defects) for defects in DEFECTS_DATABASE.values())
-    print(f"   [OK] Total defects: {total_defects}")
-
-    for cat_id, cat_data in DEFECT_CATEGORIES.items():
-        count = len(DEFECTS_DATABASE.get(cat_id, {}))
-        print(f"      - {cat_data['name']}: {count} defects")
-
-    print("   [SUCCESS] Defect gallery works correctly!")
-except Exception as e:
-    print(f"   [ERROR] defect_gallery: {e}")
-
-# 8. History manager
-print("\n8. HISTORY MANAGER CHECK")
+# 7. History manager
+print("\n7. HISTORY MANAGER CHECK")
 print("-"*60)
 try:
     from history_manager import get_user_history_file

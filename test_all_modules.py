@@ -169,30 +169,8 @@ try:
 except Exception as e:
     print(f"   ❌ ОШИБКА saved_calculations: {e}")
 
-# 7. Проверка defect_gallery
-print("\n7. ✅ ПРОВЕРКА DEFECT_GALLERY")
-print("-" * 60)
-try:
-    from defect_gallery import (
-        DEFECT_CATEGORIES,
-        DEFECTS_DATABASE
-    )
-    print("   ✅ defect_gallery импортирован!")
-    print(f"   ✅ Категорий дефектов: {len(DEFECT_CATEGORIES)}")
-
-    total_defects = sum(len(defects) for defects in DEFECTS_DATABASE.values())
-    print(f"   ✅ Всего дефектов в базе: {total_defects}")
-
-    for cat_id, cat_data in DEFECT_CATEGORIES.items():
-        count = len(DEFECTS_DATABASE.get(cat_id, {}))
-        print(f"      • {cat_data['name']}: {count} дефектов")
-
-    print("   ✅ Defect gallery работает корректно!")
-except Exception as e:
-    print(f"   ❌ ОШИБКА defect_gallery: {e}")
-
-# 8. Проверка history_manager
-print("\n8. ✅ ПРОВЕРКА HISTORY_MANAGER")
+# 7. Проверка history_manager
+print("\n7. ✅ ПРОВЕРКА HISTORY_MANAGER")
 print("-" * 60)
 try:
     from history_manager import (

@@ -11,13 +11,18 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# Инициализация клиентов
+# Инициализация клиентов (опционально)
 openai_client = None
-try:
-    openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    logger.info("✅ OpenAI клиент инициализирован для распознавания голоса")
-except Exception as e:
-    logger.warning(f"⚠️ OpenAI клиент не инициализирован: {e}")
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+if OPENAI_API_KEY and OPENAI_API_KEY.startswith('sk-'):
+    try:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        logger.info("✅ OpenAI клиент инициализирован для распознавания голоса")
+    except Exception as e:
+        logger.warning(f"⚠️ OpenAI клиент не инициализирован: {e}")
+else:
+    logger.info("ℹ️ OpenAI API key не найден. Голосовые сообщения отключены (используйте только Claude API)")
 
 # Папка для временных голосовых файлов
 VOICE_TEMP_DIR = Path("voice_temp")
