@@ -275,6 +275,20 @@ except ImportError:
     SAVED_CALCS_AVAILABLE = False
     logger.warning("⚠️ Модуль saved_calculations.py не найден")
 
+# База часто задаваемых вопросов (FAQ) v3.7
+try:
+    from faq import (
+        faq_command,
+        faq_search_command,
+        handle_faq_callback,
+        get_total_faq_count
+    )
+    FAQ_AVAILABLE = True
+    logger.info("✅ FAQ v3.7 загружен")
+except ImportError:
+    FAQ_AVAILABLE = False
+    logger.warning("⚠️ Модуль faq.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1314,6 +1328,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /regulations - Список нормативов (27 документов)
 /requirements2025 - База требований 2025
 
+❓ **Быстрые ответы:**
+/faq - Часто задаваемые вопросы (20+ готовых ответов)
+/faq_search <запрос> - Поиск по FAQ
+
 🛠️ **Практические знания:**
 /hse - Охрана труда и ТБ
 /technology - Технология строительства
@@ -1396,6 +1414,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /defects - Галерея типичных дефектов (12 дефектов)
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
+
+**❓ БЫСТРЫЕ ОТВЕТЫ v3.7 (НОВОЕ!):**
+   /faq - База часто задаваемых вопросов (20+ ответов)
+   /faq_search <запрос> - Поиск готовых ответов
 
 **Примеры вопросов:**
 📌 Какие требования к прочности бетона класса B25?
@@ -3084,6 +3106,14 @@ def main():
         # Обработчик callback для сохранённых расчётов
         application.add_handler(CallbackQueryHandler(handle_saved_callback, pattern="^saved_"))
         logger.info("✅ Сохранённые расчёты v3.6 зарегистрированы")
+
+    # === БАЗА ЧАСТЫХ ВОПРОСОВ (FAQ) v3.7 ===
+    if FAQ_AVAILABLE:
+        application.add_handler(CommandHandler("faq", faq_command))
+        application.add_handler(CommandHandler("faq_search", faq_search_command))
+        # Обработчик callback для FAQ
+        application.add_handler(CallbackQueryHandler(handle_faq_callback, pattern="^faq_"))
+        logger.info(f"✅ FAQ v3.7 зарегистрирован ({get_total_faq_count()} вопросов)")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
