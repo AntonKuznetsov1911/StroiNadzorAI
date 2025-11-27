@@ -1347,6 +1347,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 """
 
+    # Показываем активный проект (если есть)
+    if PROJECTS_AVAILABLE:
+        current_project = context.user_data.get("current_project")
+        if current_project:
+            welcome_message += f"📁 *Активный проект:* {current_project}\n"
+            welcome_message += "_(все диалоги сохраняются в проект)_\n\n"
+
     welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
     keyboard = [
@@ -2047,18 +2054,149 @@ async def new_project_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     result = create_project(user_id, project_name)
 
     if result["success"]:
+        context.user_data["current_project"] = project_name
         await update.message.reply_text(
-            f"✅ Проект **{project_name}** создан!\n\n"
-            "Теперь вы можете:\n"
-            "• Загружать файлы: отправьте файл с подписью\n"
-            "• Просмотреть проект: `/projects`",
+            f"✅ Проект **{project_name}** создан и активирован!\n\n"
+            "📌 Все ваши вопросы и ответы теперь сохраняются в проект.\n\n"
+            "Доступные команды:\n"
+            "• `/project_info` - информация о проекте\n"
+            "• `/project_log` - журнал работы\n"
+            "• `/set_project` - переключить проект\n"
+            "• `/projects` - список проектов",
             parse_mode="Markdown"
         )
-        context.user_data["current_project"] = project_name
     else:
         await update.message.reply_text(
             f"❌ Ошибка создания проекта:\n{result.get('error', '')}"
         )
+
+
+async def set_project_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /set_project - установить активный проект"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    user_id = update.effective_user.id
+    projects = get_user_projects(user_id)
+
+    if not projects:
+        await update.message.reply_text(
+            "📁 У вас нет проектов.\n\n"
+            "Создайте новый: `/new_project Название`",
+            parse_mode="Markdown"
+        )
+        return
+
+    if context.args:
+        # Установить проект по названию
+        project_name = " ".join(context.args)
+        if project_name in projects:
+            context.user_data["current_project"] = project_name
+            project = load_project(user_id, project_name)
+            await update.message.reply_text(
+                f"✅ Активный проект: **{project_name}**\n\n"
+                f"{project.get_log_summary()}\n\n"
+                "Все вопросы и ответы сохраняются в этот проект.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(f"❌ Проект '{project_name}' не найден.")
+    else:
+        # Показать меню выбора
+        keyboard = []
+        for proj in projects:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📁 {proj}",
+                    callback_data=f"setproj_{proj}"
+                )
+            ])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        current = context.user_data.get("current_project", "Не выбран")
+        await update.message.reply_text(
+            f"**ВЫБОР АКТИВНОГО ПРОЕКТА**\n\n"
+            f"Текущий проект: {current}\n\n"
+            "Выберите проект для работы:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+
+
+async def project_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /project_info - информация об активном проекте"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    current_project_name = context.user_data.get("current_project")
+    if not current_project_name:
+        await update.message.reply_text(
+            "❌ Нет активного проекта.\n\n"
+            "Выберите проект: `/set_project`",
+            parse_mode="Markdown"
+        )
+        return
+
+    user_id = update.effective_user.id
+    project = load_project(user_id, current_project_name)
+
+    if not project:
+        await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
+    info = project.get_project_summary()
+    log_summary = project.get_log_summary()
+
+    await update.message.reply_text(
+        f"{info}\n\n"
+        f"📊 **Журнал работы:** {log_summary}",
+        parse_mode="Markdown"
+    )
+
+
+async def project_log_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /project_log - журнал работы над проектом"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    current_project_name = context.user_data.get("current_project")
+    if not current_project_name:
+        await update.message.reply_text(
+            "❌ Нет активного проекта.\n\n"
+            "Выберите проект: `/set_project`",
+            parse_mode="Markdown"
+        )
+        return
+
+    user_id = update.effective_user.id
+    project = load_project(user_id, current_project_name)
+
+    if not project:
+        await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
+    log = project.get_conversation_log()
+
+    if not log:
+        await update.message.reply_text("📋 Журнал работы пуст")
+        return
+
+    # Показываем последние 10 записей
+    recent_log = log[-10:]
+    response = f"📋 **ЖУРНАЛ: {current_project_name}**\n\n"
+    response += f"Всего записей: {len(log)}\n"
+    response += f"Показаны последние {len(recent_log)} записей:\n\n"
+
+    for i, entry in enumerate(recent_log, 1):
+        timestamp = entry["timestamp"][:16].replace("T", " ")
+        question = entry.get("question", "")[:50]
+        response += f"{i}. {timestamp}\n   Q: {question}...\n\n"
+
+    response += "\n💡 Для экспорта полного журнала используйте `/export_project`"
+
+    await update.message.reply_text(response, parse_mode="Markdown")
 
 
 # === ОБРАБОТКА СООБЩЕНИЙ ===
@@ -2689,6 +2827,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
 
+        # Сохраняем в активный проект (если есть)
+        if PROJECTS_AVAILABLE:
+            current_project_name = context.user_data.get("current_project")
+            if current_project_name:
+                try:
+                    project = load_project(user_id, current_project_name)
+                    if project:
+                        project.add_conversation_entry(question, answer, "qa")
+                        logger.info(f"✅ Диалог сохранён в проект: {current_project_name}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка сохранения в проект: {e}")
+
         # Определяем упомянутые нормативы
         mentioned_regs = []
         for reg_code in REGULATIONS.keys():
@@ -3164,6 +3314,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("⚠️ Модуль ролей недоступен.")
 
+    # Обработчики выбора проекта
+    elif query.data.startswith("setproj_"):
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("setproj_", "")
+            user_id = update.effective_user.id
+            context.user_data["current_project"] = project_name
+            project = load_project(user_id, project_name)
+            await query.edit_message_text(
+                f"✅ Активный проект установлен: **{project_name}**\n\n"
+                f"{project.get_log_summary()}\n\n"
+                "📌 Все ваши вопросы и ответы теперь сохраняются в этот проект.",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ошибок"""
@@ -3309,7 +3475,10 @@ def main():
     if PROJECTS_AVAILABLE:
         application.add_handler(CommandHandler("projects", projects_command))
         application.add_handler(CommandHandler("new_project", new_project_command))
-        logger.info("✅ Команды /projects и /new_project зарегистрированы")
+        application.add_handler(CommandHandler("set_project", set_project_command))
+        application.add_handler(CommandHandler("project_info", project_info_command))
+        application.add_handler(CommandHandler("project_log", project_log_command))
+        logger.info("✅ Команды управления проектами зарегистрированы (5 команд)")
 
     if ROLES_AVAILABLE:
         application.add_handler(CommandHandler("role", role_command))

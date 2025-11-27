@@ -143,6 +143,44 @@ class Project:
             self.metadata["tags"].append(tag)
             self.save_metadata()
 
+    def add_conversation_entry(self, question: str, answer: str, entry_type: str = "qa"):
+        """
+        Добавить запись диалога в проект
+
+        Args:
+            question: вопрос пользователя
+            answer: ответ AI
+            entry_type: тип записи (qa, note, calculation, etc)
+        """
+        if "conversation_log" not in self.metadata:
+            self.metadata["conversation_log"] = []
+
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": entry_type,
+            "question": question,
+            "answer": answer
+        }
+
+        self.metadata["conversation_log"].append(entry)
+        self.save_metadata()
+
+    def get_conversation_log(self) -> List[Dict]:
+        """Получить журнал работы над проектом"""
+        return self.metadata.get("conversation_log", [])
+
+    def get_log_summary(self) -> str:
+        """Получить краткую сводку по журналу"""
+        log = self.get_conversation_log()
+        if not log:
+            return "Журнал работы пуст"
+
+        total_entries = len(log)
+        first_date = log[0]["timestamp"][:10] if log else ""
+        last_date = log[-1]["timestamp"][:10] if log else ""
+
+        return f"Записей: {total_entries} | С {first_date} по {last_date}"
+
 
 def get_user_projects(user_id: int) -> List[str]:
     """Получить список проектов пользователя"""
