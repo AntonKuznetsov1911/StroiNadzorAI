@@ -184,10 +184,12 @@ try:
         create_electrical_calculator_handler,
         create_water_calculator_handler,
         create_winter_calculator_handler,
-        quick_concrete
+        create_math_calculator_handler,
+        quick_concrete,
+        quick_math
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.3 (все 6) загружены")
+    logger.info("✅ Интерактивные калькуляторы v3.4 (все 7) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -4022,9 +4024,11 @@ def main():
         application.add_handler(create_electrical_calculator_handler())
         application.add_handler(create_water_calculator_handler())
         application.add_handler(create_winter_calculator_handler())
-        # Быстрая команда для расчёта одной строкой
+        application.add_handler(create_math_calculator_handler())
+        # Быстрые команды для расчёта одной строкой
         application.add_handler(CommandHandler("calc_concrete", quick_concrete))
-        logger.info("✅ Все 6 интерактивных калькуляторов зарегистрированы (v3.3)")
+        application.add_handler(CommandHandler("calc_math", quick_math))
+        logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.4)")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
