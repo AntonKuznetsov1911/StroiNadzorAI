@@ -1,0 +1,63 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>💎 Уведомление о Premium подписке</h2>
+
+{% if action == 'activated' %}
+<div style="background-color: #e8f5e9; padding: 20px; border-radius: 4px; text-align: center; margin: 20px 0;">
+    <h3 style="color: #4CAF50; margin-top: 0;">✅ Подписка активирована!</h3>
+    <p>Поздравляем! Ваша Premium подписка успешно активирована.</p>
+</div>
+
+<h3>Ваши преимущества:</h3>
+<ul style="list-style-type: none; padding-left: 0;">
+    <li>✅ <strong>200 запросов в час</strong> (вместо 50)</li>
+    <li>✅ <strong>Приоритетная обработка</strong></li>
+    <li>✅ <strong>Расширенные PDF отчеты</strong></li>
+    <li>✅ <strong>История за 1 год</strong> (вместо 30 дней)</li>
+    <li>✅ <strong>Командные проекты</strong></li>
+    <li>✅ <strong>Email уведомления</strong></li>
+    <li>✅ <strong>Без рекламы</strong></li>
+</ul>
+
+<div class="info-box">
+    <p><strong>Срок действия:</strong> {{ expiry_date }}</p>
+    <p><strong>Тип подписки:</strong> {{ plan_type }}</p>
+</div>
+
+{% elif action == 'expiring' %}
+<div style="background-color: #fff3e0; padding: 20px; border-radius: 4px; text-align: center; margin: 20px 0;">
+    <h3 style="color: #ff9800; margin-top: 0;">⏰ Подписка скоро истекает</h3>
+    <p>Ваша Premium подписка истекает через {{ days_left }} дней.</p>
+</div>
+
+<p>Чтобы продолжить пользоваться всеми преимуществами, продлите подписку:</p>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ renewal_link }}" class="button">🔄 Продлить подписку</a>
+</div>
+
+{% elif action == 'expired' %}
+<div style="background-color: #ffebee; padding: 20px; border-radius: 4px; text-align: center; margin: 20px 0;">
+    <h3 style="color: #f44336; margin-top: 0;">❌ Подписка истекла</h3>
+    <p>Ваша Premium подписка истекла {{ expired_date }}.</p>
+</div>
+
+<p>Вы переведены на базовый тариф с ограничениями:</p>
+<ul>
+    <li>50 запросов в час</li>
+    <li>История за 30 дней</li>
+    <li>Базовые PDF отчеты</li>
+</ul>
+
+<p>Хотите вернуть все возможности?</p>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ renewal_link }}" class="button">💎 Восстановить Premium</a>
+</div>
+{% endif %}
+
+<div style="margin-top: 30px; padding: 15px; background-color: #e3f2fd; border-left: 4px solid #2196F3;">
+    <p><strong>💬 Нужна помощь?</strong> Напишите нам в поддержку: <a href="mailto:support@stroinadzor.ai">support@stroinadzor.ai</a></p>
+</div>
+{% endblock %}

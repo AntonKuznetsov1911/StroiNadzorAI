@@ -1,0 +1,57 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>📋 Отчет о выявленном дефекте</h2>
+
+<div class="info-box">
+    <p><strong>Тип дефекта:</strong> {{ defect_type }}</p>
+    <p><strong>Критичность:</strong>
+        {% if severity == 'CRITICAL' %}
+            <span class="badge badge-critical">🔴 КРИТИЧНО</span>
+        {% elif severity == 'HIGH' %}
+            <span class="badge badge-warning">🟡 ВАЖНО</span>
+        {% elif severity == 'MEDIUM' %}
+            <span class="badge badge-info">🔵 СРЕДНЕ</span>
+        {% else %}
+            <span class="badge badge-success">🟢 НИЗКО</span>
+        {% endif %}
+    </p>
+    {% if location %}
+    <p><strong>Местоположение:</strong> {{ location }}</p>
+    {% endif %}
+    {% if date %}
+    <p><strong>Дата обнаружения:</strong> {{ date }}</p>
+    {% endif %}
+</div>
+
+<h3>Описание проблемы:</h3>
+<div style="background-color: #f9f9f9; padding: 15px; border-radius: 4px;">
+    {{ description|safe }}
+</div>
+
+{% if recommendations %}
+<h3>💡 Рекомендации:</h3>
+<div style="background-color: #e3f2fd; padding: 15px; border-radius: 4px;">
+    {{ recommendations|safe }}
+</div>
+{% endif %}
+
+{% if normatives %}
+<h3>📚 Нормативная база:</h3>
+<ul>
+    {% for normative in normatives %}
+    <li>{{ normative }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+{% if has_attachment %}
+<p style="margin-top: 20px;">
+    <strong>📎 К письму прилагается детальный PDF отчет</strong>
+</p>
+{% endif %}
+
+<div style="margin-top: 30px; padding: 15px; background-color: #fff3e0; border-left: 4px solid #ff9800;">
+    <p><strong>⚠️ Важно:</strong> Данный отчет носит рекомендательный характер. Для принятия окончательного решения рекомендуется проконсультироваться со специалистами.</p>
+</div>
+{% endblock %}

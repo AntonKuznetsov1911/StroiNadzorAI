@@ -1,0 +1,76 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<h2>📊 Ежедневная сводка</h2>
+<p><strong>Дата:</strong> {{ date }}</p>
+
+<h3>Статистика за сегодня:</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Показатель</th>
+            <th>Значение</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>💬 Всего запросов</td>
+            <td><strong>{{ stats.total_requests or 0 }}</strong></td>
+        </tr>
+        <tr>
+            <td>📸 Анализов фото</td>
+            <td><strong>{{ stats.photo_requests or 0 }}</strong></td>
+        </tr>
+        <tr>
+            <td>📝 Текстовых вопросов</td>
+            <td><strong>{{ stats.text_requests or 0 }}</strong></td>
+        </tr>
+        <tr>
+            <td>🎤 Голосовых сообщений</td>
+            <td><strong>{{ stats.voice_requests or 0 }}</strong></td>
+        </tr>
+        <tr>
+            <td>👥 Новых пользователей</td>
+            <td><strong>{{ stats.new_users or 0 }}</strong></td>
+        </tr>
+        <tr>
+            <td>🔴 Критических дефектов</td>
+            <td><strong style="color: #f44336;">{{ stats.critical_defects or 0 }}</strong></td>
+        </tr>
+    </tbody>
+</table>
+
+{% if top_defects %}
+<h3>🔝 Топ выявленных дефектов:</h3>
+<ol>
+    {% for defect in top_defects %}
+    <li>{{ defect.type }} - {{ defect.count }} случаев</li>
+    {% endfor %}
+</ol>
+{% endif %}
+
+{% if active_users %}
+<h3>👤 Самые активные пользователи:</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Пользователь</th>
+            <th>Запросов</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in active_users %}
+        <tr>
+            <td>{{ user.name }}</td>
+            <td>{{ user.requests }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<div style="margin-top: 20px; text-align: center;">
+    <a href="#" class="button">📈 Открыть детальную статистику</a>
+</div>
+{% endblock %}
