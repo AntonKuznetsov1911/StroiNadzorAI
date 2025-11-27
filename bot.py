@@ -1357,9 +1357,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
     keyboard = [
-        [InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu"),
-         InlineKeyboardButton("📚 Нормативы", callback_data="regulations")],
-        [InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu")],
+        [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
+         InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
+        [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
+         InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu")],
         [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
          InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
         [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples"),
@@ -2471,6 +2472,59 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     question = update.message.text
 
+    # Проверка ожидания названия проекта
+    if context.user_data.get("waiting_for_project_name"):
+        context.user_data["waiting_for_project_name"] = False
+        project_name = question.strip()
+
+        if PROJECTS_AVAILABLE:
+            result = create_project(user_id, project_name)
+            if result["success"]:
+                context.user_data["current_project"] = project_name
+
+                keyboard = [[InlineKeyboardButton("« К проектам", callback_data="project_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await update.message.reply_text(
+                    f"✅ **Проект создан:** {project_name}\n\n"
+                    "📌 Проект активирован!\n"
+                    "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
+                    "Можете начинать работу!",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
+        return
+
+    # Проверка ожидания заметки
+    if context.user_data.get("waiting_for_note"):
+        project_name = context.user_data["waiting_for_note"]
+        context.user_data["waiting_for_note"] = None
+        note_text = question.strip()
+
+        if PROJECTS_AVAILABLE:
+            project = load_project(user_id, project_name)
+            if project:
+                # Сохраняем заметку как отдельную запись
+                project.add_conversation_entry(
+                    f"[ЗАМЕТКА] {note_text[:50]}...",
+                    note_text,
+                    "note"
+                )
+
+                keyboard = [[InlineKeyboardButton("« К проекту", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await update.message.reply_text(
+                    f"✅ Заметка добавлена в проект **{project_name}**",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
     # Проверка rate limit
     if not check_rate_limit(user_id):
         await update.message.reply_text(
@@ -2996,6 +3050,52 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await role_command(adapted_update, context)
         else:
             await query.edit_message_text("⚠️ Модуль ролей недоступен.")
+    elif query.data == "project_menu":
+        # Кнопка "Проект" из главного меню
+        if PROJECTS_AVAILABLE:
+            user_id = update.effective_user.id
+            projects = get_user_projects(user_id)
+            current_project = context.user_data.get("current_project")
+
+            keyboard = []
+
+            # Кнопка создания нового проекта
+            keyboard.append([
+                InlineKeyboardButton("➕ Создать новый проект", callback_data="proj_create")
+            ])
+
+            # Список существующих проектов
+            if projects:
+                keyboard.append([
+                    InlineKeyboardButton("────────────────", callback_data="ignore")
+                ])
+                for proj in projects:
+                    emoji = "✅ " if proj == current_project else "📁 "
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            text=f"{emoji}{proj}",
+                            callback_data=f"proj_open_{proj}"
+                        )
+                    ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            status_text = f"**📁 УПРАВЛЕНИЕ ПРОЕКТАМИ**\n\n"
+            if current_project:
+                status_text += f"✅ Активный проект: **{current_project}**\n\n"
+            else:
+                status_text += "Активный проект: _не выбран_\n\n"
+
+            status_text += f"Всего проектов: {len(projects)}\n\n"
+            status_text += "Выберите действие:"
+
+            await query.edit_message_text(
+                status_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
     elif query.data == "clear_confirm":
         # Подтверждение очистки истории
         user_id = update.effective_user.id
@@ -3329,6 +3429,250 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "proj_create":
+        # Создание нового проекта через диалог
+        if PROJECTS_AVAILABLE:
+            await query.edit_message_text(
+                "📝 **СОЗДАНИЕ ПРОЕКТА**\n\n"
+                "Введите название проекта:\n\n"
+                "_Например: Реконструкция ТЦ Мега, Строительство жилого дома, Ремонт моста_",
+                parse_mode="Markdown"
+            )
+            context.user_data["waiting_for_project_name"] = True
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_open_"):
+        # Открытие существующего проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_open_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                context.user_data["current_project"] = project_name
+
+                # Создаём меню проекта
+                keyboard = [
+                    [InlineKeyboardButton("📊 Информация", callback_data=f"proj_info_{project_name}"),
+                     InlineKeyboardButton("📋 Журнал", callback_data=f"proj_log_{project_name}")],
+                    [InlineKeyboardButton("📁 Файлы", callback_data=f"proj_files_{project_name}"),
+                     InlineKeyboardButton("📝 Добавить заметку", callback_data=f"proj_note_{project_name}")],
+                    [InlineKeyboardButton("📦 Экспорт проекта", callback_data=f"proj_export_{project_name}")],
+                    [InlineKeyboardButton("« Назад к проектам", callback_data="project_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                info_text = f"📁 **ПРОЕКТ: {project_name}**\n\n"
+                info_text += f"✅ Проект активирован\n\n"
+                info_text += f"{project.get_log_summary()}\n\n"
+                info_text += "Что вы хотите сделать?"
+
+                await query.edit_message_text(
+                    info_text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_info_"):
+        # Информация о проекте
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_info_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                info = project.get_project_summary()
+                log_summary = project.get_log_summary()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    f"{info}\n\n📊 **Журнал работы:** {log_summary}",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_log_"):
+        # Журнал проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_log_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                log = project.get_conversation_log()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                if not log:
+                    await query.edit_message_text(
+                        "📋 Журнал работы пуст",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    # Последние 10 записей
+                    recent_log = log[-10:]
+                    response = f"📋 **ЖУРНАЛ: {project_name}**\n\n"
+                    response += f"Всего записей: {len(log)}\n"
+                    response += f"Последние {len(recent_log)} записей:\n\n"
+
+                    for i, entry in enumerate(recent_log, 1):
+                        timestamp = entry["timestamp"][:16].replace("T", " ")
+                        question = entry.get("question", "")[:40]
+                        response += f"{i}. {timestamp}\n   Q: {question}...\n\n"
+
+                    await query.edit_message_text(
+                        response,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_files_"):
+        # Файлы проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_files_", "")
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                files = project.list_files()
+
+                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                if not files:
+                    await query.edit_message_text(
+                        "📁 В проекте пока нет файлов\n\n"
+                        "Отправьте файл с подписью для добавления в проект",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    response = f"📁 **ФАЙЛЫ ПРОЕКТА: {project_name}**\n\n"
+                    response += f"Всего файлов: {len(files)}\n\n"
+
+                    for i, file_info in enumerate(files, 1):
+                        name = file_info["original_name"]
+                        size_mb = file_info["size_bytes"] / 1024 / 1024
+                        file_type = file_info["type"]
+                        response += f"{i}. {name}\n"
+                        response += f"   Тип: {file_type} | Размер: {size_mb:.2f} МБ\n\n"
+
+                    await query.edit_message_text(
+                        response,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_note_"):
+        # Добавление заметки
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_note_", "")
+            await query.edit_message_text(
+                f"📝 **ДОБАВЛЕНИЕ ЗАМЕТКИ**\n\n"
+                f"Проект: {project_name}\n\n"
+                "Введите текст заметки:",
+                parse_mode="Markdown"
+            )
+            context.user_data["waiting_for_note"] = project_name
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_export_"):
+        # Экспорт проекта
+        if PROJECTS_AVAILABLE:
+            project_name = query.data.replace("proj_export_", "")
+            user_id = update.effective_user.id
+
+            await query.edit_message_text("⏳ Подготавливаю экспорт проекта...")
+
+            try:
+                project = load_project(user_id, project_name)
+                if project:
+                    # Экспортируем проект в JSON
+                    export_data = {
+                        "project_name": project_name,
+                        "metadata": project.metadata,
+                        "exported_at": datetime.now().isoformat()
+                    }
+
+                    # Создаём текстовый файл для экспорта
+                    export_text = f"📁 ПРОЕКТ: {project_name}\n"
+                    export_text += f"Экспортирован: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
+                    export_text += "=" * 50 + "\n\n"
+
+                    # Информация о проекте
+                    export_text += f"{project.get_project_summary()}\n\n"
+                    export_text += "=" * 50 + "\n\n"
+
+                    # Журнал работы
+                    log = project.get_conversation_log()
+                    export_text += f"📋 ЖУРНАЛ РАБОТЫ ({len(log)} записей)\n\n"
+
+                    for i, entry in enumerate(log, 1):
+                        timestamp = entry["timestamp"][:16].replace("T", " ")
+                        question = entry.get("question", "")
+                        answer = entry.get("answer", "")
+                        export_text += f"═══ Запись #{i} ═══\n"
+                        export_text += f"⏰ {timestamp}\n\n"
+                        export_text += f"❓ ВОПРОС:\n{question}\n\n"
+                        export_text += f"💬 ОТВЕТ:\n{answer}\n\n"
+                        export_text += "-" * 50 + "\n\n"
+
+                    # Список файлов
+                    files = project.list_files()
+                    if files:
+                        export_text += "=" * 50 + "\n\n"
+                        export_text += f"📁 ФАЙЛЫ ПРОЕКТА ({len(files)})\n\n"
+                        for file_info in files:
+                            export_text += f"• {file_info['original_name']}\n"
+                            export_text += f"  Тип: {file_info['type']}\n"
+                            export_text += f"  Размер: {file_info['size_bytes'] / 1024 / 1024:.2f} МБ\n"
+                            export_text += f"  Добавлен: {file_info['added_at'][:16]}\n\n"
+
+                    # Отправляем файл
+                    from io import BytesIO
+                    buffer = BytesIO(export_text.encode('utf-8'))
+                    buffer.seek(0)
+                    filename = f"{project_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+
+                    await query.message.reply_document(
+                        document=buffer,
+                        filename=filename,
+                        caption=f"📦 Экспорт проекта: **{project_name}**\n\n"
+                                f"Записей: {len(log)} | Файлов: {len(files)}",
+                        parse_mode="Markdown"
+                    )
+
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
+                    await query.edit_message_text(
+                        "✅ Проект экспортирован!",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await query.edit_message_text("❌ Ошибка загрузки проекта")
+            except Exception as e:
+                logger.error(f"Ошибка экспорта проекта: {e}")
+                await query.edit_message_text(f"❌ Ошибка экспорта: {str(e)}")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data == "ignore":
+        # Игнорируем разделитель
+        await query.answer()
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
