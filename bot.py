@@ -289,6 +289,35 @@ except ImportError:
     FAQ_AVAILABLE = False
     logger.warning("⚠️ Модуль faq.py не найден")
 
+# Кэширование ответов v3.8
+try:
+    from cache_manager import (
+        init_cache,
+        close_cache,
+        get_cached_answer,
+        set_cached_answer,
+        find_similar_cached_question,
+        get_cache_stats
+    )
+    CACHE_AVAILABLE = True
+    logger.info("✅ Cache manager v3.8 загружен")
+except ImportError:
+    CACHE_AVAILABLE = False
+    logger.warning("⚠️ Модуль cache_manager.py не найден")
+
+# Планировщик работ v3.8
+try:
+    from work_planner import (
+        planner_command,
+        plan_calc_command,
+        handle_planner_callback
+    )
+    PLANNER_AVAILABLE = True
+    logger.info("✅ Work planner v3.8 загружен")
+except ImportError:
+    PLANNER_AVAILABLE = False
+    logger.warning("⚠️ Модуль work_planner.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -3114,6 +3143,14 @@ def main():
         # Обработчик callback для FAQ
         application.add_handler(CallbackQueryHandler(handle_faq_callback, pattern="^faq_"))
         logger.info(f"✅ FAQ v3.7 зарегистрирован ({get_total_faq_count()} вопросов)")
+
+    # === ПЛАНИРОВЩИК РАБОТ v3.8 ===
+    if PLANNER_AVAILABLE:
+        application.add_handler(CommandHandler("planner", planner_command))
+        application.add_handler(CommandHandler("plan_calc", plan_calc_command))
+        # Обработчик callback для планировщика
+        application.add_handler(CallbackQueryHandler(handle_planner_callback, pattern="^plan_"))
+        logger.info("✅ Work planner v3.8 зарегистрирован")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
