@@ -192,31 +192,32 @@ except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
 
-# Обработчик голосовых сообщений v3.1
+# Обработчик голосовых сообщений v3.9
 try:
-    from voice_handler import (
-        handle_voice,
-        handle_audio,
-        get_voice_info
-    )
+    from voice_handler import process_voice_message
     VOICE_HANDLER_AVAILABLE = True
-    logger.info("✅ Обработчик голосовых сообщений v3.1 загружен")
+    logger.info("✅ Обработчик голосовых сообщений v3.9 загружен")
 except ImportError:
     VOICE_HANDLER_AVAILABLE = False
     logger.warning("⚠️ Модуль voice_handler.py не найден")
 
-# Шаблоны документов v3.2
+# Шаблоны документов v3.9
 try:
-    from document_templates import (
-        templates_command,
-        handle_template_selection,
-        create_templates_menu
-    )
+    from document_templates import DOCUMENT_TEMPLATES, generate_document
     TEMPLATES_AVAILABLE = True
-    logger.info("✅ Шаблоны документов v3.2 загружены")
+    logger.info(f"✅ Шаблоны документов v3.9 загружены ({len(DOCUMENT_TEMPLATES)} шаблонов)")
 except ImportError:
     TEMPLATES_AVAILABLE = False
     logger.warning("⚠️ Модуль document_templates.py не найден")
+
+# Управление проектами v3.9
+try:
+    from project_manager import get_user_projects, create_project, load_project, Project
+    PROJECTS_AVAILABLE = True
+    logger.info("✅ Управление проектами v3.9 загружено")
+except ImportError:
+    PROJECTS_AVAILABLE = False
+    logger.warning("⚠️ Модуль project_manager.py не найден")
 
 # Режимы работы по ролям v3.2
 try:
@@ -2143,6 +2144,109 @@ async def management_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(text, parse_mode='Markdown')
 
 
+# === НОВЫЕ КОМАНДЫ v3.9 ===
+
+async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /templates - показать шаблоны документов"""
+    if not TEMPLATES_AVAILABLE:
+        await update.message.reply_text("⚠️ Шаблоны документов недоступны")
+        return
+
+    keyboard = []
+    for template_id, info in DOCUMENT_TEMPLATES.items():
+        keyboard.append([
+            InlineKeyboardButton(
+                text=info["name"],
+                callback_data=f"template_{template_id}"
+            )
+        ])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "📄 **ШАБЛОНЫ ДОКУМЕНТОВ**\n\n"
+        "Выберите тип документа для генерации:",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+
+async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /projects - показать проекты пользователя"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    user_id = update.effective_user.id
+    projects = get_user_projects(user_id)
+
+    if not projects:
+        await update.message.reply_text(
+            "📁 У вас пока нет проектов.\n\n"
+            "Создайте новый проект:\n"
+            "`/new_project Название проекта`",
+            parse_mode="Markdown"
+        )
+        return
+
+    keyboard = []
+    for project_name in projects:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📁 {project_name}",
+                callback_data=f"proj_open_{project_name}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            text="➕ Создать новый проект",
+            callback_data="proj_new"
+        )
+    ])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        f"📁 **ВАШИ ПРОЕКТЫ** ({len(projects)})\n\n"
+        "Выберите проект для работы:",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+
+async def new_project_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /new_project - создать новый проект"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    user_id = update.effective_user.id
+
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Укажите название проекта:\n"
+            "`/new_project Название проекта`",
+            parse_mode="Markdown"
+        )
+        return
+
+    project_name = " ".join(context.args)
+    result = create_project(user_id, project_name)
+
+    if result["success"]:
+        await update.message.reply_text(
+            f"✅ Проект **{project_name}** создан!\n\n"
+            "Теперь вы можете:\n"
+            "• Загружать файлы: отправьте файл с подписью\n"
+            "• Просмотреть проект: `/projects`",
+            parse_mode="Markdown"
+        )
+        context.user_data["current_project"] = project_name
+    else:
+        await update.message.reply_text(
+            f"❌ Ошибка создания проекта:\n{result.get('error', '')}"
+        )
+
+
 # === ОБРАБОТКА СООБЩЕНИЙ ===
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2311,6 +2415,105 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"❌ Ошибка при анализе фотографии: {str(e)}\n\nПопробуйте еще раз или обратитесь к администратору."
         )
+
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка голосовых сообщений"""
+    if not VOICE_HANDLER_AVAILABLE:
+        await update.message.reply_text("⚠️ Голосовые сообщения недоступны")
+        return
+
+    user_id = update.effective_user.id
+    thinking_msg = await update.message.reply_text("🎤 Распознаю голосовое сообщение...")
+
+    try:
+        voice_file_id = update.message.voice.file_id
+        result = await process_voice_message(
+            bot=context.bot,
+            voice_file_id=voice_file_id,
+            user_id=user_id
+        )
+
+        if result["success"]:
+            recognized_text = result["text"]
+            await thinking_msg.edit_text(
+                f"✅ Распознано:\n\n{recognized_text}\n\n⏳ Обрабатываю запрос..."
+            )
+
+            # Обрабатываем как текстовый вопрос
+            update.message.text = recognized_text
+            await handle_text(update, context)
+
+        else:
+            error_msg = result.get("error", "Неизвестная ошибка")
+            await thinking_msg.edit_text(
+                f"❌ Ошибка распознавания:\n{error_msg}\n\n"
+                "Попробуйте записать голосовое сообщение ещё раз или напишите текстом."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки голоса: {e}")
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+        await update.message.reply_text(
+            f"❌ Ошибка: {str(e)}\n\nПожалуйста, напишите ваш вопрос текстом."
+        )
+
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка загрузки файлов в проект"""
+    if not PROJECTS_AVAILABLE:
+        await update.message.reply_text("⚠️ Управление проектами недоступно")
+        return
+
+    user_id = update.effective_user.id
+    current_project_name = context.user_data.get("current_project")
+
+    if not current_project_name:
+        await update.message.reply_text(
+            "📁 Сначала выберите или создайте проект:\n"
+            "`/projects` или `/new_project Название`",
+            parse_mode="Markdown"
+        )
+        return
+
+    project = load_project(user_id, current_project_name)
+    if not project:
+        await update.message.reply_text("❌ Проект не найден")
+        return
+
+    try:
+        file = await update.message.document.get_file()
+        file_path = f"temp_{user_id}_{update.message.document.file_name}"
+        await file.download_to_drive(file_path)
+
+        description = update.message.caption or ""
+        file_type = update.message.document.mime_type or "unknown"
+
+        result = project.add_file(file_path, file_type, description)
+
+        import os
+        os.remove(file_path)
+
+        if result["success"]:
+            file_info = result["file_info"]
+            await update.message.reply_text(
+                f"✅ Файл добавлен в проект **{current_project_name}**\n\n"
+                f"📄 {file_info['original_name']}\n"
+                f"💾 Размер: {file_info['size_bytes'] / 1024:.1f} КБ\n"
+                f"📝 {description or 'Без описания'}",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ Ошибка добавления файла:\n{result.get('error', '')}"
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки файла: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3145,7 +3348,8 @@ async def setup_bot_menu(application):
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("faq", "❓ Частые вопросы"),
         BotCommand("defects", "🔍 Галерея дефектов"),
-        BotCommand("templates", "📋 Шаблоны документов"),
+        BotCommand("templates", "📄 Шаблоны документов"),
+        BotCommand("projects", "📁 Мои проекты"),
         BotCommand("role", "👔 Выбрать роль"),
         BotCommand("history", "📜 История диалогов"),
         BotCommand("stats", "📊 Статистика"),
@@ -3213,10 +3417,15 @@ def main():
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
 
-    # === НОВЫЕ КОМАНДЫ v3.2 ===
+    # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
         application.add_handler(CommandHandler("templates", templates_command))
         logger.info("✅ Команда /templates зарегистрирована")
+
+    if PROJECTS_AVAILABLE:
+        application.add_handler(CommandHandler("projects", projects_command))
+        application.add_handler(CommandHandler("new_project", new_project_command))
+        logger.info("✅ Команды /projects и /new_project зарегистрированы")
 
     if ROLES_AVAILABLE:
         application.add_handler(CommandHandler("role", role_command))
@@ -3279,11 +3488,15 @@ def main():
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    # === ГОЛОСОВЫЕ СООБЩЕНИЯ v3.1 ===
+    # === ГОЛОСОВЫЕ СООБЩЕНИЯ v3.9 ===
     if VOICE_HANDLER_AVAILABLE:
         application.add_handler(MessageHandler(filters.VOICE, handle_voice))
-        application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
-        logger.info("✅ Обработчики голосовых сообщений зарегистрированы")
+        logger.info("✅ Обработчик голосовых сообщений зарегистрирован")
+
+    # === ЗАГРУЗКА ДОКУМЕНТОВ В ПРОЕКТЫ v3.9 ===
+    if PROJECTS_AVAILABLE:
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+        logger.info("✅ Обработчик документов зарегистрирован")
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
