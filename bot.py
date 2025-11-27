@@ -2414,18 +2414,15 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка загрузки файлов в проект"""
-    if not PROJECTS_AVAILABLE:
-        await update.message.reply_text("⚠️ Управление проектами недоступно")
-        return
-
+    """Обработка загрузки файлов с анализом и экспертным заключением"""
     user_id = update.effective_user.id
     current_project_name = context.user_data.get("current_project")
 
-    if not current_project_name:
+    # Если нет активного проекта - предлагаем создать
+    if not PROJECTS_AVAILABLE or not current_project_name:
         await update.message.reply_text(
-            "📁 Сначала выберите или создайте проект:\n"
-            "`/projects` или `/new_project Название`",
+            "📁 Для анализа документов создайте или выберите проект:\n"
+            "Нажмите кнопку **📁 Проект** в главном меню",
             parse_mode="Markdown"
         )
         return
@@ -2436,35 +2433,156 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Скачиваем файл
         file = await update.message.document.get_file()
-        file_path = f"temp_{user_id}_{update.message.document.file_name}"
+        file_name = update.message.document.file_name
+        file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
 
         description = update.message.caption or ""
         file_type = update.message.document.mime_type or "unknown"
 
+        # Определяем тип документа
+        is_pdf = file_name.lower().endswith('.pdf') or 'pdf' in file_type.lower()
+
+        # Сообщение о начале анализа
+        thinking_msg = await update.message.reply_text(
+            f"📄 Получен документ: **{file_name}**\n\n"
+            f"⏳ Анализирую документ...",
+            parse_mode="Markdown"
+        )
+
+        # Анализируем PDF
+        expert_opinion = None
+        if is_pdf:
+            try:
+                # Извлекаем текст из PDF
+                import PyPDF2
+                pdf_text = ""
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    num_pages = len(pdf_reader.pages)
+
+                    # Читаем максимум первые 10 страниц
+                    max_pages = min(num_pages, 10)
+                    for page_num in range(max_pages):
+                        page = pdf_reader.pages[page_num]
+                        pdf_text += page.extract_text() + "\n"
+
+                # Ограничиваем размер текста
+                pdf_text = pdf_text[:15000]  # ~3000 токенов
+
+                if pdf_text.strip():
+                    # Формируем промпт для анализа
+                    analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
+
+📋 **ЗАДАЧА:** Проанализируйте предоставленный строительный документ и дайте экспертное заключение.
+
+{'📝 **ЗАПРОС ПОЛЬЗОВАТЕЛЯ:** ' + description if description else ''}
+
+🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
+
+1. **ИДЕНТИФИКАЦИЯ ДОКУМЕНТА:**
+   • Определите тип документа (проект, смета, акт, заключение, экспертиза, и т.д.)
+   • Укажите основные реквизиты (если есть)
+   • Определите объект строительства
+
+2. **СОДЕРЖАНИЕ:**
+   • Кратко опишите основное содержание (3-5 пунктов)
+   • Выделите ключевые технические решения
+   • Укажите применённые нормативы
+
+3. **ЭКСПЕРТНАЯ ОЦЕНКА:**
+   • Соответствие актуальным нормативам 2024-2025
+   • Выявленные проблемы или несоответствия (если есть)
+   • Что требует особого внимания
+
+4. **РЕКОМЕНДАЦИИ:**
+   • Что нужно проверить дополнительно
+   • Какие документы могут потребоваться
+   • Практические советы по применению
+
+**ВАЖНО:**
+- Если документ частично нечитаем - укажите это
+- Ссылайтесь на конкретные СП/ГОСТ с пунктами
+- Будьте объективны и конкретны
+
+---
+
+📄 **ТЕКСТ ДОКУМЕНТА:**
+
+{pdf_text}"""
+
+                    # Отправляем на анализ Claude
+                    client = get_anthropic_client()
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: call_claude_with_retry(
+                            client,
+                            model="claude-sonnet-4-5-20250929",
+                            max_tokens=3000,
+                            system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
+                            messages=[{"role": "user", "content": analysis_prompt}],
+                            temperature=0.3
+                        )
+                    )
+                    expert_opinion = response.content[0].text
+
+                    # Сохраняем анализ в проект
+                    if expert_opinion:
+                        project.add_conversation_entry(
+                            f"[ДОКУМЕНТ] {file_name}" + (f": {description}" if description else ""),
+                            expert_opinion,
+                            "document_analysis"
+                        )
+
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа PDF установите библиотеку PyPDF2:\n`pip install PyPDF2`"
+            except Exception as e:
+                logger.error(f"Ошибка анализа PDF: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать PDF: {str(e)}"
+
+        # Сохраняем файл в проект
         result = project.add_file(file_path, file_type, description)
 
+        # Удаляем временный файл
         import os
         os.remove(file_path)
 
+        # Удаляем сообщение "анализирую"
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+
+        # Формируем ответ
+        response_text = f"✅ **Документ добавлен в проект:** {current_project_name}\n\n"
+        response_text += f"📄 **Файл:** {file_name}\n"
+
         if result["success"]:
             file_info = result["file_info"]
-            await update.message.reply_text(
-                f"✅ Файл добавлен в проект **{current_project_name}**\n\n"
-                f"📄 {file_info['original_name']}\n"
-                f"💾 Размер: {file_info['size_bytes'] / 1024:.1f} КБ\n"
-                f"📝 {description or 'Без описания'}",
-                parse_mode="Markdown"
-            )
+            response_text += f"💾 **Размер:** {file_info['size_bytes'] / 1024:.1f} КБ\n"
+            if description:
+                response_text += f"📝 **Описание:** {description}\n"
+
+        # Добавляем экспертное заключение
+        if expert_opinion and is_pdf:
+            response_text += f"\n{'='*40}\n\n"
+            response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
+
+        # Отправляем ответ частями если нужно
+        max_length = 4000
+        if len(response_text) > max_length:
+            parts = [response_text[i:i+max_length] for i in range(0, len(response_text), max_length)]
+            for part in parts:
+                await update.message.reply_text(part, parse_mode="Markdown")
         else:
-            await update.message.reply_text(
-                f"❌ Ошибка добавления файла:\n{result.get('error', '')}"
-            )
+            await update.message.reply_text(response_text, parse_mode="Markdown")
 
     except Exception as e:
-        logger.error(f"Ошибка обработки файла: {e}")
-        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+        logger.error(f"Ошибка обработки документа: {e}")
+        await update.message.reply_text(f"❌ Ошибка обработки: {str(e)}")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
