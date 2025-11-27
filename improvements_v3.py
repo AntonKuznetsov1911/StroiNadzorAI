@@ -372,11 +372,6 @@ CALCULATORS = {
         "description": "Расход воды на объекте",
         "icon": "💧"
     },
-    "winter": {
-        "name": "❄️ Зимний прогрев",
-        "description": "Прогрев бетона при -15°C",
-        "icon": "❄️"
-    },
     "math": {
         "name": "🧮 Математический",
         "description": "Универсальный калькулятор",
@@ -390,8 +385,9 @@ def create_calculators_menu():
     buttons = []
 
     for calc_id, calc_data in CALCULATORS.items():
+        # Используем только name (там уже есть смайлик), чтобы избежать задвоения
         buttons.append([InlineKeyboardButton(
-            f"{calc_data['icon']} {calc_data['name']}",
+            calc_data['name'],
             callback_data=f"calc_{calc_id}"
         )])
 

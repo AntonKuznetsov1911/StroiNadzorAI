@@ -183,13 +183,12 @@ try:
         create_formwork_calculator_handler,
         create_electrical_calculator_handler,
         create_water_calculator_handler,
-        create_winter_calculator_handler,
         create_math_calculator_handler,
         quick_concrete,
         quick_math
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.4 (все 7) загружены")
+    logger.info("✅ Интерактивные калькуляторы v3.4 (все 6) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -3460,19 +3459,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
-    elif query.data == "calc_winter":
-        await query.edit_message_text(
-            "❄️ **КАЛЬКУЛЯТОР ЗИМНЕГО ПРОГРЕВА**\n\n"
-            "Введите параметры в формате:\n"
-            "`/calc_winter объём температура метод`\n\n"
-            "**Пример:**\n"
-            "`/calc_winter 20 -15 cable`\n\n"
-            "Методы прогрева:\n"
-            "• `electrodes` - электроды (100 кВт·ч/м³)\n"
-            "• `cable` - греющий кабель (35 кВт·ч/м³)\n"
-            "• `tent` - тепляки (50 кВт·ч/м³)",
-            parse_mode='Markdown'
-        )
 
     # Обработчики категорий нормативов
     elif query.data.startswith("reg_cat_"):
@@ -3852,7 +3838,6 @@ async def calculators_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 📦 **Опалубка** - Оборачиваемость, количество комплектов
 ⚡ **Электроснабжение** - Мощность для стройплощадки
 💧 **Водоснабжение** - Расход воды на объекте
-❄️ **Зимний прогрев** - Прогрев бетона при минусовой температуре
 
 Выберите калькулятор из меню ниже:"""
 
@@ -4023,12 +4008,11 @@ def main():
         application.add_handler(create_formwork_calculator_handler())
         application.add_handler(create_electrical_calculator_handler())
         application.add_handler(create_water_calculator_handler())
-        application.add_handler(create_winter_calculator_handler())
         application.add_handler(create_math_calculator_handler())
         # Быстрые команды для расчёта одной строкой
         application.add_handler(CommandHandler("calc_concrete", quick_concrete))
         application.add_handler(CommandHandler("calc_math", quick_math))
-        logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.4)")
+        logger.info("✅ Все 6 интерактивных калькуляторов зарегистрированы (v3.4)")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
