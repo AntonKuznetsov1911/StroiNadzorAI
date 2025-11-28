@@ -318,10 +318,7 @@ def create_concrete_calculator_handler():
             CommandHandler('cancel', cancel)
         ],
         name="concrete_calculator",
-        persistent=False,
-        per_message=False,
-        per_chat=True,
-        per_user=True
+        persistent=False
     )
 
 

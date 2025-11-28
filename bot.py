@@ -3313,6 +3313,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка кнопок"""
     query = update.callback_query
+
+    # Пропускаем callbacks которые относятся к ConversationHandler калькуляторов
+    calculator_prefixes = [
+        "concrete_class_", "concrete_wastage_",
+        "rebar_diameter_", "rebar_spacing_", "rebar_type_",
+        "formwork_type_", "formwork_duration_",
+        "elec_", "water_", "winter_method_"
+    ]
+    if any(query.data.startswith(prefix) for prefix in calculator_prefixes):
+        # Не обрабатываем здесь - пусть обработает ConversationHandler
+        return
+
     await query.answer()
 
     if query.data == "regulations":
