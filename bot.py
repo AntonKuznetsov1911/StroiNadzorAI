@@ -2007,6 +2007,45 @@ async def templates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def handle_template_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, template_id: str):
+    """Обработчик выбора шаблона документа"""
+    query = update.callback_query
+    await query.answer()
+
+    if template_id not in DOCUMENT_TEMPLATES:
+        await query.edit_message_text("❌ Шаблон не найден")
+        return
+
+    template_info = DOCUMENT_TEMPLATES[template_id]
+
+    # Сохраняем выбранный шаблон в контексте пользователя
+    context.user_data["selected_template"] = template_id
+    context.user_data["waiting_for_template_params"] = True
+
+    # Формируем список параметров
+    params_list = "\n".join([f"• {param}" for param in template_info["params"]])
+
+    # Отправляем информацию о шаблоне и запрашиваем параметры
+    message_text = (
+        f"📄 **{template_info['name']}**\n\n"
+        f"{template_info['description']}\n\n"
+        f"**Необходимые данные:**\n{params_list}\n\n"
+        "💬 **Опишите ваш проект**, и я помогу заполнить шаблон.\n\n"
+        "_Например: 'Объект - ЖК Солнечный, подрядчик - ООО Стройтех, "
+        "дата - 15.11.2025, тип фундамента - ленточный...'_\n\n"
+        "Или просто задайте вопросы, и я соберу все данные в диалоге."
+    )
+
+    keyboard = [[InlineKeyboardButton("« Назад к шаблонам", callback_data="templates")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        message_text,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+
 async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /projects - показать проекты пользователя"""
     if not PROJECTS_AVAILABLE:
@@ -2656,6 +2695,94 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
+        return
+
+    # Проверка ожидания параметров для шаблона
+    if context.user_data.get("waiting_for_template_params"):
+        template_id = context.user_data.get("selected_template")
+
+        if not template_id or not TEMPLATES_AVAILABLE:
+            await update.message.reply_text("❌ Ошибка: шаблон не выбран")
+            context.user_data["waiting_for_template_params"] = False
+            return
+
+        # Отправляем сообщение о генерации
+        processing_msg = await update.message.reply_text("⏳ Обрабатываю данные и генерирую документ...")
+
+        try:
+            # Используем Claude AI для извлечения параметров из текста пользователя
+            template_info = DOCUMENT_TEMPLATES[template_id]
+            user_input = question.strip()
+
+            # Создаем промпт для Claude
+            extraction_prompt = f"""Извлеки из текста пользователя параметры для документа "{template_info['name']}".
+
+Необходимые параметры: {', '.join(template_info['params'])}
+
+Текст пользователя:
+{user_input}
+
+Верни JSON в формате:
+{{
+    "param1": "значение1",
+    "param2": "значение2",
+    ...
+}}
+
+Если какой-то параметр отсутствует, используй заполнитель "___________" (11 символов подчёркивания).
+Даты форматируй как ДД.МM.ГГГГ.
+"""
+
+            # Вызываем Claude API для извлечения параметров
+            messages = [{"role": "user", "content": extraction_prompt}]
+
+            response = client.messages.create(
+                model=DEFAULT_MODEL,
+                max_tokens=1000,
+                messages=messages
+            )
+
+            # Извлекаем JSON из ответа
+            import json
+            import re
+
+            answer_text = response.content[0].text
+            json_match = re.search(r'\{[^{}]*\}', answer_text, re.DOTALL)
+
+            if json_match:
+                params = json.loads(json_match.group())
+            else:
+                # Если не нашли JSON, создаем базовые параметры
+                params = {param: "___________" for param in template_info['params']}
+
+            # Генерируем документ
+            result = generate_document(template_id, params)
+
+            if result["success"]:
+                # Отправляем документ пользователю
+                with open(result["filepath"], 'rb') as doc_file:
+                    await update.message.reply_document(
+                        document=doc_file,
+                        filename=os.path.basename(result["filepath"]),
+                        caption=f"✅ **Документ готов!**\n\n📄 {template_info['name']}\n\n"
+                                f"_Проверьте документ и при необходимости отредактируйте параметры, "
+                                f"отмеченные подчёркиваниями._",
+                        parse_mode="Markdown"
+                    )
+
+                # Удаляем сообщение о процессе
+                await processing_msg.delete()
+
+            else:
+                await processing_msg.edit_text(f"❌ Ошибка генерации документа: {result['error']}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при генерации документа: {e}")
+            await processing_msg.edit_text(f"❌ Произошла ошибка: {str(e)}")
+
+        # Сбрасываем флаги
+        context.user_data["waiting_for_template_params"] = False
+        context.user_data["selected_template"] = None
         return
 
     # Проверка rate limit
