@@ -3988,10 +3988,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if project:
                 log = project.get_conversation_log()
 
-                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                keyboard = []
 
                 if not log:
+                    keyboard.append([InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(
                         "📋 Журнал работы пуст",
                         reply_markup=reply_markup
@@ -4003,10 +4004,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     response += f"Всего записей: {len(log)}\n"
                     response += f"Последние {len(recent_log)} записей:\n\n"
 
-                    for i, entry in enumerate(recent_log, 1):
+                    # Создаём кнопки для каждой записи
+                    start_index = len(log) - len(recent_log)
+                    for i, entry in enumerate(recent_log, start=start_index):
                         timestamp = entry["timestamp"][:16].replace("T", " ")
                         question = entry.get("question", "")[:40]
-                        response += f"{i}. {timestamp}\n   Q: {question}...\n\n"
+                        response += f"{i+1}. {timestamp}\n   Q: {question}...\n\n"
+
+                        # Добавляем кнопку для просмотра этой записи
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                f"📖 Запись #{i+1}",
+                                callback_data=f"proj_entry_{project_name}_{i}"
+                            )
+                        ])
+
+                    keyboard.append([InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
 
                     await query.edit_message_text(
                         response,
@@ -4017,6 +4031,105 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ Ошибка загрузки проекта")
         else:
             await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_entry_"):
+        # Просмотр конкретной записи из журнала
+        if PROJECTS_AVAILABLE:
+            parts = query.data.replace("proj_entry_", "").rsplit("_", 1)
+            project_name = parts[0]
+            entry_index = int(parts[1])
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                log = project.get_conversation_log()
+                if 0 <= entry_index < len(log):
+                    entry = log[entry_index]
+                    timestamp = entry["timestamp"][:19].replace("T", " ")
+                    question = entry.get("question", "Нет вопроса")
+                    answer = entry.get("answer", "Нет ответа")
+                    entry_type = entry.get("type", "qa")
+
+                    response = f"📖 **ЗАПИСЬ #{entry_index+1}**\n\n"
+                    response += f"⏰ {timestamp}\n"
+                    response += f"📂 Тип: {entry_type}\n\n"
+                    response += f"**❓ Вопрос:**\n{question}\n\n"
+                    response += f"**💬 Ответ:**\n{answer[:3000]}"  # Ограничение на длину
+
+                    if len(answer) > 3000:
+                        response += "\n\n_...ответ обрезан, полный текст сохранён в проекте_"
+
+                    keyboard = [
+                        [InlineKeyboardButton("🔄 Повторно отправить", callback_data=f"proj_resend_{project_name}_{entry_index}")],
+                        [InlineKeyboardButton("« К журналу", callback_data=f"proj_log_{project_name}")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
+                    await query.edit_message_text(
+                        response,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await query.edit_message_text("❌ Запись не найдена")
+            else:
+                await query.edit_message_text("❌ Ошибка загрузки проекта")
+        else:
+            await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+    elif query.data.startswith("proj_resend_"):
+        # Повторная отправка записи из журнала
+        if PROJECTS_AVAILABLE:
+            parts = query.data.replace("proj_resend_", "").rsplit("_", 1)
+            project_name = parts[0]
+            entry_index = int(parts[1])
+            user_id = update.effective_user.id
+            project = load_project(user_id, project_name)
+
+            if project:
+                log = project.get_conversation_log()
+                if 0 <= entry_index < len(log):
+                    entry = log[entry_index]
+                    question = entry.get("question", "Нет вопроса")
+                    answer = entry.get("answer", "Нет ответа")
+
+                    # Отправляем информацию как новое сообщение
+                    await query.answer("📨 Отправляю информацию...")
+
+                    full_message = f"📂 **Из проекта:** {project_name}\n\n"
+                    full_message += f"**❓ Вопрос:**\n{question}\n\n"
+                    full_message += f"**💬 Ответ:**\n{answer}"
+
+                    # Разбиваем на части если слишком длинное
+                    max_length = 4000
+                    if len(full_message) > max_length:
+                        # Отправляем по частям
+                        await query.message.reply_text(
+                            f"📂 **Из проекта:** {project_name}\n\n**❓ Вопрос:**\n{question}",
+                            parse_mode="Markdown"
+                        )
+
+                        # Делим ответ на части
+                        chunks = [answer[i:i+max_length] for i in range(0, len(answer), max_length)]
+                        for i, chunk in enumerate(chunks):
+                            prefix = f"**💬 Ответ (часть {i+1}/{len(chunks)}):**\n" if len(chunks) > 1 else "**💬 Ответ:**\n"
+                            await query.message.reply_text(
+                                prefix + chunk,
+                                parse_mode="Markdown"
+                            )
+                    else:
+                        await query.message.reply_text(full_message, parse_mode="Markdown")
+
+                    # Возвращаемся к записи
+                    keyboard = [
+                        [InlineKeyboardButton("« К журналу", callback_data=f"proj_log_{project_name}")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_reply_markup(reply_markup=reply_markup)
+                else:
+                    await query.answer("❌ Запись не найдена", show_alert=True)
+            else:
+                await query.answer("❌ Ошибка загрузки проекта", show_alert=True)
+        else:
+            await query.answer("⚠️ Модуль проектов недоступен", show_alert=True)
     elif query.data.startswith("proj_files_"):
         # Файлы проекта
         if PROJECTS_AVAILABLE:
