@@ -4509,6 +4509,7 @@ async def setup_bot_menu(application):
         BotCommand("estimating", "💰 Сметное дело"),
         BotCommand("legal", "⚖️ Юридические вопросы"),
         BotCommand("management", "📈 Управление проектами"),
+        BotCommand("suggestions", "💡 Предложения по улучшению"),
         BotCommand("dev", "🔧 Режим разработчика"),
     ]
 
@@ -4584,6 +4585,16 @@ def main():
     if ROLES_AVAILABLE:
         application.add_handler(CommandHandler("role", role_command))
         logger.info("✅ Команда /role зарегистрирована")
+
+    # === ПРЕДЛОЖЕНИЯ ПО УЛУЧШЕНИЮ v1.0 ===
+    if SUGGESTIONS_AVAILABLE:
+        # Добавляем команду /suggestions для быстрого доступа
+        async def suggestions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Команда /suggestions - открывает меню предложений"""
+            await suggestions_menu(update, context)
+
+        application.add_handler(CommandHandler("suggestions", suggestions_command))
+        logger.info("✅ Команда /suggestions зарегистрирована")
 
     # === УПРАВЛЕНИЕ ИСТОРИЕЙ v3.5 ===
     if HISTORY_MANAGER_AVAILABLE:

@@ -22,6 +22,23 @@ WAITING_FOR_CHANGE_REQUEST = 1
 # Путь к проекту
 PROJECT_PATH = Path(__file__).parent
 
+# Проверка наличия git
+GIT_AVAILABLE = False
+try:
+    result = subprocess.run(
+        ["git", "--version"],
+        capture_output=True,
+        timeout=5
+    )
+    GIT_AVAILABLE = (result.returncode == 0)
+    if GIT_AVAILABLE:
+        logger.info("✅ Git доступен - кнопка автопуша будет показана")
+    else:
+        logger.warning("⚠️ Git не найден - работаем без автопуша")
+except Exception as e:
+    logger.warning(f"⚠️ Git не доступен: {e}")
+    GIT_AVAILABLE = False
+
 
 async def dev_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /dev - вход в режим разработчика"""
@@ -138,11 +155,11 @@ NEW: |
         header = f"✅ АНАЛИЗ ЗАВЕРШЁН\n\nЗапрос: {request}\n\n"
         full_text = header + analysis
 
-        # Создаём кнопку "Запушить на git"
-        keyboard = [
-            [InlineKeyboardButton("📤 Запушить на git", callback_data="dev_push_to_git")],
-            [InlineKeyboardButton("❌ Отменить", callback_data="dev_cancel")]
-        ]
+        # Создаём кнопки - показываем "Запушить на git" только если git доступен
+        keyboard = []
+        if GIT_AVAILABLE:
+            keyboard.append([InlineKeyboardButton("📤 Запушить на git", callback_data="dev_push_to_git")])
+        keyboard.append([InlineKeyboardButton("❌ Закрыть", callback_data="dev_cancel")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         if len(full_text) <= MAX_LENGTH:
@@ -166,11 +183,12 @@ NEW: |
                 await update.message.reply_text(f"📋 Часть {i}/{len(parts)}:\n\n{part}")
 
             # Последнее сообщение с кнопкой
-            await update.message.reply_text(
-                "✅ Анализ завершён!\n\n"
-                "Нажмите кнопку ниже чтобы применить изменения и запушить в git:",
-                reply_markup=reply_markup
-            )
+            if GIT_AVAILABLE:
+                button_text = "✅ Анализ завершён!\n\nНажмите кнопку чтобы применить изменения и запушить в git:"
+            else:
+                button_text = "✅ Анализ завершён!\n\n⚠️ Git недоступен - примените изменения вручную."
+
+            await update.message.reply_text(button_text, reply_markup=reply_markup)
 
     except Exception as e:
         logger.error(f"Ошибка в dev_mode: {e}", exc_info=True)
