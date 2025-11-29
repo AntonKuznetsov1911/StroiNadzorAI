@@ -222,14 +222,21 @@ except ImportError as e:
     DOCUMENT_HANDLERS_AVAILABLE = False
     logger.warning(f"⚠️ Модуль document_handlers.py не найден: {e}")
 
-# Режим разработчика v1.0
+# Режим разработчика v3.0 - автовыбор локальной/облачной версии
 try:
-    from dev_mode import create_dev_mode_handler
+    # Сначала пробуем загрузить ЛОКАЛЬНУЮ версию (с git автопушем)
+    from dev_mode_local import create_dev_mode_handler
     DEV_MODE_AVAILABLE = True
-    logger.info("✅ Режим разработчика v1.0 загружен")
-except ImportError as e:
-    DEV_MODE_AVAILABLE = False
-    logger.warning(f"⚠️ Модуль dev_mode.py не найден: {e}")
+    logger.info("✅ Режим разработчика v3.0 ЛОКАЛЬНЫЙ загружен (с git автопушем)")
+except ImportError:
+    try:
+        # Если не получилось (нет git) - загружаем ОБЛАЧНУЮ версию (только анализ)
+        from dev_mode import create_dev_mode_handler
+        DEV_MODE_AVAILABLE = True
+        logger.info("✅ Режим разработчика v2.0 ОБЛАЧНЫЙ загружен (без git)")
+    except ImportError as e:
+        DEV_MODE_AVAILABLE = False
+        logger.warning(f"⚠️ Модули dev_mode не найдены: {e}")
 
 # Обработчик голосовых сообщений v3.9
 try:
