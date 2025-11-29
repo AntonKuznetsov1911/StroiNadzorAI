@@ -247,6 +247,15 @@ except ImportError as e:
     AUTO_APPLY_AVAILABLE = False
     logger.warning(f"⚠️ Модуль auto_apply.py не найден: {e}")
 
+# Предложения по улучшению v1.0
+try:
+    from suggestions import suggestions_menu, create_suggestions_handler
+    SUGGESTIONS_AVAILABLE = True
+    logger.info("✅ Модуль предложений v1.0 загружен")
+except ImportError as e:
+    SUGGESTIONS_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль suggestions.py не найден: {e}")
+
 # Обработчик голосовых сообщений v3.9
 try:
     from voice_handler import process_voice_message
@@ -1418,7 +1427,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("❓ Частые вопросы", callback_data="faq_menu")],
         [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
          InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
-        [InlineKeyboardButton("💡 Примеры вопросов", callback_data="examples"),
+        [InlineKeyboardButton("💡 Предложения", callback_data="suggestions"),
+         InlineKeyboardButton("🔧 Разработчик", callback_data="dev_mode")],
+        [InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples"),
          InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3428,6 +3439,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await role_command(adapted_update, context)
         else:
             await query.edit_message_text("⚠️ Модуль ролей недоступен.")
+    elif query.data == "suggestions":
+        # Кнопка "Предложения" из главного меню
+        if SUGGESTIONS_AVAILABLE:
+            await suggestions_menu(update, context)
+        else:
+            await query.edit_message_text("⚠️ Модуль предложений недоступен.")
+    elif query.data == "dev_mode":
+        # Кнопка "Разработчик" из главного меню
+        await query.edit_message_text(
+            "🔧 **РЕЖИМ РАЗРАБОТЧИКА**\n\n"
+            "Для входа в режим разработчика используйте команду /dev\n\n"
+            "Режим разработчика позволяет:\n"
+            "• Отправлять запросы на изменение кода\n"
+            "• Получать готовые решения от AI\n"
+            "• (Локально) Автоматически применять и пушить изменения\n\n"
+            "Введите: /dev",
+            parse_mode="Markdown"
+        )
     elif query.data == "project_menu":
         # Кнопка "Проект" из главного меню
         if PROJECTS_AVAILABLE:
@@ -4639,6 +4668,11 @@ def main():
     if AUTO_APPLY_AVAILABLE:
         application.add_handler(CallbackQueryHandler(handle_apply_changes, pattern="^apply_changes"))
         logger.info("✅ Обработчик автоприменения изменений зарегистрирован")
+
+    # === ПРЕДЛОЖЕНИЯ ПО УЛУЧШЕНИЮ v1.0 ===
+    if SUGGESTIONS_AVAILABLE:
+        application.add_handler(create_suggestions_handler())
+        logger.info("✅ Обработчик предложений зарегистрирован")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
