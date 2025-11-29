@@ -197,12 +197,13 @@ try:
         create_formwork_calculator_handler,
         create_electrical_calculator_handler,
         create_water_calculator_handler,
+        create_winter_calculator_handler,
         create_math_calculator_handler,
         quick_concrete,
         quick_math
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.4 (все 6) загружены")
+    logger.info("✅ Интерактивные калькуляторы v3.5 (все 7) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -4440,7 +4441,7 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
-        BotCommand("calculators", "🧮 Калькуляторы (6 шт)"),
+        BotCommand("calculators", "🧮 Калькуляторы (7 шт)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("faq", "❓ Частые вопросы"),
         BotCommand("templates", "📄 Шаблоны документов"),
@@ -4562,19 +4563,20 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_planner_callback, pattern="^plan_"))
         logger.info("✅ Work planner v3.8 зарегистрирован")
 
-    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.3 ===
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.5 ===
     if CALCULATOR_HANDLERS_AVAILABLE:
-        # ConversationHandler для всех 6 калькуляторов
+        # ConversationHandler для всех 7 калькуляторов
         application.add_handler(create_concrete_calculator_handler())
         application.add_handler(create_rebar_calculator_handler())
         application.add_handler(create_formwork_calculator_handler())
         application.add_handler(create_electrical_calculator_handler())
         application.add_handler(create_water_calculator_handler())
+        application.add_handler(create_winter_calculator_handler())
         application.add_handler(create_math_calculator_handler())
         # Быстрые команды для расчёта одной строкой
         application.add_handler(CommandHandler("calc_concrete", quick_concrete))
         application.add_handler(CommandHandler("calc_math", quick_math))
-        logger.info("✅ Все 6 интерактивных калькуляторов зарегистрированы (v3.4)")
+        logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.5)")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

@@ -319,7 +319,8 @@ def create_concrete_calculator_handler():
         ],
         name="concrete_calculator",
         persistent=False,
-        per_message=True
+        per_chat=True,
+        per_user=True
     )
 
 
@@ -595,7 +596,6 @@ def create_rebar_calculator_handler():
         fallbacks=[CommandHandler('cancel', cancel)],
         name="rebar_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
@@ -726,7 +726,6 @@ def create_formwork_calculator_handler():
         fallbacks=[CommandHandler('cancel', cancel)],
         name="formwork_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
@@ -897,7 +896,6 @@ def create_electrical_calculator_handler():
         fallbacks=[CommandHandler('cancel', cancel)],
         name="electrical_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
@@ -997,7 +995,6 @@ def create_water_calculator_handler():
         fallbacks=[CommandHandler('cancel', cancel)],
         name="water_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
@@ -1128,7 +1125,6 @@ def create_winter_calculator_handler():
         fallbacks=[CommandHandler('cancel', cancel)],
         name="winter_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
@@ -1329,7 +1325,6 @@ def create_math_calculator_handler():
         ],
         name="math_calculator",
         persistent=False,
-        per_message=True,
         per_chat=True,
         per_user=True
     )
