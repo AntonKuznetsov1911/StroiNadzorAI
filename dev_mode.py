@@ -109,10 +109,10 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
 
         analysis = response.content[0].text
 
+        # Отправляем анализ без markdown чтобы избежать ошибок парсинга
         await status_msg.edit_text(
-            f"📋 **Анализ запроса:**\n\n{analysis}\n\n"
-            "⏳ Выполняю изменения...",
-            parse_mode="Markdown"
+            f"📋 Анализ запроса:\n\n{analysis}\n\n"
+            "⏳ Выполняю изменения..."
         )
 
         # Теперь запрашиваем у Claude конкретный код для изменений
