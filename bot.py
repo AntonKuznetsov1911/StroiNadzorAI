@@ -208,6 +208,20 @@ except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
 
+# Интерактивные обработчики документов v1.0
+try:
+    from document_handlers import (
+        create_acceptance_foundation_handler,
+        create_complaint_contractor_handler,
+        create_safety_plan_handler,
+        create_hidden_works_act_handler,
+    )
+    DOCUMENT_HANDLERS_AVAILABLE = True
+    logger.info("✅ Интерактивные обработчики документов v1.0 (все 4) загружены")
+except ImportError as e:
+    DOCUMENT_HANDLERS_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль document_handlers.py не найден: {e}")
+
 # Обработчик голосовых сообщений v3.9
 try:
     from voice_handler import process_voice_message
@@ -2019,31 +2033,70 @@ async def handle_template_selection(update: Update, context: ContextTypes.DEFAUL
 
     template_info = DOCUMENT_TEMPLATES[template_id]
 
-    # Сохраняем выбранный шаблон в контексте пользователя
-    context.user_data["selected_template"] = template_id
-    context.user_data["waiting_for_template_params"] = True
-
     # Формируем список параметров
     params_list = "\n".join([f"• {param}" for param in template_info["params"]])
 
-    # Отправляем информацию о шаблоне и запрашиваем параметры
+    # Отправляем информацию о шаблоне с выбором действия
     message_text = (
         f"📄 **{template_info['name']}**\n\n"
         f"{template_info['description']}\n\n"
         f"**Необходимые данные:**\n{params_list}\n\n"
-        "💬 **Опишите ваш проект**, и я помогу заполнить шаблон.\n\n"
-        "_Например: 'Объект - ЖК Солнечный, подрядчик - ООО Стройтех, "
-        "дата - 15.11.2025, тип фундамента - ленточный...'_\n\n"
-        "Или просто задайте вопросы, и я соберу все данные в диалоге."
+        "Выберите действие:"
     )
 
-    keyboard = [[InlineKeyboardButton("« Назад к шаблонам", callback_data="templates")]]
+    # Кнопки выбора: скачать пустой или заполнить с ботом
+    keyboard = [
+        [InlineKeyboardButton("📥 Скачать пустой шаблон", callback_data=f"download_empty_{template_id}")],
+        [InlineKeyboardButton("✏️ Заполнить с ботом", callback_data=f"fill_{template_id}")],
+        [InlineKeyboardButton("« Назад к шаблонам", callback_data="templates")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
         message_text,
         reply_markup=reply_markup,
         parse_mode="Markdown"
+    )
+
+
+async def handle_download_empty_template(update: Update, context: ContextTypes.DEFAULT_TYPE, template_id: str):
+    """Обработчик скачивания пустого шаблона"""
+    query = update.callback_query
+    await query.answer()
+
+    if template_id not in DOCUMENT_TEMPLATES:
+        await query.edit_message_text("❌ Шаблон не найден")
+        return
+
+    template_info = DOCUMENT_TEMPLATES[template_id]
+
+    # Создаем пустой документ с заполнителями
+    params = {param: "___________" for param in template_info["params"]}
+
+    # Генерируем документ
+    result = generate_document(template_id, params)
+
+    if not result["success"]:
+        await query.edit_message_text(f"❌ Ошибка генерации документа: {result['error']}")
+        return
+
+    # Отправляем пустой шаблон
+    with open(result["filepath"], 'rb') as doc_file:
+        await update.effective_chat.send_document(
+            document=doc_file,
+            filename=os.path.basename(result["filepath"]),
+            caption=f"📄 **Пустой шаблон**: {template_info['name']}\n\n"
+                    f"Заполните документ вручную, заменив подчёркивания на ваши данные.",
+            parse_mode="Markdown"
+        )
+
+    # Кнопка назад к шаблонам
+    keyboard = [[InlineKeyboardButton("« Назад к шаблонам", callback_data="templates")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"✅ Пустой шаблон отправлен!\n\nЧто дальше?",
+        reply_markup=reply_markup
     )
 
 
@@ -2698,93 +2751,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
         return
 
-    # Проверка ожидания параметров для шаблона
-    if context.user_data.get("waiting_for_template_params"):
-        template_id = context.user_data.get("selected_template")
-
-        if not template_id or not TEMPLATES_AVAILABLE:
-            await update.message.reply_text("❌ Ошибка: шаблон не выбран")
-            context.user_data["waiting_for_template_params"] = False
-            return
-
-        # Отправляем сообщение о генерации
-        processing_msg = await update.message.reply_text("⏳ Обрабатываю данные и генерирую документ...")
-
-        try:
-            # Используем Claude AI для извлечения параметров из текста пользователя
-            template_info = DOCUMENT_TEMPLATES[template_id]
-            user_input = question.strip()
-
-            # Создаем промпт для Claude
-            extraction_prompt = f"""Извлеки из текста пользователя параметры для документа "{template_info['name']}".
-
-Необходимые параметры: {', '.join(template_info['params'])}
-
-Текст пользователя:
-{user_input}
-
-Верни JSON в формате:
-{{
-    "param1": "значение1",
-    "param2": "значение2",
-    ...
-}}
-
-Если какой-то параметр отсутствует, используй заполнитель "___________" (11 символов подчёркивания).
-Даты форматируй как ДД.МM.ГГГГ.
-"""
-
-            # Вызываем Claude API для извлечения параметров
-            messages = [{"role": "user", "content": extraction_prompt}]
-
-            response = client.messages.create(
-                model=DEFAULT_MODEL,
-                max_tokens=1000,
-                messages=messages
-            )
-
-            # Извлекаем JSON из ответа
-            import json
-            import re
-
-            answer_text = response.content[0].text
-            json_match = re.search(r'\{[^{}]*\}', answer_text, re.DOTALL)
-
-            if json_match:
-                params = json.loads(json_match.group())
-            else:
-                # Если не нашли JSON, создаем базовые параметры
-                params = {param: "___________" for param in template_info['params']}
-
-            # Генерируем документ
-            result = generate_document(template_id, params)
-
-            if result["success"]:
-                # Отправляем документ пользователю
-                with open(result["filepath"], 'rb') as doc_file:
-                    await update.message.reply_document(
-                        document=doc_file,
-                        filename=os.path.basename(result["filepath"]),
-                        caption=f"✅ **Документ готов!**\n\n📄 {template_info['name']}\n\n"
-                                f"_Проверьте документ и при необходимости отредактируйте параметры, "
-                                f"отмеченные подчёркиваниями._",
-                        parse_mode="Markdown"
-                    )
-
-                # Удаляем сообщение о процессе
-                await processing_msg.delete()
-
-            else:
-                await processing_msg.edit_text(f"❌ Ошибка генерации документа: {result['error']}")
-
-        except Exception as e:
-            logger.error(f"Ошибка при генерации документа: {e}")
-            await processing_msg.edit_text(f"❌ Произошла ошибка: {str(e)}")
-
-        # Сбрасываем флаги
-        context.user_data["waiting_for_template_params"] = False
-        context.user_data["selected_template"] = None
-        return
+    # === СТАРАЯ ОБРАБОТКА ШАБЛОНОВ (ЗАМЕНЕНА НА ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ v1.0) ===
+    # Теперь используются ConversationHandler из document_handlers.py
+    # Эта секция оставлена для совместимости, но больше не используется
+    #
+    # if context.user_data.get("waiting_for_template_params"):
+    #     ... (старый код удалён)
 
     # Проверка rate limit
     if not check_rate_limit(user_id):
@@ -3985,6 +3957,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
 
+    # Обработчики скачивания пустого шаблона
+    elif query.data.startswith("download_empty_"):
+        if TEMPLATES_AVAILABLE:
+            template_id = query.data.replace("download_empty_", "")
+            await handle_download_empty_template(update, context, template_id)
+        else:
+            await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
+
+    # Обработчик копирования текста документа
+    elif query.data == "copy_document_text":
+        from document_handlers import copy_document_text_callback
+        await copy_document_text_callback(update, context)
+
     # Обработчики выбора роли
     elif query.data.startswith("role_"):
         if ROLES_AVAILABLE:
@@ -4577,6 +4562,15 @@ def main():
         application.add_handler(CommandHandler("calc_concrete", quick_concrete))
         application.add_handler(CommandHandler("calc_math", quick_math))
         logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.5)")
+
+    # === ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ ДОКУМЕНТОВ v1.0 ===
+    if DOCUMENT_HANDLERS_AVAILABLE:
+        # ConversationHandler для всех 4 шаблонов документов
+        application.add_handler(create_acceptance_foundation_handler())
+        application.add_handler(create_complaint_contractor_handler())
+        application.add_handler(create_safety_plan_handler())
+        application.add_handler(create_hidden_works_act_handler())
+        logger.info("✅ Все 4 интерактивных обработчика документов зарегистрированы (v1.0)")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
