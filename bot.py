@@ -2033,8 +2033,9 @@ async def handle_template_selection(update: Update, context: ContextTypes.DEFAUL
 
     template_info = DOCUMENT_TEMPLATES[template_id]
 
-    # Формируем список параметров
-    params_list = "\n".join([f"• {param}" for param in template_info["params"]])
+    # Формируем список параметров для отображения пользователю
+    params_display = template_info.get("params_display", template_info["params"])
+    params_list = "\n".join([f"• {param}" for param in params_display])
 
     # Отправляем информацию о шаблоне с выбором действия
     message_text = (

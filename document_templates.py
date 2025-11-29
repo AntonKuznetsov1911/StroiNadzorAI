@@ -28,22 +28,26 @@ DOCUMENT_TEMPLATES = {
     "acceptance_foundation": {
         "name": "Акт приёмки фундамента",
         "description": "Акт освидетельствования скрытых работ (фундамент) по форме ОС-3",
-        "params": ["act_number", "object_name", "contractor", "customer", "date", "foundation_type", "volume_m3", "concrete_class", "inspector_name", "defects"]
+        "params": ["act_number", "object_name", "contractor", "customer", "date", "foundation_type", "volume_m3", "concrete_class", "inspector_name", "defects"],
+        "params_display": ["Номер акта", "Наименование объекта", "Подрядчик", "Заказчик", "Дата", "Тип фундамента", "Объём бетона (м³)", "Класс бетона", "ФИО инспектора", "Выявленные дефекты"]
     },
     "complaint_contractor": {
         "name": "Претензия подрядчику",
         "description": "Официальная претензия по выявленным дефектам работ",
-        "params": ["complaint_number", "date", "contractor_name", "contractor_address", "sender_name", "sender_address", "contract_number", "contract_date", "defect_description", "deadline_days", "penalty_percent"]
+        "params": ["complaint_number", "date", "contractor_name", "contractor_address", "sender_name", "sender_address", "contract_number", "contract_date", "defect_description", "deadline_days", "penalty_percent"],
+        "params_display": ["Номер претензии", "Дата", "Наименование подрядчика", "Адрес подрядчика", "Ваше наименование/ФИО", "Ваш адрес", "Номер договора", "Дата договора", "Описание дефектов", "Срок устранения (дни)", "Размер штрафа (%)"]
     },
     "safety_plan": {
         "name": "План мероприятий по охране труда",
         "description": "План ОТ и ТБ на объекте на 2025 год по СП 12-135-2003",
-        "params": ["object_name", "year", "responsible_person", "worker_count", "total_budget"]
+        "params": ["object_name", "year", "responsible_person", "worker_count", "total_budget"],
+        "params_display": ["Наименование объекта", "Год", "ФИО ответственного лица", "Численность работников", "Общий бюджет (руб.)"]
     },
     "hidden_works_act": {
         "name": "Акт освидетельствования скрытых работ",
         "description": "Универсальный акт для скрытых работ по форме КС-3",
-        "params": ["act_number", "object_name", "contractor", "customer", "date", "work_type", "volume", "standards", "inspector_name", "project_compliance"]
+        "params": ["act_number", "object_name", "contractor", "customer", "date", "work_type", "volume", "standards", "inspector_name", "project_compliance"],
+        "params_display": ["Номер акта", "Наименование объекта", "Подрядчик", "Заказчик", "Дата", "Вид работ", "Объём работ", "Применяемые нормативы", "ФИО инспектора", "Соответствие проекту"]
     },
 }
 
