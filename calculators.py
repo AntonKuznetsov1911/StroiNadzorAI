@@ -156,40 +156,56 @@ def calculate_concrete(
 # ========================================
 
 def calculate_reinforcement(
-    slab_length: float,
-    slab_width: float,
-    slab_thickness: float,
-    rebar_diameter: int = 12,
-    mesh_spacing: int = 200,
-    double_mesh: bool = True
+    length: float,
+    width: float,
+    height: float,
+    diameter: int = 12,
+    spacing: int = 200,
+    element_type: str = "slab"
 ) -> Dict:
     """
     Расчёт арматуры по СП 63.13330.2018
     """
-    if slab_length <= 0 or slab_width <= 0 or slab_thickness <= 0:
+    if length <= 0 or width <= 0 or height <= 0:
         return {"error": "Все размеры должны быть положительными"}
 
     rebar_weights = {
         6: 0.222, 8: 0.395, 10: 0.617, 12: 0.888,
-        14: 1.210, 16: 1.580, 18: 2.000, 20: 2.470
+        14: 1.210, 16: 1.580, 18: 2.000, 20: 2.470, 22: 2.980, 25: 3.850
     }
 
     available_diams = sorted(rebar_weights.keys())
-    selected_diam = min(available_diams, key=lambda x: abs(x - rebar_diameter))
-    weight_per_meter = rebar_weights[selected_diam]
+    selected_diam = min(available_diams, key=lambda x: abs(x - diameter))
+    weight_per_meter = rebar_weights.get(selected_diam, 0.888)
 
-    rebar_spacing = min(200, max(100, int(slab_thickness * 1000 * 4)))
-    if mesh_spacing:
-        rebar_spacing = mesh_spacing
+    rebar_spacing = spacing
 
-    num_lengthwise = int(slab_length * 1000 / rebar_spacing) + 1
-    num_widthwise = int(slab_width * 1000 / rebar_spacing) + 1
+    num_lengthwise = int(length * 1000 / rebar_spacing) + 1
+    num_widthwise = int(width * 1000 / rebar_spacing) + 1
 
-    mesh_count = 2 if double_mesh else 1
-    total_length = mesh_count * (num_lengthwise * slab_width + num_widthwise * slab_length)
+    # Учитываем тип элемента
+    if element_type == "slab":
+        # Для плиты - двойная сетка
+        mesh_count = 2
+        total_length = mesh_count * (num_lengthwise * width + num_widthwise * length)
+    elif element_type == "beam":
+        # Для балки - продольная арматура + хомуты
+        longitudinal = 4 * length  # 4 стержня по длине
+        stirrups_count = int(length * 1000 / 300)  # хомуты каждые 300 мм
+        stirrup_length = 2 * (width + height) - 0.1
+        total_length = longitudinal + stirrups_count * stirrup_length
+    elif element_type == "column":
+        # Для колонны - вертикальная арматура + хомуты
+        vertical = 4 * height  # 4 стержня по высоте
+        stirrups_count = int(height * 1000 / 200)  # хомуты каждые 200 мм
+        stirrup_length = 2 * (width + length) - 0.1
+        total_length = vertical + stirrups_count * stirrup_length
+    else:
+        mesh_count = 2
+        total_length = mesh_count * (num_lengthwise * width + num_widthwise * length)
 
     total_mass = total_length * weight_per_meter
-    slab_area = slab_length * slab_width
+    element_area = length * width
 
     return {
         "total_length": round(total_length, 2),
@@ -199,9 +215,9 @@ def calculate_reinforcement(
         "rebar_spacing": rebar_spacing,
         "num_lengthwise": num_lengthwise,
         "num_widthwise": num_widthwise,
-        "slab_area": round(slab_area, 2),
-        "mass_per_m2": round(total_mass / slab_area, 2),
-        "double_mesh": double_mesh,
+        "element_area": round(element_area, 2),
+        "mass_per_m2": round(total_mass / element_area, 2) if element_area > 0 else 0,
+        "element_type": element_type,
         "standards": "СП 63.13330.2018"
     }
 
@@ -210,36 +226,45 @@ def calculate_reinforcement(
 # ========================================
 
 def calculate_formwork(
-    length: float,
-    width: float,
-    height: float,
-    formwork_type: str = "plywood"
+    area: float,
+    duration: int,
+    formwork_type: str = "panel"
 ) -> Dict:
-    """Расчёт опалубки"""
-    if length <= 0 or width <= 0 or height <= 0:
-        return {"error": "Размеры должны быть положительными"}
-
-    side_area = 2 * (length + width) * height
-    bottom_area = length * width
-    total_area = side_area + bottom_area
+    """Расчёт опалубки по площади и сроку эксплуатации"""
+    if area <= 0 or duration <= 0:
+        return {"error": "Площадь и срок должны быть положительными"}
 
     formwork_materials = {
-        "plywood": {"name": "Фанера", "reuse": 5, "cost_per_m2": 450},
-        "boards": {"name": "Доски", "reuse": 3, "cost_per_m2": 300},
-        "metal": {"name": "Металлическая", "reuse": 100, "cost_per_m2": 1500}
+        "panel": {"name": "Щитовая", "reuse": 50, "cost_per_m2": 350, "install_time": 0.5},
+        "wall": {"name": "Стеновая", "reuse": 40, "cost_per_m2": 400, "install_time": 0.6},
+        "universal": {"name": "Универсальная", "reuse": 100, "cost_per_m2": 600, "install_time": 0.4}
     }
 
-    material = formwork_materials.get(formwork_type, formwork_materials["plywood"])
-    cost = (total_area * material["cost_per_m2"]) / material["reuse"]
+    material = formwork_materials.get(formwork_type, formwork_materials["panel"])
+
+    # Количество оборотов опалубки
+    turnovers = max(1, int(duration / 7))  # каждые 7 дней - один оборот
+
+    # Необходимое количество опалубки с учётом оборачиваемости
+    required_area = area / turnovers if turnovers > 1 else area
+
+    # Стоимость с учётом износа
+    cost = (required_area * material["cost_per_m2"]) / material["reuse"] * turnovers
+
+    # Время монтажа в человеко-часах
+    installation_time = required_area * material["install_time"]
 
     return {
-        "total_area": round(total_area, 2),
-        "side_area": round(side_area, 2),
-        "bottom_area": round(bottom_area, 2),
+        "total_area": round(area, 2),
+        "required_formwork": round(required_area, 2),
+        "duration_days": duration,
+        "turnovers": turnovers,
         "formwork_type": material["name"],
         "reuse_count": material["reuse"],
         "cost": round(cost, 2),
-        "cost_per_m2": round(cost / total_area, 2)
+        "cost_per_m2": round(cost / area, 2) if area > 0 else 0,
+        "installation_time_hours": round(installation_time, 1),
+        "standards": "СП 70.13330.2012"
     }
 
 # ========================================
@@ -247,37 +272,77 @@ def calculate_formwork(
 # ========================================
 
 def calculate_electrical(
-    total_power: float,
-    voltage: int = 220,
-    cable_length: float = 50,
-    cable_type: str = "copper"
+    crane_count: int,
+    pump_count: int,
+    welder_count: int,
+    heater_count: int,
+    cabin_count: int
 ) -> Dict:
-    """Расчёт электроснабжения"""
-    if total_power <= 0 or cable_length <= 0:
-        return {"error": "Мощность и длина кабеля должны быть положительными"}
+    """Расчёт электроснабжения стройплощадки"""
+    if any(x < 0 for x in [crane_count, pump_count, welder_count, heater_count, cabin_count]):
+        return {"error": "Количество оборудования не может быть отрицательным"}
 
-    current = total_power / voltage
+    # Средняя мощность оборудования (кВт)
+    power_ratings = {
+        "crane": 50,      # Башенный кран
+        "pump": 15,       # Бетононасос
+        "welder": 10,     # Сварочный аппарат
+        "heater": 5,      # Обогреватель
+        "cabin": 3        # Бытовка
+    }
 
-    if cable_type == "copper":
-        cross_section = current / 8
-    else:
-        cross_section = current / 6
+    # Коэффициенты одновременности
+    simultaneity = {
+        "crane": 0.7,
+        "pump": 0.8,
+        "welder": 0.5,
+        "heater": 0.9,
+        "cabin": 1.0
+    }
 
-    standard_sections = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120]
-    selected_section = min([s for s in standard_sections if s >= cross_section], default=120)
+    # Расчёт установленной мощности
+    installed_power = (
+        crane_count * power_ratings["crane"] +
+        pump_count * power_ratings["pump"] +
+        welder_count * power_ratings["welder"] +
+        heater_count * power_ratings["heater"] +
+        cabin_count * power_ratings["cabin"]
+    )
 
-    voltage_drop = (2 * current * cable_length * 0.0175) / selected_section
-    voltage_drop_percent = (voltage_drop / voltage) * 100
+    # Расчёт расчётной мощности с учётом коэффициентов одновременности
+    calculated_power = (
+        crane_count * power_ratings["crane"] * simultaneity["crane"] +
+        pump_count * power_ratings["pump"] * simultaneity["pump"] +
+        welder_count * power_ratings["welder"] * simultaneity["welder"] +
+        heater_count * power_ratings["heater"] * simultaneity["heater"] +
+        cabin_count * power_ratings["cabin"] * simultaneity["cabin"]
+    )
+
+    # Ток при напряжении 380В (трёхфазное)
+    voltage = 380
+    current = (calculated_power * 1000) / (voltage * 1.73)  # 1.73 = sqrt(3)
+
+    # Рекомендуемый автомат
+    recommended_breaker = int(current * 1.25 / 10) * 10  # Округляем до 10А вверх
+
+    # Потребление электроэнергии (кВт·ч в день, при 8 часах работы)
+    daily_consumption = calculated_power * 8
 
     return {
-        "total_power": total_power,
+        "installed_power": round(installed_power, 2),
+        "calculated_power": round(calculated_power, 2),
+        "voltage": voltage,
         "current": round(current, 2),
-        "cable_type": cable_type,
-        "cross_section": selected_section,
-        "cable_length": cable_length,
-        "voltage_drop": round(voltage_drop, 2),
-        "voltage_drop_percent": round(voltage_drop_percent, 2),
-        "recommended_breaker": int(current * 1.25)
+        "recommended_breaker": recommended_breaker,
+        "daily_consumption": round(daily_consumption, 2),
+        "equipment": {
+            "cranes": crane_count,
+            "pumps": pump_count,
+            "welders": welder_count,
+            "heaters": heater_count,
+            "cabins": cabin_count
+        },
+        "standards": "СП 256.1325800.2016"
     }
 
 # ========================================
@@ -285,33 +350,49 @@ def calculate_electrical(
 # ========================================
 
 def calculate_water(
-    num_residents: int,
-    fixtures_count: int = 5,
-    pipe_length: float = 30
+    workers: int,
+    mixers_per_day: int = 0
 ) -> Dict:
-    """Расчёт водоснабжения"""
-    if num_residents <= 0:
-        return {"error": "Количество жильцов должно быть положительным"}
+    """Расчёт водоснабжения стройплощадки"""
+    if workers <= 0:
+        return {"error": "Количество рабочих должно быть положительным"}
 
-    daily_consumption_per_person = 200
-    total_daily = num_residents * daily_consumption_per_person
-    peak_hourly = total_daily * 0.15
+    # Нормы потребления (литры)
+    consumption_per_worker = 25  # питьевая вода + бытовые нужды
+    consumption_per_mixer = 200  # вода на замес бетона (средний)
+
+    # Расчёт суточного потребления
+    workers_consumption = workers * consumption_per_worker
+    concrete_consumption = mixers_per_day * consumption_per_mixer
+    total_daily = workers_consumption + concrete_consumption
+
+    # Пиковый часовой расход (в обеденное время и при замесах)
+    peak_hourly = total_daily * 0.2  # 20% от суточного
+
+    # Расход в л/с
     flow_rate = peak_hourly / 3600
 
-    velocity = 1.2
-    diameter = math.sqrt((4 * flow_rate) / (math.pi * velocity * 1000)) * 1000
+    # Диаметр трубы при скорости 1.5 м/с
+    velocity = 1.5
+    diameter = math.sqrt((4 * flow_rate / 1000) / (math.pi * velocity)) * 1000
 
-    standard_diameters = [15, 20, 25, 32, 40, 50]
-    selected_diameter = min([d for d in standard_diameters if d >= diameter], default=50)
+    standard_diameters = [25, 32, 40, 50, 65, 80, 100]
+    selected_diameter = min([d for d in standard_diameters if d >= diameter], default=100)
+
+    # Запас воды (на 2 часа пикового потребления)
+    reserve_volume = peak_hourly * 2
 
     return {
-        "num_residents": num_residents,
+        "workers": workers,
+        "mixers_per_day": mixers_per_day,
         "daily_consumption": round(total_daily, 0),
+        "workers_consumption": round(workers_consumption, 0),
+        "concrete_consumption": round(concrete_consumption, 0),
         "peak_hourly": round(peak_hourly, 2),
         "flow_rate": round(flow_rate, 3),
         "pipe_diameter": selected_diameter,
-        "pipe_length": pipe_length,
-        "fixtures_count": fixtures_count
+        "reserve_volume": round(reserve_volume, 0),
+        "standards": "СНиП 2.04.01-85"
     }
 
 # ========================================
@@ -323,17 +404,35 @@ def calculate_math_expression(expression: str) -> Dict:
     try:
         allowed_chars = set('0123456789+-*/().^sqrt ')
         if not all(c in allowed_chars for c in expression.replace('sqrt', '').replace('^', '')):
-            return {"error": "Недопустимые символы в выражении"}
+            return {"success": False, "error": "Недопустимые символы в выражении", "expression": expression}
 
         expr = expression.replace('^', '**').replace('sqrt', 'math.sqrt')
         result = eval(expr, {"__builtins__": {}}, {"math": math})
 
         return {
+            "success": True,
             "expression": expression,
-            "result": round(result, 6)
+            "result": result,
+            "formatted": round(result, 6)
         }
     except Exception as e:
-        return {"error": f"Ошибка вычисления: {str(e)}"}
+        return {"success": False, "error": f"Ошибка вычисления: {str(e)}", "expression": expression}
+
+
+def format_math_result(result: Dict) -> str:
+    """Форматирование результата математического калькулятора"""
+    if not result.get("success", False):
+        return (
+            f"❌ **ОШИБКА ВЫЧИСЛЕНИЯ**\n\n"
+            f"📝 Выражение:\n`{result.get('expression', 'неизвестно')}`\n\n"
+            f"⚠️ {result.get('error', 'Неизвестная ошибка')}"
+        )
+
+    return (
+        f"✅ **РЕЗУЛЬТАТ ВЫЧИСЛЕНИЯ**\n\n"
+        f"📝 Выражение:\n`{result['expression']}`\n\n"
+        f"💡 Результат:\n**{format_number(result['formatted'], 6)}**"
+    )
 
 # ========================================
 # 7. КАЛЬКУЛЯТОР КИРПИЧА/БЛОКОВ
@@ -688,21 +787,83 @@ def calculate_labor(
 def calculate_winter_heating(
     volume: float,
     temperature_outside: float,
-    temperature_inside: float = 20
+    method: str = "electrode"
 ) -> Dict:
     """Расчёт зимнего прогрева бетона"""
     if volume <= 0:
         return {"error": "Объём должен быть положительным"}
 
+    # Температура прогрева (стандартная для твердения)
+    temperature_inside = 20
+
     temp_diff = temperature_inside - temperature_outside
-    heating_power = volume * 0.5 * temp_diff
-    heating_time = 3 if temperature_outside > -10 else 7
+
+    # Методы прогрева
+    methods = {
+        "electrode": {
+            "name": "Электроды",
+            "power_per_m3": 1.2,  # кВт/м³
+            "efficiency": 0.8,
+            "electrodes_per_m3": 20  # шт/м³
+        },
+        "wire": {
+            "name": "Провод ПНСВ",
+            "power_per_m3": 1.0,  # кВт/м³
+            "efficiency": 0.9,
+            "wire_per_m3": 50  # м/м³
+        },
+        "thermomat": {
+            "name": "Термоматы",
+            "power_per_m3": 0.8,  # кВт/м³
+            "efficiency": 0.95,
+            "area_per_m3": 2.5  # м²/м³
+        }
+    }
+
+    method_data = methods.get(method, methods["electrode"])
+
+    # Расчёт мощности прогрева с учётом температурного режима
+    temp_coefficient = 1.0 + abs(temperature_outside) * 0.02
+    heating_power = volume * method_data["power_per_m3"] * temp_coefficient
+
+    # Время прогрева в сутках
+    if temperature_outside > -5:
+        heating_time = 3
+    elif temperature_outside > -15:
+        heating_time = 5
+    else:
+        heating_time = 7
+
+    # Расход материалов
+    if method == "electrode":
+        material_consumption = volume * method_data["electrodes_per_m3"]
+        material_unit = "шт"
+    elif method == "wire":
+        material_consumption = volume * method_data["wire_per_m3"]
+        material_unit = "м"
+    else:  # thermomat
+        material_consumption = volume * method_data["area_per_m3"]
+        material_unit = "м²"
+
+    # Потребление электроэнергии (кВт·ч)
+    total_energy = heating_power * heating_time * 24 / method_data["efficiency"]
+
+    # Стоимость (примерная, 6 руб/кВт·ч)
+    cost = total_energy * 6
 
     return {
         "volume": round(volume, 3),
+        "temperature_outside": round(temperature_outside, 1),
+        "temperature_inside": temperature_inside,
+        "temp_diff": round(temp_diff, 1),
+        "method": method_data["name"],
         "heating_power": round(heating_power, 2),
         "heating_time_days": heating_time,
-        "temp_diff": round(temp_diff, 1)
+        "material_consumption": round(material_consumption, 1),
+        "material_unit": material_unit,
+        "total_energy": round(total_energy, 2),
+        "estimated_cost": round(cost, 2),
+        "standards": "СП 70.13330.2012"
     }
 
 # ========================================
@@ -757,14 +918,81 @@ def format_calculator_result(calc_type: str, result: Dict) -> str:
         )
 
     elif calc_type == "reinforcement":
+        element_names = {"slab": "Плита", "beam": "Балка", "column": "Колонна"}
+        element_name = element_names.get(result.get('element_type', 'slab'), "Плита")
         return (
             f"🔩 **РЕЗУЛЬТАТЫ РАСЧЁТА АРМАТУРЫ**\n\n"
             f"📏 Длина: **{format_number(result['total_length'])} м**\n"
             f"⚖️ Масса: **{format_number(result['total_mass'])} кг**\n\n"
-            f"• Диаметр: {result['rebar_diameter']} мм\n"
+            f"• Диаметр: Ø{result['rebar_diameter']} мм\n"
             f"• Шаг: {result['rebar_spacing']} мм\n"
-            f"• Сетка: {'двойная' if result['double_mesh'] else 'одинарная'}\n"
+            f"• Тип: {element_name}\n"
             f"• На м²: {format_number(result['mass_per_m2'])} кг/м²\n\n"
+            f"📚 {result['standards']}"
+        )
+
+    elif calc_type == "formwork":
+        return (
+            f"📦 **РЕЗУЛЬТАТЫ РАСЧЁТА ОПАЛУБКИ**\n\n"
+            f"📐 Площадь: **{format_number(result['total_area'])} м²**\n"
+            f"📦 Требуется опалубки: **{format_number(result['required_formwork'])} м²**\n\n"
+            f"• Тип: {result['formwork_type']}\n"
+            f"• Срок эксплуатации: {result['duration_days']} дней\n"
+            f"• Оборотов: {result['turnovers']}\n"
+            f"• Время монтажа: {result['installation_time_hours']} ч\n\n"
+            f"💰 Стоимость: {format_number(result['cost'])} руб\n\n"
+            f"📚 {result['standards']}"
+        )
+
+    elif calc_type == "electrical":
+        return (
+            f"⚡ **РЕЗУЛЬТАТЫ РАСЧЁТА ЭЛЕКТРОСНАБЖЕНИЯ**\n\n"
+            f"🔌 Установленная мощность: **{format_number(result['installed_power'])} кВт**\n"
+            f"⚡ Расчётная мощность: **{format_number(result['calculated_power'])} кВт**\n\n"
+            f"**Параметры:**\n"
+            f"• Напряжение: {result['voltage']} В\n"
+            f"• Ток: {format_number(result['current'])} А\n"
+            f"• Автомат: {result['recommended_breaker']} А\n"
+            f"• Потребление в день: {format_number(result['daily_consumption'])} кВт·ч\n\n"
+            f"**Оборудование:**\n"
+            f"• Краны: {result['equipment']['cranes']} шт\n"
+            f"• Насосы: {result['equipment']['pumps']} шт\n"
+            f"• Сварочные: {result['equipment']['welders']} шт\n"
+            f"• Обогреватели: {result['equipment']['heaters']} шт\n"
+            f"• Бытовки: {result['equipment']['cabins']} шт\n\n"
+            f"📚 {result['standards']}"
+        )
+
+    elif calc_type == "water":
+        return (
+            f"💧 **РЕЗУЛЬТАТЫ РАСЧЁТА ВОДОСНАБЖЕНИЯ**\n\n"
+            f"💦 Суточное потребление: **{format_number(result['daily_consumption'], 0)} л**\n"
+            f"📊 Пиковый расход: **{format_number(result['peak_hourly'])} л/ч**\n\n"
+            f"**Детализация:**\n"
+            f"• Для рабочих: {format_number(result['workers_consumption'], 0)} л\n"
+            f"• Для бетона: {format_number(result['concrete_consumption'], 0)} л\n"
+            f"• Диаметр трубы: {result['pipe_diameter']} мм\n"
+            f"• Объём резервуара: {format_number(result['reserve_volume'], 0)} л\n\n"
+            f"**Параметры:**\n"
+            f"• Рабочих: {result['workers']} чел\n"
+            f"• Замесов в день: {result['mixers_per_day']}\n\n"
+            f"📚 {result['standards']}"
+        )
+
+    elif calc_type == "winter_heating":
+        return (
+            f"❄️ **РЕЗУЛЬТАТЫ РАСЧЁТА ЗИМНЕГО ПРОГРЕВА**\n\n"
+            f"🔥 Мощность прогрева: **{format_number(result['heating_power'])} кВт**\n"
+            f"⏱️ Время прогрева: **{result['heating_time_days']} суток**\n\n"
+            f"**Параметры:**\n"
+            f"• Объём бетона: {format_number(result['volume'])} м³\n"
+            f"• Температура воздуха: {result['temperature_outside']}°C\n"
+            f"• Температура прогрева: {result['temperature_inside']}°C\n"
+            f"• Метод: {result['method']}\n\n"
+            f"**Материалы:**\n"
+            f"• Расход: {format_number(result['material_consumption'])} {result['material_unit']}\n"
+            f"• Электроэнергия: {format_number(result['total_energy'])} кВт·ч\n"
+            f"• Примерная стоимость: {format_number(result['estimated_cost'])} руб\n\n"
             f"📚 {result['standards']}"
         )
 
@@ -797,5 +1025,5 @@ __all__ = [
     'calculate_roof', 'calculate_plaster', 'calculate_wallpaper', 'calculate_laminate',
     'calculate_insulation', 'calculate_foundation', 'calculate_stairs', 'calculate_drywall',
     'calculate_earthwork', 'calculate_labor', 'calculate_winter_heating',
-    'format_calculator_result', 'CALCULATORS', 'NORMATIVE_DOCUMENTS'
+    'format_calculator_result', 'format_math_result', 'CALCULATORS', 'NORMATIVE_DOCUMENTS'
 ]
