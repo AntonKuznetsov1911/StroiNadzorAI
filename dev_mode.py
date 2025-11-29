@@ -1,12 +1,11 @@
 """
-Режим разработчика - модификация кода бота через Telegram
-Версия 1.0
+Режим разработчика - отправка запросов на изменение кода
+Версия 2.0 - Упрощённая (без git, работает на любом хостинге)
 """
 
 import os
 import logging
-import subprocess
-from pathlib import Path
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
@@ -17,9 +16,6 @@ DEVELOPER_ID = None  # Будет установлен автоматическ�
 
 # Состояния для ConversationHandler
 WAITING_FOR_CHANGE_REQUEST = 1
-
-# Путь к проекту
-PROJECT_PATH = Path(__file__).parent
 
 
 async def dev_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -38,16 +34,16 @@ async def dev_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "🔧 **РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН**\n\n"
-        "Теперь вы можете писать мне что нужно изменить/исправить/добавить в коде, и я это сделаю.\n\n"
-        "**Примеры команд:**\n"
-        "• _Измени цвет кнопок в главном меню на синий_\n"
-        "• _Добавь новый калькулятор для расчета лестниц_\n"
-        "• _Исправь ошибку в акте приёмки фундамента_\n"
-        "• _Удали кнопку FAQ из главного меню_\n\n"
-        "Опишите что нужно сделать, и я выполню изменения, закоммичу и отправлю в GitHub.\n\n"
-        "Для выхода: /cancel",
-        parse_mode="Markdown"
+        "🔧 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН\n\n"
+        "Теперь вы можете писать мне что нужно изменить/исправить/добавить в коде.\n\n"
+        "Примеры запросов:\n"
+        "• Измени цвет кнопок в главном меню на синий\n"
+        "• Добавь новый калькулятор для расчета лестниц\n"
+        "• Исправь ошибку в акте приёмки фундамента\n"
+        "• Удали кнопку FAQ из главного меню\n\n"
+        "Я проанализирую ваш запрос, определю какие файлы нужно изменить и сгенерирую готовый код.\n"
+        "Все запросы логируются в dev_requests.log\n\n"
+        "Для выхода: /cancel"
     )
 
     return WAITING_FOR_CHANGE_REQUEST
@@ -64,8 +60,7 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
 
     # Отправляем сообщение о начале работы
     status_msg = await update.message.reply_text(
-        "⏳ Анализирую запрос и ищу нужные файлы...\n\n"
-        f"Ваш запрос: {request}"
+        f"⏳ Анализирую запрос...\n\nВаш запрос: {request}"
     )
 
     try:
@@ -77,181 +72,95 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
         # Формируем промпт для Claude
         analysis_prompt = f"""Ты - ассистент разработчика Telegram бота на Python. Пользователь хочет внести изменение в код.
 
-Проект находится в папке: {PROJECT_PATH}
-
 Основные файлы проекта:
-- bot.py - главный файл бота
-- document_handlers.py - обработчики документов
-- document_templates.py - шаблоны документов
-- calculator_handlers.py - калькуляторы
-- calculators.py - логика калькуляторов
+- bot.py - главный файл бота, регистрация handlers
+- document_handlers.py - обработчики документов (ConversationHandler)
+- document_templates.py - шаблоны документов (словарь DOCUMENT_TEMPLATES)
+- calculator_handlers.py - обработчики калькуляторов (ConversationHandler)
+- calculators.py - логика калькуляторов (функции расчётов)
 - improvements_v3.py - дополнительные функции
+- role_modes.py - режимы работы по ролям
+- dev_mode.py - этот файл (режим разработчика)
 
 Запрос пользователя: {request}
 
-Проанализируй запрос и определи:
+Проанализируй запрос и создай подробный план изменений:
 1. Какие файлы нужно изменить
-2. Какие конкретно изменения нужно внести
+2. Какие конкретно изменения нужно внести в каждый файл
 3. Нужно ли создать новые файлы
+4. Какой код нужно заменить (укажи точные строки)
+5. Какой новый код нужно добавить
 
-Верни ответ в формате:
-ФАЙЛЫ: [список файлов через запятую]
-ДЕЙСТВИЕ: [краткое описание что делать]
-ДЕТАЛИ: [подробная инструкция для выполнения]"""
+Верни детальный ответ с готовым кодом для каждого изменения."""
 
         # Вызываем Claude для анализа
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
-            max_tokens=2000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": analysis_prompt}]
         )
 
         analysis = response.content[0].text
 
-        # Отправляем анализ без markdown чтобы избежать ошибок парсинга
-        await status_msg.edit_text(
-            f"📋 Анализ запроса:\n\n{analysis}\n\n"
-            "⏳ Выполняю изменения..."
-        )
+        # Логируем запрос в файл
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"""
+{'='*80}
+ДАТА: {timestamp}
+ЗАПРОС: {request}
+АНАЛИЗ:
+{analysis}
+{'='*80}
 
-        # Теперь запрашиваем у Claude конкретный код для изменений
-        code_prompt = f"""На основе анализа выше, сгенерируй конкретные изменения в коде.
+"""
 
-Запрос пользователя: {request}
-
-Анализ: {analysis}
-
-Верни ТОЧНЫЕ изменения в формате:
-
-FILE: имя_файла.py
-ACTION: edit/create/delete
-OLD_CODE: (для edit - старый код который нужно заменить)
-NEW_CODE: (для edit/create - новый код)
----
-
-Можешь вернуть несколько блоков для разных файлов."""
-
-        code_response = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
-            max_tokens=4000,
-            messages=[{"role": "user", "content": code_prompt}]
-        )
-
-        changes_text = code_response.content[0].text
-
-        # Парсим изменения и применяем их
-        applied_changes = []
-
-        # Простой парсинг блоков изменений
-        blocks = changes_text.split("---")
-
-        for block in blocks:
-            if "FILE:" not in block:
-                continue
-
-            lines = block.strip().split("\n")
-            file_name = None
-            action = None
-            old_code = []
-            new_code = []
-            current_section = None
-
-            for line in lines:
-                if line.startswith("FILE:"):
-                    file_name = line.replace("FILE:", "").strip()
-                elif line.startswith("ACTION:"):
-                    action = line.replace("ACTION:", "").strip()
-                elif line.startswith("OLD_CODE:"):
-                    current_section = "old"
-                elif line.startswith("NEW_CODE:"):
-                    current_section = "new"
-                elif current_section == "old":
-                    old_code.append(line)
-                elif current_section == "new":
-                    new_code.append(line)
-
-            if file_name and action:
-                file_path = PROJECT_PATH / file_name
-
-                if action == "edit" and old_code and new_code:
-                    # Читаем файл
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-
-                    # Заменяем
-                    old_str = "\n".join(old_code)
-                    new_str = "\n".join(new_code)
-
-                    if old_str in content:
-                        content = content.replace(old_str, new_str)
-
-                        # Записываем обратно
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(content)
-
-                        applied_changes.append(f"✅ {file_name} - изменено")
-                    else:
-                        applied_changes.append(f"⚠️ {file_name} - старый код не найден")
-
-                elif action == "create" and new_code:
-                    # Создаем новый файл
-                    new_str = "\n".join(new_code)
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(new_str)
-
-                    applied_changes.append(f"✅ {file_name} - создан")
-
-        if not applied_changes:
-            await status_msg.edit_text(
-                "⚠️ Не удалось применить изменения автоматически.\n\n"
-                f"Анализ:\n{analysis}\n\n"
-                f"Предложенные изменения:\n{changes_text[:500]}...\n\n"
-                "Попробуйте переформулировать запрос более конкретно."
-            )
-            return WAITING_FOR_CHANGE_REQUEST
-
-        changes_summary = "\n".join(applied_changes)
-
-        await status_msg.edit_text(
-            f"✅ Изменения применены:\n{changes_summary}\n\n"
-            "⏳ Коммичу изменения..."
-        )
-
-        # Git commit
         try:
-            subprocess.run(
-                ["git", "-C", str(PROJECT_PATH), "add", "."],
-                check=True,
-                capture_output=True
-            )
+            with open("dev_requests.log", "a", encoding="utf-8") as f:
+                f.write(log_entry)
+            logger.info(f"📝 Запрос залогирован в dev_requests.log")
+        except Exception as log_error:
+            logger.warning(f"⚠️ Не удалось залогировать запрос: {log_error}")
 
-            commit_msg = f"Dev mode: {request[:100]}"
-            subprocess.run(
-                ["git", "-C", str(PROJECT_PATH), "commit", "-m", commit_msg],
-                check=True,
-                capture_output=True
-            )
+        # Отправляем результат пользователю (разбиваем если длинный)
+        MAX_LENGTH = 4000
 
-            subprocess.run(
-                ["git", "-C", str(PROJECT_PATH), "push", "origin", "main"],
-                check=True,
-                capture_output=True
-            )
+        header = f"✅ АНАЛИЗ ЗАВЕРШЁН\n\nЗапрос: {request}\n\n"
+        full_text = header + analysis
 
-            await status_msg.edit_text(
-                f"✅ ГОТОВО!\n\n"
-                f"Применённые изменения:\n{changes_summary}\n\n"
-                f"Коммит: {commit_msg}\n"
-                "Статус: Отправлено в GitHub\n\n"
-                "Можете отправить новый запрос или /cancel для выхода."
-            )
+        if len(full_text) <= MAX_LENGTH:
+            await status_msg.edit_text(full_text)
+        else:
+            # Отправляем заголовок
+            await status_msg.edit_text(header + "Результат анализа отправляю следующими сообщениями...")
 
-        except subprocess.CalledProcessError as e:
-            await status_msg.edit_text(
-                f"⚠️ Изменения применены, но не удалось отправить в Git:\n\n"
-                f"{changes_summary}\n\n"
-                f"Ошибка: {e}"
-            )
+            # Разбиваем анализ на части
+            parts = []
+            current_part = ""
+
+            for line in analysis.split("\n"):
+                if len(current_part) + len(line) + 1 > MAX_LENGTH:
+                    parts.append(current_part)
+                    current_part = line + "\n"
+                else:
+                    current_part += line + "\n"
+
+            if current_part:
+                parts.append(current_part)
+
+            # Отправляем части
+            for i, part in enumerate(parts, 1):
+                await update.message.reply_text(
+                    f"📋 Часть {i}/{len(parts)}:\n\n{part}"
+                )
+
+        # Финальное сообщение
+        await update.message.reply_text(
+            "✅ Готово! Анализ завершён и сохранён в dev_requests.log\n\n"
+            "Вы можете:\n"
+            "• Отправить новый запрос\n"
+            "• Использовать /cancel для выхода\n\n"
+            "💡 Для применения изменений используйте предложенный код вручную или через IDE."
+        )
 
     except Exception as e:
         logger.error(f"Ошибка в dev_mode: {e}")
