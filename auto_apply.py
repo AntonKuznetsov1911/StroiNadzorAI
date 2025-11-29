@@ -133,7 +133,7 @@ NEW: |новый код|
 - Можешь вернуть несколько блоков для разных файлов"""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model="claude-opus-4-20250514",
             max_tokens=4000,
             messages=[{"role": "user", "content": analysis_prompt}]
         )

@@ -2438,7 +2438,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_claude_with_retry(
                 client,
-                model="claude-sonnet-4-5-20250929",
+                model="claude-opus-4-20250514",
                 max_tokens=2500,
                 system=system_prompt,
                 messages=[
@@ -2673,7 +2673,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         None,
                         lambda: call_claude_with_retry(
                             client,
-                            model="claude-sonnet-4-5-20250929",
+                            model="claude-opus-4-20250514",
                             max_tokens=3000,
                             system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
                             messages=[{"role": "user", "content": analysis_prompt}],
@@ -3226,7 +3226,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_claude_with_retry(
                 client,
-                model="claude-sonnet-4-5-20250929",
+                model="claude-opus-4-20250514",
                 max_tokens=2500,
                 system=system_prompt,
                 messages=conversation_history,
