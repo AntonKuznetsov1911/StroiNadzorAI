@@ -65,8 +65,7 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
     # Отправляем сообщение о начале работы
     status_msg = await update.message.reply_text(
         "⏳ Анализирую запрос и ищу нужные файлы...\n\n"
-        f"**Ваш запрос:** {request}",
-        parse_mode="Markdown"
+        f"Ваш запрос: {request}"
     )
 
     try:
@@ -205,19 +204,17 @@ NEW_CODE: (для edit/create - новый код)
         if not applied_changes:
             await status_msg.edit_text(
                 "⚠️ Не удалось применить изменения автоматически.\n\n"
-                f"**Анализ:**\n{analysis}\n\n"
-                f"**Предложенные изменения:**\n{changes_text[:500]}...\n\n"
-                "Попробуйте переформулировать запрос более конкретно.",
-                parse_mode="Markdown"
+                f"Анализ:\n{analysis}\n\n"
+                f"Предложенные изменения:\n{changes_text[:500]}...\n\n"
+                "Попробуйте переформулировать запрос более конкретно."
             )
             return WAITING_FOR_CHANGE_REQUEST
 
         changes_summary = "\n".join(applied_changes)
 
         await status_msg.edit_text(
-            f"✅ **Изменения применены:**\n{changes_summary}\n\n"
-            "⏳ Коммичу изменения...",
-            parse_mode="Markdown"
+            f"✅ Изменения применены:\n{changes_summary}\n\n"
+            "⏳ Коммичу изменения..."
         )
 
         # Git commit
@@ -242,28 +239,25 @@ NEW_CODE: (для edit/create - новый код)
             )
 
             await status_msg.edit_text(
-                f"✅ **ГОТОВО!**\n\n"
-                f"**Применённые изменения:**\n{changes_summary}\n\n"
-                f"**Коммит:** {commit_msg}\n"
-                "**Статус:** Отправлено в GitHub\n\n"
-                "Можете отправить новый запрос или /cancel для выхода.",
-                parse_mode="Markdown"
+                f"✅ ГОТОВО!\n\n"
+                f"Применённые изменения:\n{changes_summary}\n\n"
+                f"Коммит: {commit_msg}\n"
+                "Статус: Отправлено в GitHub\n\n"
+                "Можете отправить новый запрос или /cancel для выхода."
             )
 
         except subprocess.CalledProcessError as e:
             await status_msg.edit_text(
-                f"⚠️ **Изменения применены, но не удалось отправить в Git:**\n\n"
+                f"⚠️ Изменения применены, но не удалось отправить в Git:\n\n"
                 f"{changes_summary}\n\n"
-                f"Ошибка: {e}",
-                parse_mode="Markdown"
+                f"Ошибка: {e}"
             )
 
     except Exception as e:
         logger.error(f"Ошибка в dev_mode: {e}")
         await status_msg.edit_text(
             f"❌ Произошла ошибка:\n\n{str(e)}\n\n"
-            "Попробуйте ещё раз или переформулируйте запрос.",
-            parse_mode="Markdown"
+            "Попробуйте ещё раз или переформулируйте запрос."
         )
 
     return WAITING_FOR_CHANGE_REQUEST
