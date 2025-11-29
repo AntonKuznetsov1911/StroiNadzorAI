@@ -222,6 +222,15 @@ except ImportError as e:
     DOCUMENT_HANDLERS_AVAILABLE = False
     logger.warning(f"⚠️ Модуль document_handlers.py не найден: {e}")
 
+# Режим разработчика v1.0
+try:
+    from dev_mode import create_dev_mode_handler
+    DEV_MODE_AVAILABLE = True
+    logger.info("✅ Режим разработчика v1.0 загружен")
+except ImportError as e:
+    DEV_MODE_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль dev_mode.py не найден: {e}")
+
 # Обработчик голосовых сообщений v3.9
 try:
     from voice_handler import process_voice_message
@@ -4435,6 +4444,7 @@ async def setup_bot_menu(application):
         BotCommand("estimating", "💰 Сметное дело"),
         BotCommand("legal", "⚖️ Юридические вопросы"),
         BotCommand("management", "📈 Управление проектами"),
+        BotCommand("dev", "🔧 Режим разработчика"),
     ]
 
     await application.bot.set_my_commands(commands)
@@ -4567,6 +4577,12 @@ def main():
         application.add_handler(create_safety_plan_handler())
         application.add_handler(create_hidden_works_act_handler())
         logger.info("✅ Все 4 интерактивных обработчика документов зарегистрированы (v1.0)")
+
+    # === РЕЖИМ РАЗРАБОТЧИКА v1.0 ===
+    if DEV_MODE_AVAILABLE:
+        # ConversationHandler для режима разработчика
+        application.add_handler(create_dev_mode_handler())
+        logger.info("✅ Режим разработчика v1.0 зарегистрирован")
 
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
