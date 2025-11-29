@@ -27,23 +27,23 @@ DOCUMENTS_DIR.mkdir(exist_ok=True)
 DOCUMENT_TEMPLATES = {
     "acceptance_foundation": {
         "name": "Акт приёмки фундамента",
-        "description": "Акт освидетельствования скрытых работ (фундамент) по форме КС-3",
-        "params": ["object_name", "contractor", "date", "foundation_type", "volume_m3", "concrete_class", "inspector_name"]
+        "description": "Акт освидетельствования скрытых работ (фундамент) по форме ОС-3",
+        "params": ["act_number", "object_name", "contractor", "customer", "date", "foundation_type", "volume_m3", "concrete_class", "inspector_name", "defects"]
     },
     "complaint_contractor": {
         "name": "Претензия подрядчику",
-        "description": "Официальная претензия по выявленным дефектам",
-        "params": ["object_name", "contractor", "date", "defect_description", "deadline", "penalty", "sender_name"]
+        "description": "Официальная претензия по выявленным дефектам работ",
+        "params": ["complaint_number", "date", "contractor_name", "contractor_address", "sender_name", "sender_address", "contract_number", "contract_date", "defect_description", "deadline_days", "penalty_percent"]
     },
     "safety_plan": {
         "name": "План мероприятий по охране труда",
-        "description": "План ОТ и ТБ на объекте по СП 12-135-2003",
-        "params": ["object_name", "start_date", "end_date", "responsible_person", "worker_count"]
+        "description": "План ОТ и ТБ на объекте на 2025 год по СП 12-135-2003",
+        "params": ["object_name", "year", "responsible_person", "worker_count", "total_budget"]
     },
     "hidden_works_act": {
         "name": "Акт освидетельствования скрытых работ",
         "description": "Универсальный акт для скрытых работ по форме КС-3",
-        "params": ["object_name", "contractor", "date", "work_type", "volume", "standards", "inspector_name"]
+        "params": ["act_number", "object_name", "contractor", "customer", "date", "work_type", "volume", "standards", "inspector_name", "project_compliance"]
     },
 }
 
@@ -69,97 +69,92 @@ def add_table_border(table):
 
 
 def generate_acceptance_foundation(doc: Document, params: dict):
-    """Генерация акта приёмки фундамента по форме КС-3"""
+    """Генерация акта приёмки фундамента по форме ОС-3"""
 
     # Заголовок
-    heading = doc.add_heading('АКТ ОСВИДЕТЕЛЬСТВОВАНИЯ СКРЫТЫХ РАБОТ', level=0)
+    heading = doc.add_heading('АКТ ПРИЕМКИ ФУНДАМЕНТА', level=0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    subheading = doc.add_paragraph('(приёмка фундамента)')
-    subheading.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subheading.runs[0].font.size = Pt(11)
 
     doc.add_paragraph()
 
-    # Шапка документа
+    # Номер и дата
     p = doc.add_paragraph()
-    p.add_run(f'№ _______ от {params.get("date", "___________")}').bold = True
+    p.add_run(f'№ {params.get("act_number", "______")} от «___» __________ {params.get("date", "2025")} г.').bold = True
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     doc.add_paragraph()
 
-    # Основная информация
-    doc.add_paragraph(f'Объект: {params.get("object_name", "_________________________")}')
-    doc.add_paragraph(f'Подрядчик: {params.get("contractor", "_________________________")}')
-    doc.add_paragraph(f'Заказчик: _________________________')
+    # Стороны
+    doc.add_paragraph('Мы, нижеподписавшиеся:').runs[0].font.bold = True
+    doc.add_paragraph()
 
+    doc.add_paragraph(f'Заказчик: {params.get("customer", "_________________________________________________________")}')
+    doc.add_paragraph('(наименование организации, ФИО представителя, должность, реквизиты)')
+    doc.add_paragraph()
+
+    doc.add_paragraph(f'Подрядчик: {params.get("contractor", "________________________________________________________")}')
+    doc.add_paragraph('(наименование организации, ФИО представителя, должность, реквизиты)')
     doc.add_paragraph()
 
     # Основной текст
-    doc.add_paragraph(
-        'Комиссия в составе представителей заказчика, подрядчика и технического надзора '
-        'произвела осмотр работ по устройству фундамента и установила следующее:'
-    )
-
+    doc.add_paragraph('составили настоящий акт о том, что выполнены следующие работы:')
     doc.add_paragraph()
 
-    # Таблица с данными работ
-    table = doc.add_table(rows=8, cols=2)
-    add_table_border(table)
-    table.style = 'Table Grid'
+    # Информация об объекте
+    p = doc.add_paragraph('Объект: ')
+    p.add_run(params.get("object_name", "_____________________________________________________"))
+    doc.add_paragraph('(адрес, наименование строительного объекта)')
+    doc.add_paragraph()
 
-    rows_data = [
-        ('Наименование работ', f'Устройство {params.get("foundation_type", "монолитного железобетонного")} фундамента'),
-        ('Объём выполненных работ', f'{params.get("volume_m3", "___")} м³'),
-        ('Класс бетона', params.get("concrete_class", "В25 (М350)")),
-        ('Применённые материалы', 'Бетон, арматура класса A500C, гидроизоляция'),
-        ('Нормативные документы', 'СП 70.13330.2012, СП 63.13330.2018, ГОСТ 13580-85'),
-        ('Отступления от проекта', 'Отсутствуют'),
-        ('Дефекты и недоделки', 'Не выявлены'),
-        ('Заключение комиссии', 'Работы выполнены в соответствии с проектом и СНиП. Допускаются к закрытию.')
-    ]
+    doc.add_paragraph('Вид работ: Приемка фундамента под здание/сооружение.')
+    doc.add_paragraph()
 
-    for i, (label, value) in enumerate(rows_data):
-        table.rows[i].cells[0].text = label
-        table.rows[i].cells[1].text = value
-        table.rows[i].cells[0].paragraphs[0].runs[0].font.bold = True
+    # Технические параметры
+    p = doc.add_paragraph('Технические параметры:')
+    p.runs[0].font.bold = True
 
+    doc.add_paragraph(f'• Тип фундамента: {params.get("foundation_type", "ленточный/свайный/плитный")};')
+    doc.add_paragraph(f'• Объём бетона: {params.get("volume_m3", "___")} м³;')
+    doc.add_paragraph(f'• Класс бетона: {params.get("concrete_class", "В25")};')
+    doc.add_paragraph('• Соответствие проектной документации: □ Да / □ Нет;')
+    doc.add_paragraph(f'• Выявленные дефекты (при наличии): {params.get("defects", "_____________________________")}')
+    doc.add_paragraph()
+
+    # Результат проверки
+    p = doc.add_paragraph('Результат проверки:')
+    p.runs[0].font.bold = True
+    doc.add_paragraph('Фундамент принят/не принят к дальнейшим работам.')
+    doc.add_paragraph('Причины отказа (если применимо): _______________________________')
+    doc.add_paragraph()
+
+    # Приложения
+    p = doc.add_paragraph('Приложения:')
+    p.runs[0].font.bold = True
+    doc.add_paragraph('• Протоколы испытаний бетона (№______);')
+    doc.add_paragraph('• Чертежи с отметками о соответствии (№______).')
     doc.add_paragraph()
 
     # Подписи
-    doc.add_paragraph('ПОДПИСИ ЧЛЕНОВ КОМИССИИ:')
-    doc.add_paragraph()
-
-    sign_table = doc.add_table(rows=4, cols=4)
-    add_table_border(sign_table)
-
-    sign_table.rows[0].cells[0].text = 'Должность'
-    sign_table.rows[0].cells[1].text = 'ФИО'
-    sign_table.rows[0].cells[2].text = 'Подпись'
-    sign_table.rows[0].cells[3].text = 'Дата'
-
-    for cell in sign_table.rows[0].cells:
-        cell.paragraphs[0].runs[0].font.bold = True
-
-    sign_table.rows[1].cells[0].text = 'Представитель заказчика'
-    sign_table.rows[1].cells[1].text = '_________________'
-
-    sign_table.rows[2].cells[0].text = 'Представитель подрядчика'
-    sign_table.rows[2].cells[1].text = '_________________'
-
-    sign_table.rows[3].cells[0].text = 'Технический надзор'
-    sign_table.rows[3].cells[1].text = params.get("inspector_name", "_________________")
-
-    doc.add_paragraph()
-    p = doc.add_paragraph('Работы разрешается закрыть.')
+    p = doc.add_paragraph('Подписи сторон:')
     p.runs[0].font.bold = True
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph()
+
+    doc.add_paragraph('Заказчик:')
+    doc.add_paragraph('__________________ / __________________')
+    doc.add_paragraph()
+
+    doc.add_paragraph('Подрядчик:')
+    doc.add_paragraph('__________________ / __________________')
+    doc.add_paragraph()
+
+    doc.add_paragraph(f'Технический надзор: {params.get("inspector_name", "__________________")}')
+    doc.add_paragraph('__________________ / __________________')
 
 
 def generate_complaint_contractor(doc: Document, params: dict):
     """Генерация претензии подрядчику"""
 
-    # Шапка
+    # Заголовок
     p = doc.add_paragraph()
     p.add_run('ПРЕТЕНЗИЯ').bold = True
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -168,116 +163,116 @@ def generate_complaint_contractor(doc: Document, params: dict):
 
     doc.add_paragraph()
 
+    # Номер и дата
     p = doc.add_paragraph()
-    p.add_run(f'№ _______ от {params.get("date", "___________")}').bold = True
+    p.add_run(f'№ {params.get("complaint_number", "______")} от «___» __________ {params.get("date", "2025")} г.').bold = True
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     doc.add_paragraph()
+    doc.add_paragraph()
 
-    # Кому
-    doc.add_paragraph(f'Подрядчику: {params.get("contractor", "_________________________")}')
-    doc.add_paragraph(f'От заказчика: {params.get("sender_name", "_________________________")}')
-    doc.add_paragraph(f'Объект: {params.get("object_name", "_________________________")}')
+    # Адресат
+    p = doc.add_paragraph('Кому: ')
+    p.add_run(f'[{params.get("contractor_name", "Наименование подрядчика")}]').bold = True
+    doc.add_paragraph(f'Адрес: [{params.get("contractor_address", "Юридический адрес подрядчика")}]')
 
     doc.add_paragraph()
 
-    # Основной текст
+    # Отправитель
+    p = doc.add_paragraph('От: ')
+    p.add_run(f'[{params.get("sender_name", "Ваше наименование/ФИО")}]').bold = True
+    doc.add_paragraph(f'Адрес: [{params.get("sender_address", "Ваш юридический адрес")}]')
+
+    doc.add_paragraph()
+
+    # Основание
+    contract_num = params.get("contract_number", "____")
+    contract_date = params.get("contract_date", "«___» __________ 2025 г.")
     doc.add_paragraph(
-        'В ходе контроля качества выполненных работ на объекте были выявлены следующие дефекты и нарушения:'
+        f'На основании договора № {contract_num} от {contract_date} сообщаем о выявленных нарушениях:'
     )
 
     doc.add_paragraph()
 
-    # Описание дефектов
-    p = doc.add_paragraph(f'{params.get("defect_description", "___________________________")}')
-    p.paragraph_format.left_indent = Inches(0.5)
+    # Суть претензии
+    p = doc.add_paragraph('Суть претензии:')
+    p.runs[0].font.bold = True
 
-    doc.add_paragraph()
-
-    doc.add_paragraph(
-        'Указанные нарушения являются отступлением от проектной документации, СНиП и строительных норм. '
-        'Данные дефекты снижают качество выполненных работ и могут повлиять на эксплуатационные характеристики объекта.'
-    )
+    defects = params.get("defect_description", "")
+    if defects:
+        doc.add_paragraph(f'• {defects}')
+    else:
+        doc.add_paragraph('• Не соблюдены сроки выполнения работ по устройству фундамента (п. ___ договора);')
+        doc.add_paragraph('• Выявлены дефекты: трещины в бетоне, отклонение от проектных размеров (см. акт от «___» __________ 2025 г.);')
+        doc.add_paragraph('• Отсутствуют документы на материалы (паспорта качества).')
 
     doc.add_paragraph()
 
     # Требования
-    p = doc.add_paragraph('ТРЕБУЕМ:')
+    p = doc.add_paragraph('Требования:')
     p.runs[0].font.bold = True
 
+    deadline = params.get("deadline_days", "___")
+    doc.add_paragraph(f'• Устранить недостатки в течение {deadline} рабочих дней;')
+    doc.add_paragraph('• Предоставить письменное подтверждение устранения;')
+
+    penalty_percent = params.get("penalty_percent", "___")
+    doc.add_paragraph(f'• Оплатить штраф в размере {penalty_percent}% от стоимости работ (п. ___ договора).')
+
+    doc.add_paragraph()
+
+    # Последствия
+    p = doc.add_paragraph('Последствия:')
+    p.runs[0].font.bold = True
     doc.add_paragraph(
-        f'1. Устранить выявленные дефекты в срок до {params.get("deadline", "___________")}'
-    )
-    doc.add_paragraph(
-        '2. Предоставить письменное подтверждение выполнения работ по устранению дефектов'
-    )
-    doc.add_paragraph(
-        '3. Обеспечить повторную приёмку выполненных работ с участием представителей заказчика'
+        'В случае невыполнения требований в срок, заказчик вправе расторгнуть договор '
+        'и взыскать убытки в судебном порядке.'
     )
 
     doc.add_paragraph()
 
-    penalty = params.get("penalty", "")
-    if penalty:
-        doc.add_paragraph(
-            f'В случае невыполнения требований в установленный срок будут применены штрафные санкции '
-            f'в размере {penalty} в соответствии с условиями договора.'
-        )
+    # Приложения
+    p = doc.add_paragraph('Приложения:')
+    p.runs[0].font.bold = True
+    doc.add_paragraph('• Копия акта приемки фундамента;')
+    doc.add_paragraph('• Фотоматериалы дефектов.')
 
     doc.add_paragraph()
     doc.add_paragraph()
 
-    # Подписи
-    doc.add_paragraph(f'Подпись заказчика: ___________________ ({params.get("sender_name", "")})')
-    doc.add_paragraph()
-    doc.add_paragraph('Дата получения подрядчиком: ___________________')
+    # Подпись
+    doc.add_paragraph('С уважением,')
+    doc.add_paragraph(f'________________ / {params.get("sender_name", "__________________")}')
+    doc.add_paragraph('(подпись)             (ФИО, должность)')
 
 
 def generate_safety_plan(doc: Document, params: dict):
     """Генерация плана мероприятий по охране труда"""
 
     # Заголовок
-    heading = doc.add_heading('ПЛАН МЕРОПРИЯТИЙ', level=0)
+    heading = doc.add_heading('ПЛАН МЕРОПРИЯТИЙ ПО ОХРАНЕ ТРУДА', level=0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    subheading = doc.add_heading('по охране труда и технике безопасности', level=1)
+    subheading = doc.add_paragraph(f'на {params.get("year", "2025")} г.')
     subheading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    subheading.runs[0].font.size = Pt(12)
 
     doc.add_paragraph()
 
     # Информация об объекте
     doc.add_paragraph(f'Объект: {params.get("object_name", "_________________________")}')
-    doc.add_paragraph(
-        f'Период проведения работ: с {params.get("start_date", "___________")} '
-        f'по {params.get("end_date", "___________")}'
-    )
     doc.add_paragraph(f'Ответственное лицо: {params.get("responsible_person", "_________________________")}')
     doc.add_paragraph(f'Численность работников: {params.get("worker_count", "___")} чел.')
 
     doc.add_paragraph()
 
-    # Нормативная база
-    p = doc.add_paragraph('Настоящий план разработан в соответствии с:')
-    p.runs[0].font.bold = True
-
-    doc.add_paragraph('• СП 12-135-2003 «Безопасность труда в строительстве»')
-    doc.add_paragraph('• Трудовым кодексом РФ')
-    doc.add_paragraph('• ГОСТ 12.0.004-2015 «ССБТ. Организация обучения безопасности труда»')
-
-    doc.add_paragraph()
-
     # Таблица мероприятий
-    p = doc.add_paragraph('МЕРОПРИЯТИЯ ПО ОХРАНЕ ТРУДА:')
-    p.runs[0].font.bold = True
-
-    doc.add_paragraph()
-
-    table = doc.add_table(rows=11, cols=4)
+    table = doc.add_table(rows=4, cols=5)
     add_table_border(table)
     table.style = 'Table Grid'
 
     # Заголовки
-    headers = ['№', 'Наименование мероприятия', 'Срок выполнения', 'Ответственный']
+    headers = ['№ п/п', 'Мероприятие', 'Ответственный', 'Срок', 'Бюджет, руб.']
     for i, header in enumerate(headers):
         cell = table.rows[0].cells[i]
         cell.text = header
@@ -286,33 +281,34 @@ def generate_safety_plan(doc: Document, params: dict):
 
     # Мероприятия
     measures = [
-        ('1', 'Проведение вводного инструктажа для всех работников', 'До начала работ', 'Инженер по ОТ'),
-        ('2', 'Проведение первичного инструктажа на рабочем месте', 'Первый рабочий день', 'Прораб'),
-        ('3', 'Обеспечение работников СИЗ (каски, спецодежда, обувь)', 'До начала работ', 'Снабженец'),
-        ('4', 'Ограждение опасных зон на строительной площадке', 'Постоянно', 'Прораб'),
-        ('5', 'Проверка исправности лесов, подмостей, лестниц', 'Ежедневно', 'Мастер'),
-        ('6', 'Контроль применения СИЗ работниками', 'Ежедневно', 'Прораб'),
-        ('7', 'Проверка электроинструмента и электрооборудования', 'Перед использованием', 'Электрик'),
-        ('8', 'Обеспечение первичными средствами пожаротушения', 'До начала работ', 'Прораб'),
-        ('9', 'Организация питьевого режима', 'Постоянно', 'Прораб'),
-        ('10', 'Повторный инструктаж по ОТ', 'Каждые 3 месяца', 'Инженер по ОТ'),
+        ('1', 'Обучение персонала технике безопасности', 'Иванов А.А.', 'до 15.01.2025', '50 000'),
+        ('2', 'Проверка исправности лесов и опалубки', 'Петров С.В.', 'ежемесячно', '20 000'),
+        ('3', 'Закупка СИЗ (каски, страховочные пояса)', 'Сидорова Е.М.', 'до 30.11.2025', '150 000'),
     ]
 
-    for i, (num, measure, deadline, responsible) in enumerate(measures, start=1):
+    for i, (num, measure, responsible, deadline, budget) in enumerate(measures, start=1):
         table.rows[i].cells[0].text = num
         table.rows[i].cells[1].text = measure
-        table.rows[i].cells[2].text = deadline
-        table.rows[i].cells[3].text = responsible
+        table.rows[i].cells[2].text = responsible
+        table.rows[i].cells[3].text = deadline
+        table.rows[i].cells[4].text = budget
+        table.rows[i].cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     doc.add_paragraph()
 
-    # Подписи
+    # Общая сумма
+    total_budget = params.get("total_budget", "______")
+    p = doc.add_paragraph(f'Общая сумма: {total_budget} руб.')
+    p.runs[0].font.bold = True
+
     doc.add_paragraph()
-    doc.add_paragraph(
-        f'Ответственный за выполнение плана: ___________________ ({params.get("responsible_person", "")})'
-    )
     doc.add_paragraph()
-    doc.add_paragraph(f'Дата утверждения: {params.get("start_date", "___________")}')
+
+    # Утверждение
+    p = doc.add_paragraph('Утверждено:')
+    p.runs[0].font.bold = True
+    doc.add_paragraph(f'________________ / {params.get("responsible_person", "__________________")}')
+    doc.add_paragraph('(руководитель организации)')
 
 
 def generate_hidden_works_act(doc: Document, params: dict):
@@ -324,83 +320,83 @@ def generate_hidden_works_act(doc: Document, params: dict):
 
     doc.add_paragraph()
 
-    # Шапка документа
+    # Номер и дата
     p = doc.add_paragraph()
-    p.add_run(f'№ _______ от {params.get("date", "___________")}').bold = True
+    p.add_run(f'№ {params.get("act_number", "______")} от «___» __________ {params.get("date", "2025")} г.').bold = True
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     doc.add_paragraph()
 
     # Основная информация
-    doc.add_paragraph(f'Объект: {params.get("object_name", "_________________________")}')
-    doc.add_paragraph(f'Подрядчик: {params.get("contractor", "_________________________")}')
-    doc.add_paragraph(f'Заказчик: _________________________')
+    doc.add_paragraph(f'Объект: {params.get("object_name", "_________________________________________________________")}')
+    doc.add_paragraph(f'Место проведения работ: __________________________________________')
+    doc.add_paragraph(f'Вид работ: {params.get("work_type", "Устройство фундамента (армирование, бетонирование).")}')
 
     doc.add_paragraph()
 
-    # Основной текст
-    doc.add_paragraph(
-        'Комиссия в составе представителей заказчика, подрядчика и технического надзора '
-        f'произвела осмотр выполненных работ: {params.get("work_type", "_________________________")}'
-    )
+    # Описание работ
+    p = doc.add_paragraph('Описание работ:')
+    p.runs[0].font.bold = True
+
+    doc.add_paragraph(f'• Выполнено армирование монолитного фундамента по чертежу №______;')
+    doc.add_paragraph(f'• Уложена бетонная смесь класса {params.get("concrete_class", "В22,5")};')
+    standards = params.get("standards", "СП 70.13330.2012")
+    doc.add_paragraph(f'• Работы выполнены в соответствии с {standards}.')
 
     doc.add_paragraph()
 
-    # Таблица с данными
-    table = doc.add_table(rows=7, cols=2)
-    add_table_border(table)
-    table.style = 'Table Grid'
+    # Проверка
+    p = doc.add_paragraph('Проверка:')
+    p.runs[0].font.bold = True
 
-    rows_data = [
-        ('Наименование работ', params.get("work_type", "_________________________")),
-        ('Объём выполненных работ', params.get("volume", "_________________________")),
-        ('Применённые материалы', '_________________________'),
-        ('Нормативные документы', params.get("standards", "СП, ГОСТ, СНиП")),
-        ('Отступления от проекта', 'Отсутствуют / _________________________'),
-        ('Выявленные дефекты', 'Не выявлены / _________________________'),
-        ('Заключение комиссии', 'Работы выполнены качественно, соответствуют проекту. Допускаются к закрытию.')
-    ]
-
-    for i, (label, value) in enumerate(rows_data):
-        table.rows[i].cells[0].text = label
-        table.rows[i].cells[1].text = value
-        table.rows[i].cells[0].paragraphs[0].runs[0].font.bold = True
+    compliance = params.get("project_compliance", "Да")
+    if compliance == "Да":
+        doc.add_paragraph('☑ Соответствует проекту;')
+        doc.add_paragraph('☐ Не соответствует (указать причины): ___________________________')
+    else:
+        doc.add_paragraph('☐ Соответствует проекту;')
+        doc.add_paragraph(f'☑ Не соответствует (указать причины): {compliance}')
 
     doc.add_paragraph()
 
-    # Фотофиксация
-    doc.add_paragraph('Приложения: фотофиксация выполненных работ (при наличии)')
+    # Решение
+    p = doc.add_paragraph('Решение:')
+    p.runs[0].font.bold = True
+    doc.add_paragraph('Работы приняты/не приняты к закрытию.')
 
     doc.add_paragraph()
 
     # Подписи
-    doc.add_paragraph('ПОДПИСИ ЧЛЕНОВ КОМИССИИ:')
-    doc.add_paragraph()
-
-    sign_table = doc.add_table(rows=4, cols=4)
-    add_table_border(sign_table)
-
-    sign_table.rows[0].cells[0].text = 'Должность'
-    sign_table.rows[0].cells[1].text = 'ФИО'
-    sign_table.rows[0].cells[2].text = 'Подпись'
-    sign_table.rows[0].cells[3].text = 'Дата'
-
-    for cell in sign_table.rows[0].cells:
-        cell.paragraphs[0].runs[0].font.bold = True
-
-    sign_table.rows[1].cells[0].text = 'Представитель заказчика'
-    sign_table.rows[1].cells[1].text = '_________________'
-
-    sign_table.rows[2].cells[0].text = 'Представитель подрядчика'
-    sign_table.rows[2].cells[1].text = '_________________'
-
-    sign_table.rows[3].cells[0].text = 'Технический надзор'
-    sign_table.rows[3].cells[1].text = params.get("inspector_name", "_________________")
-
-    doc.add_paragraph()
-    p = doc.add_paragraph('Работы разрешается закрыть.')
+    p = doc.add_paragraph('Подписи:')
     p.runs[0].font.bold = True
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph()
+
+    doc.add_paragraph('Представитель заказчика')
+    doc.add_paragraph(f'__________________ / {params.get("customer", "__________________")}')
+    doc.add_paragraph()
+
+    doc.add_paragraph('Представитель подрядчика')
+    doc.add_paragraph(f'__________________ / {params.get("contractor", "__________________")}')
+    doc.add_paragraph()
+
+    doc.add_paragraph('Представитель проектной организации')
+    doc.add_paragraph(f'__________________ / {params.get("inspector_name", "__________________")}')
+
+    doc.add_paragraph()
+    doc.add_paragraph()
+
+    # Важное примечание
+    p = doc.add_paragraph('Важно!')
+    p.runs[0].font.bold = True
+    doc.add_paragraph(
+        'Все документы должны быть подписаны уполномоченными лицами с указанием должностей и реквизитов.'
+    )
+    doc.add_paragraph(
+        'Для юридической силы акты часто требуют печати (если организация ее использует).'
+    )
+
+    doc.add_paragraph()
+    doc.add_paragraph(f'Дата актуализации шаблона: 29 ноября 2025 г.')
 
 
 def generate_document(template_id: str, params: dict) -> dict:
