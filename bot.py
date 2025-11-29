@@ -238,6 +238,15 @@ except ImportError:
         DEV_MODE_AVAILABLE = False
         logger.warning(f"⚠️ Модули dev_mode не найдены: {e}")
 
+# Автоприменение изменений v1.0 - кнопка "Применить изменения" после ответов
+try:
+    from auto_apply import add_apply_button, should_show_apply_button, handle_apply_changes
+    AUTO_APPLY_AVAILABLE = True
+    logger.info("✅ Автоприменение изменений v1.0 загружено")
+except ImportError as e:
+    AUTO_APPLY_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль auto_apply.py не найден: {e}")
+
 # Обработчик голосовых сообщений v3.9
 try:
     from voice_handler import process_voice_message
@@ -2471,10 +2480,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
+                # Добавляем кнопку "Применить изменения" к последней части
+                part_reply_markup = None
+                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+                    part_reply_markup = add_apply_button()
+
                 if i == 0:
-                    await update.message.reply_text(part)
+                    await update.message.reply_text(part, reply_markup=part_reply_markup)
                 else:
-                    await update.message.reply_text(f"(продолжение {i+1}/{len(parts)})\n\n{part}")
+                    await update.message.reply_text(
+                        f"(продолжение {i+1}/{len(parts)})\n\n{part}",
+                        reply_markup=part_reply_markup
+                    )
         else:
             # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
             await update.message.reply_text(result)
@@ -3271,15 +3288,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
+                # Добавляем кнопку "Применить изменения" к последней части
+                part_reply_markup = None
+                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+                    part_reply_markup = add_apply_button()
+
                 if i == 0:
-                    await update.message.reply_text(part)
+                    await update.message.reply_text(part, reply_markup=part_reply_markup)
                 else:
-                    await update.message.reply_text(f"(продолжение {i+1}/{len(parts)})\n\n{part}")
+                    await update.message.reply_text(
+                        f"(продолжение {i+1}/{len(parts)})\n\n{part}",
+                        reply_markup=part_reply_markup
+                    )
         else:
             # Создаём интерактивные кнопки под ответом (v3.0)
             reply_markup = None
             if IMPROVEMENTS_V3_AVAILABLE:
                 reply_markup = create_answer_buttons()
+
+            # Добавляем кнопку "Применить изменения" если в ответе есть код (v1.0)
+            if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+                reply_markup = add_apply_button(reply_markup)
 
             # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
             await update.message.reply_text(result, reply_markup=reply_markup)
@@ -4605,6 +4634,11 @@ def main():
         logger.info("✅ Обработчик документов зарегистрирован")
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # === АВТОПРИМЕНЕНИЕ ИЗМЕНЕНИЙ v1.0 ===
+    if AUTO_APPLY_AVAILABLE:
+        application.add_handler(CallbackQueryHandler(handle_apply_changes, pattern="^apply_changes"))
+        logger.info("✅ Обработчик автоприменения изменений зарегистрирован")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
