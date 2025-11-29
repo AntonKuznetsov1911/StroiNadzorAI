@@ -55,7 +55,7 @@ def extract_text_from_docx(filepath: str) -> str:
 
 
 async def send_document_result(update: Update, context: ContextTypes.DEFAULT_TYPE, template_id: str, params: dict):
-    """Генерирует и отправляет документ с кнопками скачать/скопировать"""
+    """Генерирует и отправляет документ с текстом для копирования"""
 
     # Генерируем документ
     result = generate_document(template_id, params)
@@ -66,12 +66,8 @@ async def send_document_result(update: Update, context: ContextTypes.DEFAULT_TYP
 
     filepath = result["filepath"]
 
-    # Извлекаем текст для возможности копирования
+    # Извлекаем текст для копирования
     doc_text = extract_text_from_docx(filepath)
-
-    # Сохраняем в контексте для кнопки "Копировать текст"
-    context.user_data["last_document_text"] = doc_text
-    context.user_data["last_document_path"] = filepath
 
     # Отправляем документ
     template_info = DOCUMENT_TEMPLATES[template_id]
@@ -79,14 +75,28 @@ async def send_document_result(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_document(
             document=doc_file,
             filename=os.path.basename(filepath),
-            caption=f"✅ **Документ готов!**\n\n📄 {template_info['name']}\n\n"
-                    f"_Вы можете скачать файл выше или скопировать текст ниже._",
+            caption=f"✅ **Документ готов!**\n\n📄 {template_info['name']}",
             parse_mode="Markdown"
         )
 
+    # Отправляем текст документа для копирования (частями если длинный)
+    MAX_LENGTH = 4000
+    if len(doc_text) <= MAX_LENGTH:
+        await update.message.reply_text(
+            f"📋 **ТЕКСТ ДОКУМЕНТА:**\n\n{doc_text}",
+            parse_mode="Markdown"
+        )
+    else:
+        # Разбиваем на части
+        parts = [doc_text[i:i+MAX_LENGTH] for i in range(0, len(doc_text), MAX_LENGTH)]
+        for i, part in enumerate(parts, 1):
+            await update.message.reply_text(
+                f"📋 **ТЕКСТ ДОКУМЕНТА (часть {i}/{len(parts)}):**\n\n{part}",
+                parse_mode="Markdown"
+            )
+
     # Кнопки для действий
     keyboard = [
-        [InlineKeyboardButton("📋 Скопировать текст", callback_data="copy_document_text")],
         [InlineKeyboardButton("✏️ Заполнить заново", callback_data=f"fill_{template_id}")],
         [InlineKeyboardButton("« Назад к шаблонам", callback_data="templates")]
     ]
@@ -551,37 +561,3 @@ def create_hidden_works_act_handler():
         per_chat=True,
         per_user=True
     )
-
-
-# ========================================
-# ОБРАБОТЧИК КНОПКИ "СКОПИРОВАТЬ ТЕКСТ"
-# ========================================
-
-async def copy_document_text_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет текст документа для копирования"""
-    query = update.callback_query
-    await query.answer()
-
-    doc_text = context.user_data.get("last_document_text", "")
-
-    if not doc_text:
-        await query.edit_message_text("❌ Текст документа не найден. Сгенерируйте документ заново.")
-        return
-
-    # Отправляем текст частями, если он слишком длинный (лимит Telegram - 4096 символов)
-    MAX_LENGTH = 4000
-    if len(doc_text) <= MAX_LENGTH:
-        await update.effective_chat.send_message(
-            f"📋 **ТЕКСТ ДОКУМЕНТА ДЛЯ КОПИРОВАНИЯ:**\n\n{doc_text}",
-            parse_mode="Markdown"
-        )
-    else:
-        # Разбиваем на части
-        parts = [doc_text[i:i+MAX_LENGTH] for i in range(0, len(doc_text), MAX_LENGTH)]
-        for i, part in enumerate(parts, 1):
-            await update.effective_chat.send_message(
-                f"📋 **ТЕКСТ ДОКУМЕНТА (часть {i}/{len(parts)}):**\n\n{part}",
-                parse_mode="Markdown"
-            )
-
-    await query.message.reply_text("✅ Текст документа отправлен выше. Вы можете его скопировать.")

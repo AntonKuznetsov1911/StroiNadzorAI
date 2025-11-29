@@ -3966,11 +3966,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("⚠️ Модуль шаблонов недоступен.")
 
-    # Обработчик копирования текста документа
-    elif query.data == "copy_document_text":
-        from document_handlers import copy_document_text_callback
-        await copy_document_text_callback(update, context)
-
     # Обработчики выбора роли
     elif query.data.startswith("role_"):
         if ROLES_AVAILABLE:
