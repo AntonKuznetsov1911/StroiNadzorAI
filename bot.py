@@ -2728,14 +2728,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response_text += f"\n{'='*40}\n\n"
             response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
 
-        # Отправляем ответ частями если нужно
+        # Отправляем ответ частями если нужно (БЕЗ parse_mode для избежания ошибок парсинга)
         max_length = 4000
         if len(response_text) > max_length:
             parts = [response_text[i:i+max_length] for i in range(0, len(response_text), max_length)]
             for part in parts:
-                await update.message.reply_text(part, parse_mode="Markdown")
+                await update.message.reply_text(part)
         else:
-            await update.message.reply_text(response_text, parse_mode="Markdown")
+            await update.message.reply_text(response_text)
 
     except Exception as e:
         logger.error(f"Ошибка обработки документа: {e}")
