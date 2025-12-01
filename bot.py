@@ -20,6 +20,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ConversationHandler,
     ContextTypes,
     filters
 )
@@ -2741,6 +2742,33 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка обработки: {str(e)}")
 
 
+async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка создания нового проекта"""
+    user_id = update.effective_user.id
+    project_name = update.message.text.strip()
+
+    context.user_data["waiting_for_project_name"] = False
+
+    if PROJECTS_AVAILABLE:
+        result = create_project(user_id, project_name)
+        if result["success"]:
+            context.user_data["current_project"] = project_name
+
+            keyboard = [[InlineKeyboardButton("« К проектам", callback_data="project_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                f"✅ **Проект создан:** {project_name}\n\n"
+                "📌 Проект активирован!\n"
+                "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
+                "Можете начинать работу!",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
     user_id = update.effective_user.id
@@ -2748,27 +2776,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Проверка ожидания названия проекта
     if context.user_data.get("waiting_for_project_name"):
-        context.user_data["waiting_for_project_name"] = False
-        project_name = question.strip()
-
-        if PROJECTS_AVAILABLE:
-            result = create_project(user_id, project_name)
-            if result["success"]:
-                context.user_data["current_project"] = project_name
-
-                keyboard = [[InlineKeyboardButton("« К проектам", callback_data="project_menu")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await update.message.reply_text(
-                    f"✅ **Проект создан:** {project_name}\n\n"
-                    "📌 Проект активирован!\n"
-                    "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
-                    "Можете начинать работу!",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
-            else:
-                await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
+        await handle_project_creation(update, context)
         return
 
     # Проверка ожидания заметки

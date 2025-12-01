@@ -79,6 +79,18 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
     if user_id != DEVELOPER_ID:
         return ConversationHandler.END
 
+    # Если пользователь ждет ввода названия проекта - передаем в обработчик проектов
+    if context.user_data.get("waiting_for_project_name"):
+        from bot import handle_project_creation
+        await handle_project_creation(update, context)
+        return WAITING_FOR_CHANGE_REQUEST
+
+    # Если пользователь ждет ввода заметки - передаем в основной обработчик
+    if context.user_data.get("waiting_for_note"):
+        from bot import handle_text
+        await handle_text(update, context)
+        return WAITING_FOR_CHANGE_REQUEST
+
     request = update.message.text
 
     status_msg = await update.message.reply_text(
