@@ -2369,6 +2369,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Получаем фото (самое большое разрешение)
         photo = update.message.photo[-1]
+
+        # Проверяем размер фото
+        if photo.file_size and photo.file_size > 20 * 1024 * 1024:  # 20 МБ
+            await thinking_message.edit_text(
+                f"❌ **Фото слишком большое**\n\n"
+                f"📊 Размер: {photo.file_size / (1024 * 1024):.1f} МБ\n"
+                f"📏 Максимум: 20 МБ\n\n"
+                f"💡 Сожмите изображение перед отправкой"
+            )
+            return
+
         photo_file = await photo.get_file()
 
         # Скачиваем фото
@@ -2590,6 +2601,22 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Проверяем размер файла
+        file_size = update.message.document.file_size
+        max_size = 20 * 1024 * 1024  # 20 МБ - лимит Telegram Bot API
+
+        if file_size > max_size:
+            await update.message.reply_text(
+                f"❌ **Файл слишком большой**\n\n"
+                f"📊 Размер файла: {file_size / (1024 * 1024):.1f} МБ\n"
+                f"📏 Максимальный размер: 20 МБ\n\n"
+                f"💡 **Решения:**\n"
+                f"• Сожмите PDF (онлайн-сервисы: ilovepdf.com, smallpdf.com)\n"
+                f"• Разбейте документ на части\n"
+                f"• Удалите ненужные страницы"
+            )
+            return
+
         # Скачиваем файл
         file = await update.message.document.get_file()
         file_name = update.message.document.file_name
