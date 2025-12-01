@@ -29,6 +29,11 @@ DEVELOPER_ID = None
 # Состояния
 WAITING_FOR_CHANGE_REQUEST = 1
 
+
+def is_developer(user_id: int) -> bool:
+    """Проверяет, является ли пользователь разработчиком"""
+    return DEVELOPER_ID is not None and user_id == DEVELOPER_ID
+
 # Путь к проекту
 PROJECT_PATH = Path(__file__).parent
 

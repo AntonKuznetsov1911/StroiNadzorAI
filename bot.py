@@ -223,19 +223,21 @@ except ImportError as e:
     logger.warning(f"⚠️ Модуль document_handlers.py не найден: {e}")
 
 # Режим разработчика v3.0 - автовыбор локальной/облачной версии
+is_developer = None
 try:
     # Сначала пробуем загрузить ЛОКАЛЬНУЮ версию (с git автопушем)
-    from dev_mode_local import create_dev_mode_handler
+    from dev_mode_local import create_dev_mode_handler, is_developer
     DEV_MODE_AVAILABLE = True
     logger.info("✅ Режим разработчика v3.0 ЛОКАЛЬНЫЙ загружен (с git автопушем)")
 except ImportError:
     try:
         # Если не получилось (нет git) - загружаем ОБЛАЧНУЮ версию (только анализ)
-        from dev_mode import create_dev_mode_handler
+        from dev_mode import create_dev_mode_handler, is_developer
         DEV_MODE_AVAILABLE = True
         logger.info("✅ Режим разработчика v2.0 ОБЛАЧНЫЙ загружен (без git)")
     except ImportError as e:
         DEV_MODE_AVAILABLE = False
+        is_developer = lambda user_id: False  # Заглушка, если модули не загружены
         logger.warning(f"⚠️ Модули dev_mode не найдены: {e}")
 
 # Автоприменение изменений v1.0 - кнопка "Применить изменения" после ответов
@@ -2491,9 +2493,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части
+                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+                user_id = update.effective_user.id
+                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(analysis) and is_developer(user_id):
                     part_reply_markup = add_apply_button()
 
                 if i == 0:
@@ -3299,9 +3302,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части
+                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+                user_id = update.effective_user.id
+                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
                     part_reply_markup = add_apply_button()
 
                 if i == 0:
@@ -3317,8 +3321,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if IMPROVEMENTS_V3_AVAILABLE:
                 reply_markup = create_answer_buttons()
 
-            # Добавляем кнопку "Применить изменения" если в ответе есть код (v1.0)
-            if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer):
+            # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
+            user_id = update.effective_user.id
+            if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
                 reply_markup = add_apply_button(reply_markup)
 
             # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
