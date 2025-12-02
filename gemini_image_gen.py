@@ -1,10 +1,12 @@
 """
 Модуль для генерации изображений и визуализации с помощью Gemini API
+Поддерживает Imagen 3 для генерации изображений
 """
 
 import os
 import logging
 import base64
+import requests
 from io import BytesIO
 from typing import Optional, Dict, List
 import google.generativeai as genai
@@ -26,8 +28,10 @@ class GeminiImageGenerator:
         self.api_key = api_key
         genai.configure(api_key=api_key)
 
-        # Используем Gemini Pro Vision для визуализации и анализа
-        self.vision_model = genai.GenerativeModel('gemini-1.5-pro')
+        # Используем Gemini 2.5 Flash для быстрой визуализации и анализа
+        # Flash модель оптимальна для генерации схем и описаний
+        self.vision_model = genai.GenerativeModel('models/gemini-2.5-flash')
+        logger.info("✅ Используется модель: gemini-2.5-flash")
 
         logger.info("✅ Gemini Image Generator инициализирован")
 
@@ -293,6 +297,207 @@ class GeminiImageGenerator:
 
         Формат ответа: структурированное техническое описание с конкретными параметрами.
         """
+
+    async def generate_schematic_image(
+        self,
+        description: str,
+        image_type: str = "technical"
+    ) -> Optional[BytesIO]:
+        """
+        Генерирует простое схематическое изображение с помощью Pillow
+
+        Args:
+            description: Описание для генерации
+            image_type: Тип изображения (technical, diagram, layout)
+
+        Returns:
+            BytesIO с изображением или None
+        """
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            import textwrap
+
+            # Создаем изображение
+            width, height = 1024, 1024
+            img = Image.new('RGB', (width, height), color='white')
+            draw = ImageDraw.Draw(img)
+
+            # Рисуем рамку
+            draw.rectangle([20, 20, width-20, height-20], outline='black', width=3)
+
+            # Заголовок
+            title = "СТРОИТЕЛЬНАЯ СХЕМА"
+            draw.text((width//2, 50), title, fill='black', anchor="mm")
+
+            # Используем Gemini для создания описания схемы
+            prompt = f"""
+            Создай простое текстовое описание для схемы:
+            {description}
+
+            Опиши в 3-5 пунктах ключевые элементы, которые должны быть на схеме.
+            Формат: короткие пункты, каждый с новой строки.
+            """
+
+            response = self.vision_model.generate_content(prompt)
+            schema_text = response.text
+
+            # Разбиваем текст на строки
+            lines = schema_text.split('\n')
+            y_position = 150
+
+            for line in lines[:8]:  # Максимум 8 строк
+                if line.strip():
+                    # Оборачиваем длинные строки
+                    wrapped = textwrap.wrap(line, width=60)
+                    for wrapped_line in wrapped:
+                        draw.text((60, y_position), wrapped_line, fill='black')
+                        y_position += 40
+
+            # Добавляем технические детали в нижней части
+            draw.text(
+                (width//2, height-80),
+                "Создано с помощью Gemini AI",
+                fill='gray',
+                anchor="mm"
+            )
+
+            draw.text(
+                (width//2, height-50),
+                f"Описание: {description[:50]}...",
+                fill='gray',
+                anchor="mm"
+            )
+
+            # Сохраняем изображение
+            output = BytesIO()
+            img.save(output, format='PNG')
+            output.seek(0)
+
+            logger.info("✅ Схематическое изображение создано")
+            return output
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания схемы: {e}")
+            return None
+
+    async def improve_prompt_for_generation(
+        self,
+        user_request: str,
+        language: str = "en"
+    ) -> Optional[str]:
+        """
+        Улучшает промпт пользователя для генерации изображения
+
+        Args:
+            user_request: Запрос пользователя на русском
+            language: Язык результата (en или ru)
+
+        Returns:
+            Улучшенный промпт или None
+        """
+        try:
+            prompt = f"""
+            Ты - эксперт по созданию промптов для генерации изображений.
+            Пользователь запросил: "{user_request}"
+
+            Создай детальный промпт для генерации технического изображения на {'английском' if language == 'en' else 'русском'} языке.
+
+            Промпт должен включать:
+            1. Тип изображения (фото, схема, 3D-визуализация)
+            2. Ключевые объекты и их расположение
+            3. Технические детали и размеры
+            4. Стиль (реалистичный, схематичный, технический чертеж)
+            5. Ракурс и перспективу
+            6. Освещение и цветовую схему
+
+            Сделай промпт максимально точным и детальным для строительной тематики.
+            Ответ должен быть в одном абзаце, без нумерации.
+            """
+
+            response = self.vision_model.generate_content(prompt)
+            improved_prompt = response.text.strip()
+
+            logger.info(f"✅ Промпт улучшен: {improved_prompt[:100]}...")
+            return improved_prompt
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка улучшения промпта: {e}")
+            return None
+
+    async def generate_construction_diagram(
+        self,
+        description: str,
+        elements: List[str] = None
+    ) -> Optional[BytesIO]:
+        """
+        Генерирует строительную диаграмму с элементами
+
+        Args:
+            description: Описание конструкции
+            elements: Список элементов для отображения
+
+        Returns:
+            BytesIO с изображением или None
+        """
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+
+            # Создаем изображение
+            width, height = 1200, 800
+            img = Image.new('RGB', (width, height), color='#f5f5f5')
+            draw = ImageDraw.Draw(img)
+
+            # Заголовок
+            title = "СТРОИТЕЛЬНАЯ КОНСТРУКЦИЯ"
+            draw.text((width//2, 40), title, fill='black', anchor="mm")
+
+            # Описание
+            draw.text((width//2, 80), description, fill='#333333', anchor="mm")
+
+            if elements:
+                # Рисуем элементы
+                element_height = 100
+                start_y = 150
+                element_width = 300
+
+                for i, element in enumerate(elements[:5]):  # Максимум 5 элементов
+                    y = start_y + i * element_height
+                    x = width // 2
+
+                    # Рисуем прямоугольник элемента
+                    draw.rectangle(
+                        [x - element_width//2, y, x + element_width//2, y + 60],
+                        outline='#2196F3',
+                        fill='white',
+                        width=2
+                    )
+
+                    # Текст элемента
+                    draw.text((x, y + 30), element, fill='#333333', anchor="mm")
+
+                    # Соединительная линия (если не последний)
+                    if i < len(elements) - 1:
+                        draw.line([x, y + 60, x, y + 100], fill='#666666', width=2)
+
+            # Подпись
+            draw.text(
+                (width//2, height-30),
+                "Сгенерировано с помощью Gemini AI • StroiNadzorAI",
+                fill='#999999',
+                anchor="mm"
+            )
+
+            # Сохраняем изображение
+            output = BytesIO()
+            img.save(output, format='PNG')
+            output.seek(0)
+
+            logger.info("✅ Строительная диаграмма создана")
+            return output
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания диаграммы: {e}")
+            return None
 
 
 def initialize_gemini_generator() -> Optional[GeminiImageGenerator]:

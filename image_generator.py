@@ -1,6 +1,6 @@
 """
 Модуль генерации изображений для StroiNadzorAI
-Поддерживает DALL-E 3 и создание технических диаграмм
+Поддерживает DALL-E 3 и Gemini AI (fallback) для создания технических диаграмм
 """
 
 import os
@@ -10,11 +10,13 @@ from io import BytesIO
 from typing import Optional, Dict
 from datetime import datetime
 from openai import OpenAI
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 # Инициализация OpenAI клиента
 openai_client = None
+gemini_generator = None
 
 def get_openai_client():
     """Получить OpenAI клиент (ленивая инициализация)"""
@@ -25,6 +27,17 @@ def get_openai_client():
             raise Exception("OPENAI_API_KEY не найден в переменных окружения")
         openai_client = OpenAI(api_key=api_key)
     return openai_client
+
+def get_gemini_generator():
+    """Получить Gemini генератор (ленивая инициализация)"""
+    global gemini_generator
+    if gemini_generator is None:
+        try:
+            from gemini_image_gen import initialize_gemini_generator
+            gemini_generator = initialize_gemini_generator()
+        except Exception as e:
+            logger.warning(f"Не удалось загрузить Gemini генератор: {e}")
+    return gemini_generator
 
 
 # === ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ С DALL-E 3 ===
@@ -202,6 +215,7 @@ def should_generate_image(user_message: str) -> bool:
 def generate_construction_image(user_request: str, use_hd: bool = False) -> Optional[Dict]:
     """
     Сгенерировать изображение на основе запроса пользователя
+    Использует DALL-E 3, если доступен, иначе Gemini AI для создания схемы
 
     Args:
         user_request: Запрос пользователя (на русском)
@@ -213,32 +227,81 @@ def generate_construction_image(user_request: str, use_hd: bool = False) -> Opti
     try:
         logger.info(f"🎨 Запрос на генерацию: {user_request}")
 
-        # Улучшаем промпт для строительной тематики
-        enhanced_prompt = enhance_construction_prompt(user_request)
+        # Пытаемся использовать DALL-E 3
+        dalle_result = None
+        try:
+            # Улучшаем промпт для строительной тематики
+            enhanced_prompt = enhance_construction_prompt(user_request)
+            logger.info(f"📝 Улучшенный промпт: {enhanced_prompt}")
 
-        logger.info(f"📝 Улучшенный промпт: {enhanced_prompt}")
+            # Генерируем изображение
+            quality = "hd" if use_hd else "standard"
+            dalle_result = generate_image_dalle3(
+                prompt=enhanced_prompt,
+                size="1024x1024",
+                quality=quality,
+                style="natural"  # natural для технических изображений
+            )
 
-        # Генерируем изображение
-        quality = "hd" if use_hd else "standard"
-        result = generate_image_dalle3(
-            prompt=enhanced_prompt,
-            size="1024x1024",
-            quality=quality,
-            style="natural"  # natural для технических изображений
-        )
+            if dalle_result:
+                # Скачиваем изображение
+                image_data = download_image(dalle_result["url"])
+                if image_data:
+                    dalle_result["image_data"] = image_data
+                    logger.info("✅ Генерация DALL-E 3 завершена успешно")
+                    return dalle_result
 
-        if result:
-            # Скачиваем изображение
-            image_data = download_image(result["url"])
-            if image_data:
-                result["image_data"] = image_data
-                logger.info("✅ Генерация завершена успешно")
-                return result
+        except Exception as dalle_error:
+            logger.warning(f"⚠️ DALL-E 3 exception: {dalle_error}")
+
+        # Если DALL-E не дал результат - переключаемся на Gemini
+        if dalle_result is None:
+            logger.info("🔄 Переключаюсь на Gemini AI для создания схемы...")
+
+            # Fallback на Gemini AI
+            generator = get_gemini_generator()
+            logger.info(f"📌 Gemini генератор: {generator is not None}")
+
+            if generator:
+                logger.info("📌 Создаю event loop для asyncio...")
+                # Используем asyncio для запуска асинхронной функции
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                try:
+                    logger.info(f"📌 Вызываю generate_schematic_image с: {user_request}")
+                    image_data = loop.run_until_complete(
+                        generator.generate_schematic_image(user_request)
+                    )
+                    logger.info(f"📌 Результат: {image_data is not None}")
+                except Exception as gemini_error:
+                    logger.error(f"❌ Ошибка Gemini: {gemini_error}")
+                    image_data = None
+                finally:
+                    loop.close()
+
+                if image_data:
+                    result = {
+                        "image_data": image_data,
+                        "model": "gemini-schematic",
+                        "original_prompt": user_request,
+                        "size": "1024x1024",
+                        "quality": "schematic",
+                        "style": "technical",
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "revised_prompt": f"Техническая схема: {user_request}"
+                    }
+                    logger.info("✅ Схема Gemini создана успешно")
+                    return result
+                else:
+                    logger.warning("⚠️ Gemini не вернул данные изображения")
+            else:
+                logger.warning("⚠️ Gemini генератор не инициализирован")
 
         return None
 
     except Exception as e:
-        logger.error(f"Ошибка генерации изображения: {e}")
+        logger.error(f"❌ Ошибка генерации изображения: {e}")
         return None
 
 
@@ -331,20 +394,31 @@ def format_generation_result(result: Dict, user_request: str) -> str:
     if not result:
         return "❌ Не удалось сгенерировать изображение"
 
-    cost = get_generation_cost(result["quality"], result["size"])
+    model = result.get("model", "unknown")
+    is_gemini = "gemini" in model.lower()
 
-    text = f"🎨 **Изображение сгенерировано**\n\n"
+    text = f"🎨 **Изображение {'создано' if is_gemini else 'сгенерировано'}**\n\n"
     text += f"📝 **Ваш запрос:** {user_request}\n\n"
 
     if result.get("revised_prompt"):
-        text += f"🤖 **Промпт DALL-E:**\n{result['revised_prompt']}\n\n"
+        if is_gemini:
+            text += f"🤖 **Описание схемы:**\n{result['revised_prompt']}\n\n"
+        else:
+            text += f"🤖 **Промпт DALL-E:**\n{result['revised_prompt']}\n\n"
 
     text += f"⚙️ **Параметры:**\n"
     text += f"• Модель: {result['model']}\n"
     text += f"• Размер: {result['size']}\n"
     text += f"• Качество: {result['quality']}\n"
-    text += f"• Стоимость: ${cost:.3f}\n\n"
 
-    text += f"⏰ {result['timestamp']}"
+    if not is_gemini:
+        cost = get_generation_cost(result.get("quality", "standard"), result.get("size", "1024x1024"))
+        text += f"• Стоимость: ${cost:.3f}\n"
+
+    text += f"\n⏰ {result['timestamp']}"
+
+    if is_gemini:
+        text += "\n\n💡 *Схема создана с помощью Gemini AI*"
+        text += "\n_Для фотореалистичной генерации добавьте OPENAI_API_KEY_"
 
     return text
