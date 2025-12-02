@@ -27,5 +27,8 @@ PyPDF2==3.0.1
 requests==2.31.0
 beautifulsoup4==4.12.3
 
+# Image Generation и обработка
+Pillow==10.1.0
+
 # Logging (optional)
 # python-json-logger==2.0.7

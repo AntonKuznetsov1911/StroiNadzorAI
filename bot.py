@@ -232,6 +232,19 @@ except ImportError as e:
     WEB_SEARCH_AVAILABLE = False
     logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
 
+# Модуль генерации изображений
+try:
+    from image_generator import (
+        generate_construction_image,
+        should_generate_image,
+        format_generation_result
+    )
+    IMAGE_GENERATION_AVAILABLE = True
+    logger.info("✅ Модуль генерации изображений загружен (DALL-E 3)")
+except ImportError as e:
+    IMAGE_GENERATION_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль image_generator.py не найден: {e}")
+
 # Режим разработчика v3.0 - автовыбор локальной/облачной версии
 is_developer = None
 try:
@@ -3381,6 +3394,53 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Ошибка веб-поиска: {e}")
 
+        # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
+        if IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
+            logger.info("🎨 Обнаружен запрос на генерацию изображения")
+
+            # Отправляем сообщение о генерации
+            generating_msg = await update.message.reply_text(
+                "🎨 Генерирую изображение...\n"
+                "Это займет 10-30 секунд"
+            )
+
+            try:
+                # Генерируем изображение
+                result = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: generate_construction_image(question, use_hd=False)
+                )
+
+                if result and result.get("image_data"):
+                    # Удаляем сообщение о генерации
+                    try:
+                        await generating_msg.delete()
+                        await thinking_message.delete()
+                    except:
+                        pass
+
+                    # Отправляем изображение
+                    result["image_data"].seek(0)
+                    caption = format_generation_result(result, question)
+
+                    await update.message.reply_photo(
+                        photo=result["image_data"],
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+
+                    # Добавляем в историю
+                    await add_message_to_history_async(user_id, 'user', question)
+                    await add_message_to_history_async(user_id, 'assistant', f"[Сгенерировано изображение: {question}]")
+
+                    logger.info(f"✅ Изображение сгенерировано и отправлено")
+                    return  # Прерываем обработку, изображение уже отправлено
+                else:
+                    await generating_msg.edit_text("❌ Не удалось сгенерировать изображение")
+            except Exception as e:
+                logger.error(f"Ошибка генерации: {e}")
+                await generating_msg.edit_text(f"❌ Ошибка: {str(e)}")
+
         # Вызываем Claude API с контекстом истории и retry logic
         client = get_anthropic_client()
         loop = asyncio.get_event_loop()
@@ -4657,6 +4717,88 @@ async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(region_text, parse_mode='Markdown', reply_markup=keyboard)
 
 
+async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /generate - Генерация изображений"""
+    if not IMAGE_GENERATION_AVAILABLE:
+        await update.message.reply_text(
+            "⚠️ Функция генерации изображений недоступна.\n\n"
+            "Установите необходимые зависимости:\n"
+            "`pip install openai Pillow`"
+        )
+        return
+
+    # Проверяем аргументы команды
+    if not context.args:
+        await update.message.reply_text(
+            "🎨 **ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ**\n\n"
+            "Использование:\n"
+            "`/generate описание изображения`\n\n"
+            "**Примеры:**\n"
+            "• `/generate трещина в бетонном фундаменте`\n"
+            "• `/generate узел соединения балки и колонны`\n"
+            "• `/generate арматурный каркас перекрытия`\n"
+            "• `/generate дефект кирпичной кладки`\n\n"
+            "Также можно просто написать:\n"
+            "\"нарисуй трещину в стене\" - бот автоматически сгенерирует",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Получаем описание
+    user_request = " ".join(context.args)
+
+    # Отправляем сообщение о процессе
+    generating_message = await update.message.reply_text(
+        "🎨 Генерирую изображение...\n"
+        "Это займет 10-30 секунд\n\n"
+        "💡 Используется DALL-E 3"
+    )
+
+    try:
+        # Генерируем изображение
+        result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: generate_construction_image(user_request, use_hd=False)
+        )
+
+        if result and result.get("image_data"):
+            # Удаляем сообщение о генерации
+            try:
+                await generating_message.delete()
+            except:
+                pass
+
+            # Форматируем результат
+            caption = format_generation_result(result, user_request)
+
+            # Отправляем изображение
+            result["image_data"].seek(0)
+            await update.message.reply_photo(
+                photo=result["image_data"],
+                caption=caption,
+                parse_mode="Markdown"
+            )
+
+            logger.info(f"✅ Изображение отправлено пользователю {update.effective_user.id}")
+        else:
+            await generating_message.edit_text(
+                "❌ Не удалось сгенерировать изображение.\n\n"
+                "Возможные причины:\n"
+                "• Проблемы с OpenAI API\n"
+                "• Недостаточно средств на балансе\n"
+                "• Описание нарушает правила использования\n\n"
+                "Попробуйте изменить описание или повторите попытку позже."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка генерации изображения: {e}")
+        await generating_message.edit_text(
+            f"❌ Ошибка генерации изображения:\n`{str(e)}`\n\n"
+            "Проверьте наличие OPENAI_API_KEY в переменных окружения.",
+            parse_mode="Markdown"
+        )
+
+
 # === ГЛАВНАЯ ФУНКЦИЯ ===
 
 async def setup_bot_menu(application):
@@ -4664,6 +4806,7 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
+        BotCommand("generate", "🎨 Генерация изображений (DALL-E 3)"),
         BotCommand("calculators", "🧮 Калькуляторы (7 шт)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("faq", "❓ Частые вопросы"),
@@ -4736,6 +4879,11 @@ def main():
     # Новые команды v3.0
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
+
+    # === ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ v1.0 ===
+    if IMAGE_GENERATION_AVAILABLE:
+        application.add_handler(CommandHandler("generate", generate_command))
+        logger.info("✅ Команда /generate зарегистрирована (DALL-E 3)")
 
     # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
