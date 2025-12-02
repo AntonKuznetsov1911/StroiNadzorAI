@@ -455,6 +455,79 @@ def call_claude_with_retry(client, **kwargs):
             raise
 
 
+# === СИСТЕМА КЛАССИФИКАЦИИ НАМЕРЕНИЙ (INTENT CLASSIFICATION) ===
+
+def classify_user_intent(user_message: str) -> dict:
+    """
+    Быстрая классификация намерения пользователя с помощью Haiku.
+    Возвращает тип запроса для выбора оптимальной модели.
+
+    Типы:
+    - simple_save: сохранение, подтверждение, простая фиксация
+    - simple_question: простой вопрос, требующий краткого ответа
+    - technical_question: технический вопрос, требующий экспертизы
+    - complex_analysis: сложный анализ, расчеты, детальная экспертиза
+    """
+    try:
+        client = get_anthropic_client()
+
+        classification_prompt = f"""Определи тип запроса пользователя. Ответь ТОЛЬКО одним словом:
+
+ТИПЫ ЗАПРОСОВ:
+- simple_save: если пользователь просит сохранить, зафиксировать, записать информацию, или просто подтверждает ("да", "ок", "сохрани")
+- simple_question: простой вопрос, требующий краткого ответа без глубокой технической экспертизы
+- technical_question: технический вопрос по нормативам, СНиП, расчетам, требующий ссылок на документы
+- complex_analysis: сложная задача с расчетами, многофакторным анализом, детальной экспертизой
+
+Запрос пользователя: "{user_message}"
+
+Ответь ТОЛЬКО одним словом из списка выше:"""
+
+        response = call_claude_with_retry(
+            client,
+            model="claude-3-5-haiku-20241022",
+            max_tokens=50,
+            temperature=0.1,
+            messages=[{"role": "user", "content": classification_prompt}]
+        )
+
+        intent_type = response.content[0].text.strip().lower()
+
+        # Валидация ответа
+        valid_types = ["simple_save", "simple_question", "technical_question", "complex_analysis"]
+        if intent_type not in valid_types:
+            # По умолчанию считаем технический вопрос
+            intent_type = "technical_question"
+
+        # Выбор модели на основе типа запроса
+        if intent_type == "simple_save" or intent_type == "simple_question":
+            model = "claude-3-5-haiku-20241022"
+            max_tokens = 500
+        elif intent_type == "technical_question":
+            model = "claude-sonnet-4-5-20250929"
+            max_tokens = 2500
+        else:  # complex_analysis
+            model = "claude-sonnet-4-5-20250929"
+            max_tokens = 3000
+
+        logger.info(f"📊 Intent: {intent_type} → Model: {model}")
+
+        return {
+            "intent": intent_type,
+            "model": model,
+            "max_tokens": max_tokens
+        }
+
+    except Exception as e:
+        logger.error(f"Error in intent classification: {e}")
+        # При ошибке используем Sonnet для надежности
+        return {
+            "intent": "technical_question",
+            "model": "claude-sonnet-4-5-20250929",
+            "max_tokens": 2500
+        }
+
+
 # === СИСТЕМА ХРАНЕНИЯ ИСТОРИИ ДИАЛОГОВ ===
 
 # Директория для хранения истории
@@ -2452,7 +2525,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_claude_with_retry(
                 client,
-                model="claude-opus-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=2500,
                 system=system_prompt,
                 messages=[
@@ -2704,7 +2777,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         None,
                         lambda: call_claude_with_retry(
                             client,
-                            model="claude-opus-4-20250514",
+                            model="claude-sonnet-4-5-20250929",
                             max_tokens=3000,
                             system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
                             messages=[{"role": "user", "content": analysis_prompt}],
@@ -3257,6 +3330,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем текущий вопрос
         conversation_history.append({"role": "user", "content": question})
 
+        # 🤖 УМНЫЙ ВЫБОР МОДЕЛИ: Определяем намерение пользователя
+        intent_info = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: classify_user_intent(question)
+        )
+
+        selected_model = intent_info["model"]
+        selected_max_tokens = intent_info["max_tokens"]
+
+        # Для простых запросов используем упрощенный промпт
+        if intent_info["intent"] in ["simple_save", "simple_question"]:
+            system_prompt = """Ты — AI-ассистент по строительству в России.
+
+Отвечай кратко и по делу:
+• Если пользователь просит сохранить/зафиксировать — подтверди коротко
+• Если задан простой вопрос — дай краткий понятный ответ
+• Используй структурированный формат только если нужно"""
+
         # Вызываем Claude API с контекстом истории и retry logic
         client = get_anthropic_client()
         loop = asyncio.get_event_loop()
@@ -3264,8 +3355,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_claude_with_retry(
                 client,
-                model="claude-opus-4-20250514",
-                max_tokens=2500,
+                model=selected_model,
+                max_tokens=selected_max_tokens,
                 system=system_prompt,
                 messages=conversation_history,
                 temperature=0.7
