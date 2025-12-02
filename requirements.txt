@@ -23,5 +23,9 @@ openai==1.55.3
 # PDF Processing
 PyPDF2==3.0.1
 
+# Web Scraping для поиска нормативов
+requests==2.31.0
+beautifulsoup4==4.12.3
+
 # Logging (optional)
 # python-json-logger==2.0.7

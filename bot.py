@@ -223,6 +223,15 @@ except ImportError as e:
     DOCUMENT_HANDLERS_AVAILABLE = False
     logger.warning(f"⚠️ Модуль document_handlers.py не найден: {e}")
 
+# Модуль веб-поиска нормативов
+try:
+    from web_search import perform_web_search, should_perform_web_search
+    WEB_SEARCH_AVAILABLE = True
+    logger.info("✅ Модуль веб-поиска нормативов загружен (docs.cntd.ru, minstroyrf.gov.ru)")
+except ImportError as e:
+    WEB_SEARCH_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
+
 # Режим разработчика v3.0 - автовыбор локальной/облачной версии
 is_developer = None
 try:
@@ -3348,6 +3357,30 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Если задан простой вопрос — дай краткий понятный ответ
 • Используй структурированный формат только если нужно"""
 
+        # 🌐 ВЕБ-ПОИСК: Проверяем, нужен ли поиск актуальной информации
+        web_search_results = None
+        if WEB_SEARCH_AVAILABLE:
+            try:
+                web_search_results = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: perform_web_search(question)
+                )
+
+                # Если найдены результаты, добавляем их в контекст
+                if web_search_results:
+                    logger.info("✅ Веб-поиск выполнен, результаты добавлены в контекст")
+                    # Добавляем результаты поиска в историю разговора
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": web_search_results
+                    })
+                    conversation_history.append({
+                        "role": "user",
+                        "content": "Используй эти актуальные данные из интернета при ответе на мой вопрос."
+                    })
+            except Exception as e:
+                logger.error(f"Ошибка веб-поиска: {e}")
+
         # Вызываем Claude API с контекстом истории и retry logic
         client = get_anthropic_client()
         loop = asyncio.get_event_loop()
@@ -3391,6 +3424,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Формируем ответ
         result = f"💬 **Ответ:**\n\n{answer}\n\n"
+
+        # Добавляем результаты веб-поиска (если были)
+        if web_search_results:
+            result += f"---\n\n{web_search_results}\n\n---\n\n"
 
         if mentioned_regs:
             result += "📚 **Упомянутые нормативы (нажмите, чтобы открыть):**\n"
