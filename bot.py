@@ -393,6 +393,15 @@ except ImportError:
     PLANNER_AVAILABLE = False
     logger.warning("⚠️ Модуль work_planner.py не найден")
 
+# Gemini Image Generation
+try:
+    from gemini_image_gen import initialize_gemini_generator, GeminiImageGenerator
+    GEMINI_AVAILABLE = True
+    logger.info("✅ Gemini Image Generator модуль загружен")
+except ImportError:
+    GEMINI_AVAILABLE = False
+    logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -412,6 +421,16 @@ def get_anthropic_client():
     if anthropic_client is None:
         anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     return anthropic_client
+
+# Инициализация Gemini генератора
+gemini_generator = None
+
+def get_gemini_generator():
+    """Получить Gemini генератор (ленивая инициализация)"""
+    global gemini_generator
+    if gemini_generator is None and GEMINI_AVAILABLE:
+        gemini_generator = initialize_gemini_generator()
+    return gemini_generator
 
 
 # === RATE LIMITING СИСТЕМА ===
@@ -1667,6 +1686,165 @@ async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(examples_text, parse_mode='Markdown')
 
 
+async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /visualize - визуализация дефектов с помощью Gemini AI"""
+
+    if not GEMINI_AVAILABLE:
+        await update.message.reply_text(
+            "⚠️ Функция визуализации недоступна. Модуль Gemini не загружен."
+        )
+        return
+
+    generator = get_gemini_generator()
+    if not generator:
+        await update.message.reply_text(
+            "⚠️ Gemini API недоступен. Проверьте настройки GEMINI_API_KEY."
+        )
+        return
+
+    # Если есть аргументы - обрабатываем как текстовое описание
+    if context.args:
+        defect_description = " ".join(context.args)
+
+        await update.message.reply_text("🎨 Создаю техническое описание для визуализации...")
+
+        try:
+            # Генерируем описание визуализации на основе текста
+            description = await generator.generate_defect_visualization(
+                defect_description=defect_description,
+                defect_type="общий",
+                style="technical"
+            )
+
+            if description:
+                response_text = f"""🎨 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ДЛЯ ВИЗУАЛИЗАЦИИ**
+
+**Описание дефекта:** {defect_description}
+
+**Рекомендации для визуализации:**
+
+{description}
+
+---
+💡 *Это описание можно использовать для создания технических схем, диаграмм и разметки изображений.*
+"""
+                await update.message.reply_text(response_text, parse_mode='Markdown')
+            else:
+                await update.message.reply_text(
+                    "❌ Не удалось создать описание. Попробуйте переформулировать запрос."
+                )
+
+        except Exception as e:
+            logger.error(f"Ошибка визуализации по тексту: {e}")
+            await update.message.reply_text(
+                f"❌ Произошла ошибка: {str(e)}"
+            )
+
+        return
+
+    # Если аргументов нет - показываем справку
+    help_text = """🎨 **ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI**
+
+Эта команда создает детальные технические описания для визуализации строительных дефектов.
+
+**Как использовать:**
+
+1️⃣ **Анализ фотографии дефекта:**
+   • Отправьте фото с подписью /visualize
+   • Получите детальное описание для визуализации
+   • ИИ выделит ключевые зоны и проблемные участки
+
+2️⃣ **Визуализация по описанию:**
+   • /visualize [описание дефекта]
+   • Например: `/visualize трещина в бетонной колонне шириной 2мм`
+   • Получите техническое описание для схемы
+
+3️⃣ **Сравнение до/после:**
+   • Отправьте фото с подписью `/visualize compare`
+   • Идеально для отчетов о ремонте
+
+**Что вы получите:**
+✅ Техническое описание дефекта
+✅ Рекомендации по цветовому выделению зон
+✅ Размеры и масштаб проблемных участков
+✅ Структурированные данные для создания схем
+
+**Примеры:**
+📌 `/visualize трещина в несущей стене`
+📌 Отправьте фото с подписью `/visualize`
+📌 `/visualize отслоение штукатурки 50x30см`
+
+*Отправьте фото или описание дефекта для визуализации!* 🎯"""
+
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+
+async def handle_photo_with_visualization(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка фотографий для визуализации через Gemini"""
+
+    if not GEMINI_AVAILABLE:
+        return False
+
+    caption = update.message.caption or ""
+
+    # Проверяем, запрошена ли визуализация
+    if "/visualize" not in caption.lower():
+        return False
+
+    generator = get_gemini_generator()
+    if not generator:
+        await update.message.reply_text(
+            "⚠️ Gemini API недоступен в данный момент."
+        )
+        return True
+
+    # Получаем фото
+    photo = update.message.photo[-1]
+    photo_file = await photo.get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
+
+    await update.message.reply_text("🎨 Анализирую изображение для визуализации...")
+
+    try:
+        # Определяем тип запроса
+        is_comparison = "compare" in caption.lower() or "сравнен" in caption.lower()
+
+        if is_comparison:
+            # Сравнительная визуализация
+            description = await generator.create_comparison_description(
+                before_image=bytes(photo_bytes),
+                defect_info=caption.replace("/visualize", "").replace("compare", "").strip()
+            )
+        else:
+            # Обычный анализ для визуализации
+            description = await generator.analyze_and_visualize_defect(
+                image_bytes=bytes(photo_bytes),
+                analysis_text=caption.replace("/visualize", "").strip()
+            )
+
+        if description:
+            response_text = f"""🎨 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ДЛЯ ВИЗУАЛИЗАЦИИ**
+
+{description}
+
+---
+💡 *Это описание можно использовать для создания технических схем, диаграмм и аннотированных изображений дефектов.*
+"""
+            await update.message.reply_text(response_text, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(
+                "❌ Не удалось создать описание визуализации. Попробуйте снова."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка визуализации: {e}")
+        await update.message.reply_text(
+            f"❌ Произошла ошибка при создании визуализации: {str(e)}"
+        )
+
+    return True
+
+
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /history - показать последние сообщения из истории"""
     user_id = update.effective_user.id
@@ -2456,6 +2634,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Вы можете отправлять до {RATE_LIMIT_MAX_REQUESTS} запросов в минуту.\n"
             "Пожалуйста, подождите немного и попробуйте снова."
         )
+        return
+
+    # Проверяем, нужна ли визуализация через Gemini
+    if await handle_photo_with_visualization(update, context):
         return
 
     # Отправляем сообщение о процессе и сохраняем его для последующего удаления
@@ -4807,6 +4989,7 @@ async def setup_bot_menu(application):
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
         BotCommand("generate", "🎨 Генерация изображений (DALL-E 3)"),
+        BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),
         BotCommand("calculators", "🧮 Калькуляторы (7 шт)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("faq", "❓ Частые вопросы"),
@@ -4884,6 +5067,11 @@ def main():
     if IMAGE_GENERATION_AVAILABLE:
         application.add_handler(CommandHandler("generate", generate_command))
         logger.info("✅ Команда /generate зарегистрирована (DALL-E 3)")
+
+    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI ===
+    if GEMINI_AVAILABLE:
+        application.add_handler(CommandHandler("visualize", visualize_command))
+        logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
 
     # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
