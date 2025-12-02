@@ -1,0 +1,12 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python bot.py"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+# Постоянное хранилище для проектов пользователей
+[[deploy.volumes]]
+mountPath = "/app/user_projects"
+name = "user_projects_volume"
