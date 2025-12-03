@@ -1,6 +1,6 @@
 """
 Модуль генерации изображений для StroiNadzorAI
-Использует Gemini AI для создания технических схем и диаграмм
+Использует Stable Diffusion Web UI для профессиональной генерации
 """
 
 import os
@@ -11,19 +11,39 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Gemini генератор
-gemini_generator = None
+# Генераторы изображений
+sd_generator = None
+prompt_engineer = None
 
-def get_gemini_generator():
-    """Получить Gemini генератор (ленивая инициализация)"""
-    global gemini_generator
-    if gemini_generator is None:
+
+def get_sd_generator():
+    """Получить SD генератор (ленивая инициализация)"""
+    global sd_generator
+    if sd_generator is None:
         try:
-            from gemini_image_gen import initialize_gemini_generator
-            gemini_generator = initialize_gemini_generator()
+            from stable_diffusion_api import initialize_sd_generator
+            sd_generator = initialize_sd_generator()
+            if sd_generator:
+                logger.info("✅ Stable Diffusion генератор загружен")
+            else:
+                logger.warning("⚠️ SD генератор не инициализирован (API недоступен)")
         except Exception as e:
-            logger.warning(f"Не удалось загрузить Gemini генератор: {e}")
-    return gemini_generator
+            logger.warning(f"⚠️ Не удалось загрузить SD генератор: {e}")
+    return sd_generator
+
+
+def get_prompt_engineer():
+    """Получить промпт-инженера (ленивая инициализация)"""
+    global prompt_engineer
+    if prompt_engineer is None:
+        try:
+            from prompt_engineer import initialize_prompt_engineer
+            prompt_engineer = initialize_prompt_engineer()
+            if prompt_engineer:
+                logger.info("✅ Prompt Engineer загружен")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось загрузить Prompt Engineer: {e}")
+    return prompt_engineer
 
 
 # === ОПРЕДЕЛЕНИЕ НЕОБХОДИМОСТИ ГЕНЕРАЦИИ ===
@@ -76,63 +96,128 @@ def should_generate_image(user_message: str) -> bool:
 def generate_construction_image(user_request: str, use_hd: bool = False) -> Optional[Dict]:
     """
     Сгенерировать изображение на основе запроса пользователя
-    Использует Gemini AI для создания технических схем
+    Использует Stable Diffusion Web UI
 
     Args:
         user_request: Запрос пользователя (на русском)
-        use_hd: Не используется (для совместимости)
+        use_hd: Использовать HD качество (для SD - 1024x1024)
 
     Returns:
         Dict с данными изображения или None
     """
     try:
-        logger.info(f"🎨 Запрос на генерацию схемы: {user_request}")
+        logger.info(f"🎨 Запрос на генерацию: {user_request}")
 
-        # Используем Gemini AI для создания схемы
-        generator = get_gemini_generator()
+        # Определяем тип схемы из запроса
+        schematic_type = detect_schematic_type(user_request)
+        logger.info(f"📋 Определен тип схемы: {schematic_type}")
 
-        if not generator:
-            logger.error("❌ Gemini генератор не инициализирован")
+        # Проверяем доступность Stable Diffusion
+        sd_gen = get_sd_generator()
+        if not sd_gen:
+            logger.error("❌ Stable Diffusion недоступен")
             return None
 
-        logger.info("📌 Генерирую схему с Gemini AI...")
-
-        # Используем синхронную обёртку для асинхронной функции
-        import asyncio
-        try:
-            logger.info(f"📌 Вызываю generate_schematic_image с: {user_request}")
-            image_data = asyncio.run(
-                generator.generate_schematic_image(user_request)
-            )
-            logger.info(f"📌 Результат: {image_data is not None}")
-        except Exception as gemini_error:
-            logger.error(f"❌ Ошибка Gemini: {gemini_error}")
-            import traceback
-            traceback.print_exc()
-            return None
-
-        if image_data:
-            result = {
-                "image_data": image_data,
-                "model": "gemini-2.5-flash",
-                "original_prompt": user_request,
-                "size": "1024x1024",
-                "quality": "schematic",
-                "style": "technical",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "revised_prompt": f"Техническая схема: {user_request}"
-            }
-            logger.info("✅ Схема Gemini создана успешно")
-            return result
-        else:
-            logger.warning("⚠️ Gemini не вернул данные изображения")
-            return None
+        logger.info("🚀 Используем Stable Diffusion для генерации")
+        return generate_with_sd(user_request, schematic_type, use_hd)
 
     except Exception as e:
         logger.error(f"❌ Ошибка генерации изображения: {e}")
         import traceback
         traceback.print_exc()
         return None
+
+
+def generate_with_sd(
+    user_request: str,
+    schematic_type: str,
+    use_hd: bool = False
+) -> Optional[Dict]:
+    """
+    Генерация через Stable Diffusion
+
+    Args:
+        user_request: Запрос пользователя
+        schematic_type: Тип схемы
+        use_hd: HD качество
+
+    Returns:
+        Dict с результатом или None
+    """
+    try:
+        sd_gen = get_sd_generator()
+        engineer = get_prompt_engineer()
+
+        # Улучшаем промпт
+        if engineer:
+            logger.info("🔧 Используем AI промпт-инженеринг")
+            enhanced = engineer.enhance_prompt(user_request, schematic_type, use_ai=True)
+            prompt = enhanced["prompt"]
+            negative_prompt = enhanced["negative_prompt"]
+        else:
+            # Простой перевод без AI
+            logger.info("🔧 Используем базовый промпт")
+            prompt = user_request
+            negative_prompt = None
+
+        logger.info(f"📝 Финальный промпт: {prompt[:100]}...")
+
+        # Генерируем
+        import asyncio
+        image_data = asyncio.run(
+            sd_gen.generate_construction_schematic(
+                description=user_request,
+                schematic_type=schematic_type,
+                style="technical"
+            )
+        )
+
+        if image_data:
+            result = {
+                "image_data": image_data,
+                "model": "stable-diffusion",
+                "original_prompt": user_request,
+                "enhanced_prompt": prompt,
+                "size": "1024x1024" if use_hd else "1024x1024",
+                "quality": "hd" if use_hd else "standard",
+                "style": schematic_type,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "generator": "Stable Diffusion Web UI"
+            }
+            logger.info("✅ SD генерация успешна")
+            return result
+        else:
+            logger.error("❌ SD не вернул данные")
+            return None
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка SD генерации: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def detect_schematic_type(user_request: str) -> str:
+    """
+    Определяет тип схемы из запроса пользователя
+
+    Args:
+        user_request: Запрос пользователя
+
+    Returns:
+        Тип схемы: technical, blueprint, isometric, diagram
+    """
+    request_lower = user_request.lower()
+
+    # Ключевые слова для разных типов
+    if any(word in request_lower for word in ["чертёж", "план", "планировка", "чертеж"]):
+        return "blueprint"
+    elif any(word in request_lower for word in ["изометрия", "3d", "объём", "объемный", "аксонометрия"]):
+        return "isometric"
+    elif any(word in request_lower for word in ["разрез", "сечение", "узел", "деталь"]):
+        return "diagram"
+    else:
+        return "technical"
 
 
 # === ФОРМАТИРОВАНИЕ РЕЗУЛЬТАТА ===
@@ -151,19 +236,48 @@ def format_generation_result(result: Dict, user_request: str) -> str:
     if not result:
         return "❌ Не удалось сгенерировать изображение"
 
-    model = result.get("model", "gemini-ai")
+    generator = result.get("generator", "AI")
 
-    text = f"🎨 **Схема создана**\n\n"
+    text = f"🎨 **Изображение создано**\n\n"
     text += f"📝 **Ваш запрос:** {user_request}\n\n"
 
-    if result.get("revised_prompt"):
-        text += f"🤖 **Описание:**\n{result['revised_prompt']}\n\n"
+    if result.get("enhanced_prompt"):
+        text += f"🤖 **Улучшенный промпт:**\n{result['enhanced_prompt'][:200]}...\n\n"
 
     text += f"⚙️ **Параметры:**\n"
-    text += f"• Модель: {result['model']}\n"
-    text += f"• Размер: {result['size']}\n"
-    text += f"• Тип: Техническая схема\n"
+    text += f"• Генератор: {generator}\n"
+    text += f"• Размер: {result.get('size', 'N/A')}\n"
+    text += f"• Стиль: {result.get('style', 'technical')}\n"
+    text += f"• Качество: {result.get('quality', 'standard').upper()}\n"
+
     text += f"\n⏰ {result['timestamp']}"
-    text += "\n\n💡 *Создано с помощью Gemini AI*"
+    text += "\n\n💡 *Создано с помощью Stable Diffusion*"
 
     return text
+
+
+def get_generation_status() -> Dict[str, bool]:
+    """
+    Получить статус доступности генераторов
+
+    Returns:
+        Dict с информацией о доступных генераторах
+    """
+    status = {
+        "sd_available": False,
+        "prompt_engineer_available": False,
+        "preferred_generator": None
+    }
+
+    # Проверяем SD
+    sd_gen = get_sd_generator()
+    if sd_gen:
+        status["sd_available"] = True
+        status["preferred_generator"] = "stable_diffusion"
+
+    # Проверяем Prompt Engineer
+    engineer = get_prompt_engineer()
+    if engineer:
+        status["prompt_engineer_available"] = True
+
+    return status
