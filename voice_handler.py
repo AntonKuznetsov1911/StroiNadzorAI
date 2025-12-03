@@ -1,28 +1,19 @@
 """
 Модуль для обработки голосовых сообщений
-Использует OpenAI Whisper API для распознавания речи
+ОТКЛЮЧЕНО: требует OpenAI Whisper API
 """
 
 import os
 import logging
 from pathlib import Path
 from datetime import datetime
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# Инициализация клиентов (опционально)
+# Голосовые сообщения отключены (требуется OpenAI API)
 openai_client = None
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-if OPENAI_API_KEY and OPENAI_API_KEY.startswith('sk-'):
-    try:
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
-        logger.info("✅ OpenAI клиент инициализирован для распознавания голоса")
-    except Exception as e:
-        logger.warning(f"⚠️ OpenAI клиент не инициализирован: {e}")
-else:
-    logger.info("ℹ️ OpenAI API key не найден. Голосовые сообщения отключены (используйте только Claude API)")
+logger.info("ℹ️ OpenAI API key не найден. Голосовые сообщения отключены (используйте только текст и изображения)")
 
 # Папка для временных голосовых файлов
 VOICE_TEMP_DIR = Path("voice_temp")
@@ -32,6 +23,7 @@ VOICE_TEMP_DIR.mkdir(exist_ok=True)
 async def transcribe_voice(voice_file_path: str) -> dict:
     """
     Распознаёт голосовое сообщение в текст
+    ОТКЛЮЧЕНО: требует OpenAI Whisper API
 
     Args:
         voice_file_path: путь к голосовому файлу
@@ -39,41 +31,11 @@ async def transcribe_voice(voice_file_path: str) -> dict:
     Returns:
         dict: {"success": bool, "text": str, "error": str}
     """
-    if not openai_client:
-        return {
-            "success": False,
-            "text": "",
-            "error": "OpenAI API не настроен. Добавьте OPENAI_API_KEY в .env"
-        }
-
-    try:
-        logger.info(f"🎤 Начинаем распознавание голоса: {voice_file_path}")
-
-        # Открываем аудиофайл
-        with open(voice_file_path, "rb") as audio_file:
-            # Используем Whisper API
-            transcript = openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="ru"  # Русский язык
-            )
-
-        text = transcript.text.strip()
-        logger.info(f"✅ Голос распознан: '{text[:50]}...'")
-
-        return {
-            "success": True,
-            "text": text,
-            "error": ""
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Ошибка распознавания голоса: {e}")
-        return {
-            "success": False,
-            "text": "",
-            "error": f"Ошибка распознавания: {str(e)}"
-        }
+    return {
+        "success": False,
+        "text": "",
+        "error": "Голосовые сообщения отключены. Используйте текст или отправьте фото."
+    }
 
 
 async def download_voice_file(bot, file_id: str, user_id: int) -> str:
@@ -110,6 +72,7 @@ async def download_voice_file(bot, file_id: str, user_id: int) -> str:
 async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
     """
     Полная обработка голосового сообщения
+    ОТКЛЮЧЕНО: требует OpenAI Whisper API
 
     Args:
         bot: экземпляр бота
@@ -119,33 +82,11 @@ async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
     Returns:
         dict: {"success": bool, "text": str, "error": str}
     """
-    voice_file_path = None
-
-    try:
-        # Скачиваем голосовой файл
-        voice_file_path = await download_voice_file(bot, voice_file_id, user_id)
-
-        # Распознаём речь
-        result = await transcribe_voice(voice_file_path)
-
-        return result
-
-    except Exception as e:
-        logger.error(f"❌ Ошибка обработки голосового сообщения: {e}")
-        return {
-            "success": False,
-            "text": "",
-            "error": str(e)
-        }
-
-    finally:
-        # Удаляем временный файл
-        if voice_file_path and os.path.exists(voice_file_path):
-            try:
-                os.remove(voice_file_path)
-                logger.info(f"🗑️ Временный файл удалён: {voice_file_path}")
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось удалить временный файл: {e}")
+    return {
+        "success": False,
+        "text": "",
+        "error": "Голосовые сообщения отключены. Пожалуйста, напишите текстом или отправьте фото."
+    }
 
 
 def cleanup_old_voice_files(max_age_hours: int = 24):
