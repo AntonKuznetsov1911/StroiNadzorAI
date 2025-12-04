@@ -402,6 +402,45 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
 
+# Интерактивные калькуляторы v4.0
+try:
+    from interactive_calculators import (
+        create_concrete_calculator_handler,
+        create_rebar_calculator_handler
+    )
+    INTERACTIVE_CALCS_AVAILABLE = True
+    logger.info("✅ Интерактивные калькуляторы v4.0 загружены")
+except ImportError:
+    INTERACTIVE_CALCS_AVAILABLE = False
+    logger.warning("⚠️ Модуль interactive_calculators.py не найден")
+
+# Категоризация нормативов v1.0
+try:
+    from regulations_categories import (
+        get_categories_keyboard,
+        get_regulations_by_category,
+        search_regulations_by_keyword,
+        get_all_regulations_text
+    )
+    REGULATIONS_CATEGORIES_AVAILABLE = True
+    logger.info("✅ Категоризация нормативов v1.0 загружена")
+except ImportError:
+    REGULATIONS_CATEGORIES_AVAILABLE = False
+    logger.warning("⚠️ Модуль regulations_categories.py не найден")
+
+# Контекстные подсказки v1.0
+try:
+    from context_hints import (
+        is_short_question,
+        get_context_hints,
+        format_hint_response
+    )
+    CONTEXT_HINTS_AVAILABLE = True
+    logger.info("✅ Контекстные подсказки v1.0 загружены")
+except ImportError:
+    CONTEXT_HINTS_AVAILABLE = False
+    logger.warning("⚠️ Модуль context_hints.py не найден")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -1575,6 +1614,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *📚 КОМАНДЫ - НОРМАТИВЫ:*
    /regulations - 27 актуальных СП, ГОСТ, СНиП
+   /regulations_menu - Категории нормативов (удобная навигация!)
    /examples - Примеры вопросов
 
 *📋 КОМАНДЫ - ТРЕБОВАНИЯ 2025:*
@@ -1596,8 +1636,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /export - Экспорт истории (TXT/Markdown)
    /clear - Очистить историю
 
-*💡 УМНЫЕ ФУНКЦИИ v3.6:*
-   /calculators - 6 интерактивных калькуляторов
+*💡 УМНЫЕ ФУНКЦИИ v4.0 (ОБНОВЛЕНО!):*
+   /calculators - Меню калькуляторов (21 шт)
+   /concrete_calc - Интерактивный расчет бетона (пошагово!)
+   /rebar_calc - Интерактивный расчет арматуры (пошагово!)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
@@ -4989,8 +5031,11 @@ async def setup_bot_menu(application):
         BotCommand("help", "📖 Справка по всем командам"),
         BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),
         BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),
-        BotCommand("calculators", "🧮 Калькуляторы (7 шт)"),
+        BotCommand("calculators", "🧮 Калькуляторы (21 шт)"),
+        BotCommand("concrete_calc", "🧱 Расчет бетона (интерактивный)"),
+        BotCommand("rebar_calc", "🔩 Расчет арматуры (интерактивный)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
+        BotCommand("regulations_menu", "📖 Категории нормативов"),
         BotCommand("faq", "❓ Частые вопросы"),
         BotCommand("templates", "📄 Шаблоны документов"),
         BotCommand("projects", "📁 Мои проекты"),
@@ -5061,6 +5106,65 @@ def main():
     # Новые команды v3.0
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
+
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v4.0 ===
+    if INTERACTIVE_CALCS_AVAILABLE:
+        application.add_handler(create_concrete_calculator_handler())
+        application.add_handler(create_rebar_calculator_handler())
+        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (/concrete_calc, /rebar_calc)")
+
+    # === КАТЕГОРИЗАЦИЯ НОРМАТИВОВ v1.0 ===
+    if REGULATIONS_CATEGORIES_AVAILABLE:
+        async def regulations_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Команда /regulations_menu - категории нормативов"""
+            keyboard = get_categories_keyboard()
+            await update.message.reply_text(
+                "📚 **КАТЕГОРИИ НОРМАТИВОВ**\n\n"
+                "Выберите категорию для просмотра документов:\n\n"
+                "_27 документов разделены на 7 удобных категорий_",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+
+        application.add_handler(CommandHandler("regulations_menu", regulations_menu_command))
+
+        # Callback handler для категорий нормативов
+        async def handle_regulations_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Обработчик callback для категорий нормативов"""
+            query = update.callback_query
+            await query.answer()
+
+            callback_data = query.data
+
+            if callback_data.startswith("cat_"):
+                category_id = callback_data.replace("cat_", "")
+
+                if category_id == "all":
+                    # Показать все нормативы
+                    text = get_all_regulations_text()
+                    await query.edit_message_text(text, parse_mode='Markdown')
+                else:
+                    # Показать нормативы категории
+                    text = get_regulations_by_category(category_id)
+                    if text:
+                        # Кнопка "Назад"
+                        keyboard = [[InlineKeyboardButton("⬅️ Назад к категориям", callback_data="cat_back")]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+            elif callback_data == "cat_back":
+                # Вернуться к категориям
+                keyboard = get_categories_keyboard()
+                await query.edit_message_text(
+                    "📚 **КАТЕГОРИИ НОРМАТИВОВ**\n\n"
+                    "Выберите категорию для просмотра документов:\n\n"
+                    "_27 документов разделены на 7 удобных категорий_",
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+
+        application.add_handler(CallbackQueryHandler(handle_regulations_callback, pattern="^cat_"))
+        logger.info("✅ Команда /regulations_menu зарегистрирована (категории нормативов)")
 
     # === ГЕНЕРАЦИЯ СХЕМ v1.0 ===
     if IMAGE_GENERATION_AVAILABLE:
