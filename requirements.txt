@@ -1,34 +1,49 @@
+# ===========================================
+# ОБЯЗАТЕЛЬНЫЕ ЗАВИСИМОСТИ (Required)
+# ===========================================
+
 # Telegram Bot
 python-telegram-bot==21.0.1
 
 # AI API (ЗАФИКСИРОВАННАЯ ВЕРСИЯ для стабильности)
 anthropic==0.40.0
 
-# Database
-asyncpg==0.29.0
-
 # Utilities
 python-dotenv==1.0.1
 
-# PDF/Word Export
-reportlab==4.0.7
-python-docx==1.1.0
+# Gemini API для генерации изображений
+google-generativeai==0.8.3
 
-# Redis Cache
-redis==5.0.1
-
-# PDF Processing
-PyPDF2==3.0.1
+# Image Processing
+Pillow==10.1.0
 
 # Web Scraping для поиска нормативов
 requests==2.31.0
 beautifulsoup4==4.12.3
 
-# Image Generation и обработка
-Pillow==10.1.0
+# ===========================================
+# ОПЦИОНАЛЬНЫЕ ЗАВИСИМОСТИ (Optional)
+# ===========================================
 
-# Gemini API для генерации изображений
-google-generativeai==0.8.3
+# Database - для хранения истории в PostgreSQL
+# Без этого используются JSON файлы
+asyncpg==0.29.0
+
+# PDF/Word Export - для экспорта истории
+# Без этого экспорт в PDF недоступен (только Word)
+reportlab==4.0.7
+python-docx==1.1.0
+
+# Redis Cache - для кэширования ответов
+# Без этого кэш работает только в памяти
+redis==5.0.1
+
+# PDF Processing - для обработки PDF документов
+PyPDF2==3.0.1
+
+# ===========================================
+# ДОПОЛНИТЕЛЬНЫЕ (Extra)
+# ===========================================
 
 # Logging (optional)
 # python-json-logger==2.0.7
