@@ -509,22 +509,87 @@ def check_rate_limit(user_id: int) -> bool:
     return True
 
 
-# === УЛУЧШЕННАЯ ОБРАБОТКА CLAUDE API ===
+# === УЛУЧШЕННАЯ ОБРАБОТКА AI API С FALLBACK НА CLAUDE ===
 
 import time
+from anthropic import Anthropic
+
+# Инициализация Claude клиента (резервный)
+claude_client = None
+
+def get_claude_client():
+    """Получить Claude клиент (ленивая инициализация)"""
+    global claude_client
+    if claude_client is None and ANTHROPIC_API_KEY:
+        claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    return claude_client
 
 def call_grok_with_retry(client, model, messages, max_tokens, temperature):
     """
-    Вызов xAI Grok API с retry logic и exponential backoff
-    Обертка для совместимости со старым кодом
+    Вызов xAI Grok API с автоматическим fallback на Claude при сбое
+
+    Логика:
+    1. Пытается использовать xAI Grok (основной)
+    2. Если ошибка - автоматически переключается на Claude (резерв)
+    3. Логирует какой API был использован
     """
-    return call_xai_with_retry(
-        client=client,
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature
-    )
+    # Сначала пытаемся Grok
+    try:
+        response = call_xai_with_retry(
+            client=client,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        logger.info("✅ Ответ получен от xAI Grok")
+        return response
+    except Exception as grok_error:
+        logger.warning(f"⚠️ xAI Grok недоступен: {str(grok_error)}")
+
+        # Fallback на Claude
+        if not ANTHROPIC_API_KEY:
+            logger.error("❌ Claude API также недоступен (нет ключа)")
+            raise Exception("⚠️ AI сервисы временно недоступны. Попробуйте позже.")
+
+        try:
+            logger.info("🔄 Переключение на Claude Sonnet 4.5 (резерв)...")
+            claude = get_claude_client()
+
+            # Преобразуем формат messages для Claude
+            claude_messages = []
+            system_prompt = None
+
+            for msg in messages:
+                if msg.get("role") == "system":
+                    system_prompt = msg.get("content")
+                else:
+                    claude_messages.append(msg)
+
+            # Вызываем Claude
+            claude_response = claude.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt if system_prompt else "Вы — эксперт по строительным нормативам РФ.",
+                messages=claude_messages
+            )
+
+            # Преобразуем ответ Claude в формат совместимый с Grok
+            response = {
+                "choices": [{
+                    "message": {
+                        "content": claude_response.content[0].text
+                    }
+                }]
+            }
+
+            logger.info("✅ Ответ получен от Claude Sonnet 4.5 (резерв)")
+            return response
+
+        except Exception as claude_error:
+            logger.error(f"❌ Claude также недоступен: {str(claude_error)}")
+            raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
 # === СИСТЕМА КЛАССИФИКАЦИИ НАМЕРЕНИЙ (INTENT CLASSIFICATION) ===
