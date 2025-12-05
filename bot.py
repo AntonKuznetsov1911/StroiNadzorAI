@@ -622,7 +622,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model="grok-2-latest",
+            model="grok-4.1",
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -638,13 +638,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "grok-2-latest"
+            model = "grok-4.1"
             max_tokens = 500
         elif intent_type == "technical_question":
-            model = "grok-2-latest"
+            model = "grok-4.1"
             max_tokens = 2500
         else:  # complex_analysis
-            model = "grok-2-latest"
+            model = "grok-4.1"
             max_tokens = 3000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -657,10 +657,10 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем Sonnet для надежности
+        # При ошибке используем Grok 4.1 для надежности
         return {
             "intent": "technical_question",
-            "model": "grok-2-latest",
+            "model": "grok-4.1",
             "max_tokens": 2500
         }
 
@@ -2828,7 +2828,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_grok_with_retry(
                 client,
-                model="grok-2-latest",
+                model="grok-4.1",
                 max_tokens=2500,
                 temperature=0.7,
                 messages=[
@@ -3076,14 +3076,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 {pdf_text}"""
 
-                    # Отправляем на анализ Claude
+                    # Отправляем на анализ Grok
                     client = get_grok_client()
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
                         None,
                         lambda: call_grok_with_retry(
                             client,
-                            model="grok-2-latest",
+                            model="grok-4.1",
                             max_tokens=3000,
                             temperature=0.3,
                             messages=[
