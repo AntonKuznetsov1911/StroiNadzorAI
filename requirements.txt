@@ -5,24 +5,21 @@
 # Telegram Bot
 python-telegram-bot==21.0.1
 
-# AI API (ЗАФИКСИРОВАННАЯ ВЕРСИЯ для стабильности)
-anthropic==0.40.0
+# Claude AI API (обновленная версия)
+anthropic>=0.74.0
 
 # Utilities
 python-dotenv==1.0.1
 
-# Gemini API для генерации изображений
-google-generativeai==0.8.3
-
-# OpenAI API для голосовых сообщений
-openai==1.12.0
-
 # Image Processing
-Pillow==10.1.0
+Pillow>=10.4.0
 
 # Web Scraping для поиска нормативов
 requests==2.31.0
 beautifulsoup4==4.12.3
+
+# HTTP клиент для xAI Grok API
+httpx==0.27.0
 
 # ===========================================
 # ОПЦИОНАЛЬНЫЕ ЗАВИСИМОСТИ (Optional)

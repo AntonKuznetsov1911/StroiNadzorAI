@@ -24,7 +24,6 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from openai import OpenAI
 import asyncio
 
 # Загрузка переменных окружения
@@ -441,24 +440,30 @@ except ImportError:
     CONTEXT_HINTS_AVAILABLE = False
     logger.warning("⚠️ Модуль context_hints.py не найден")
 
+# Импорт xAI клиента
+from xai_client import XAIClient, call_xai_with_retry
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # Проверка наличия токенов
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_BOT_TOKEN не найден в .env файле!")
 if not XAI_API_KEY:
     raise ValueError("❌ XAI_API_KEY не найден в .env файле!")
+if not ANTHROPIC_API_KEY:
+    logger.warning("⚠️ ANTHROPIC_API_KEY не найден - функции Claude будут недоступны")
 
-# Инициализация Claude клиента
+# Инициализация xAI клиента
 grok_client = None
 
 def get_grok_client():
-    """Получить Anthropic клиент (ленивая инициализация)"""
+    """Получить xAI Grok клиент (ленивая инициализация)"""
     global grok_client
     if grok_client is None:
-        grok_client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+        grok_client = XAIClient(api_key=XAI_API_KEY)
     return grok_client
 
 # Инициализация Gemini генератора
@@ -508,31 +513,18 @@ def check_rate_limit(user_id: int) -> bool:
 
 import time
 
-def call_grok_with_retry(client, **kwargs):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature):
     """
-    Вызов Claude API с retry logic и exponential backoff
+    Вызов xAI Grok API с retry logic и exponential backoff
+    Обертка для совместимости со старым кодом
     """
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            return client.chat.completions.create(**kwargs)
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # 1s, 2s, 4s
-                logger.warning(f"Claude API rate limit hit (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s")
-                time.sleep(wait_time)
-            else:
-                logger.error(f"Claude API rate limit exceeded after {max_retries} attempts")
-                raise Exception("⚠️ Claude API временно недоступен. Попробуйте через минуту.")
-        except Exception as e:
-            logger.error(f"Claude API connection error: {e}")
-            raise Exception("❌ Проблемы с подключением к AI сервису. Проверьте интернет-соединение.")
-        except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            raise Exception("⚠️ Временные проблемы с AI сервисом. Попробуйте позже.")
-        except Exception as e:
-            logger.error(f"Unexpected error calling Claude API: {e}")
-            raise
+    return call_xai_with_retry(
+        client=client,
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature
+    )
 
 
 # === СИСТЕМА КЛАССИФИКАЦИИ НАМЕРЕНИЙ (INTENT CLASSIFICATION) ===
@@ -571,7 +563,7 @@ def classify_user_intent(user_message: str) -> dict:
             messages=[{"role": "user", "content": classification_prompt}]
         )
 
-        intent_type = response.choices[0].message.content.strip().lower()
+        intent_type = response["choices"][0]["message"]["content"].strip().lower()
 
         # Валидация ответа
         valid_types = ["simple_save", "simple_question", "technical_question", "complex_analysis"]
@@ -2764,7 +2756,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if caption:
             user_message += f"\n\nДополнительная информация от пользователя: {caption}"
 
-        # Вызываем Claude API для анализа изображения с retry logic
+        # Вызываем xAI Grok API для анализа изображения с retry logic
         client = get_grok_client()
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
@@ -2773,8 +2765,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 client,
                 model="grok-2-latest",
                 max_tokens=2500,
-                system=system_prompt,
+                temperature=0.7,
                 messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
                     {
                         "role": "user",
                         "content": [
@@ -2792,11 +2788,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             }
                         ]
                     }
-                ],
-                temperature=0.7
+                ]
             )
         )
-        analysis = response.choices[0].message.content
+        analysis = response["choices"][0]["message"]["content"]
 
         # Удаляем сообщение "анализирую фотографию"
         try:
@@ -3025,12 +3020,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             client,
                             model="grok-2-latest",
                             max_tokens=3000,
-                            system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
-                            messages=[{"role": "user", "content": analysis_prompt}],
-                            temperature=0.3
+                            temperature=0.3,
+                            messages=[
+                                {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
+                                {"role": "user", "content": analysis_prompt}
+                            ]
                         )
                     )
-                    expert_opinion = response.choices[0].message.content
+                    expert_opinion = response["choices"][0]["message"]["content"]
 
                     # Сохраняем анализ в проект
                     if expert_opinion:
@@ -3668,18 +3665,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Вызываем Claude API с контекстом истории и retry logic
         client = get_grok_client()
         loop = asyncio.get_event_loop()
+        # Добавляем system prompt в начало истории
+        messages_with_system = [{"role": "system", "content": system_prompt}] + conversation_history
+
         response = await loop.run_in_executor(
             None,
             lambda: call_grok_with_retry(
                 client,
                 model=selected_model,
                 max_tokens=selected_max_tokens,
-                system=system_prompt,
-                messages=conversation_history,
-                temperature=0.7
+                temperature=0.7,
+                messages=messages_with_system
             )
         )
-        answer = response.choices[0].message.content
+        answer = response["choices"][0]["message"]["content"]
 
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
@@ -4955,8 +4954,8 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
-        BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),
-        BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),
+        # BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),  # Отключено
+        # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
         BotCommand("calculators", "🧮 Калькуляторы (21 шт)"),
         BotCommand("concrete_calc", "🧱 Расчет бетона (интерактивный)"),
         BotCommand("rebar_calc", "🔩 Расчет арматуры (интерактивный)"),
@@ -5093,14 +5092,16 @@ def main():
         logger.info("✅ Команда /regulations_menu зарегистрирована (категории нормативов)")
 
     # === ГЕНЕРАЦИЯ СХЕМ v1.0 ===
-    if IMAGE_GENERATION_AVAILABLE:
-        application.add_handler(CommandHandler("generate", generate_command))
-        logger.info("✅ Команда /generate зарегистрирована (Gemini AI)")
+    # Генерация изображений отключена (Gemini API не используется)
+    # if IMAGE_GENERATION_AVAILABLE:
+    #     application.add_handler(CommandHandler("generate", generate_command))
+    #     logger.info("✅ Команда /generate зарегистрирована (Gemini AI)")
 
-    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI ===
-    if GEMINI_AVAILABLE:
-        application.add_handler(CommandHandler("visualize", visualize_command))
-        logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
+    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI (ОТКЛЮЧЕНО) ===
+    # Визуализация отключена (Gemini API не используется)
+    # if GEMINI_AVAILABLE:
+    #     application.add_handler(CommandHandler("visualize", visualize_command))
+    #     logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
 
     # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
