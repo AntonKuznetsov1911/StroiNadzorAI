@@ -96,9 +96,9 @@ async def process_change_request(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     try:
-        from anthropic import Anthropic
+        from openai import OpenAI
 
-        client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        client = OpenAI(api_key=os.getenv("XAI_API_KEY", base_url="https://api.x.ai/v1"))
 
         # Шаг 1: Анализ запроса
         analysis_prompt = f"""Ты - ассистент разработчика Telegram бота на Python.

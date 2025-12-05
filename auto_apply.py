@@ -98,9 +98,9 @@ async def handle_apply_changes(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     try:
-        from anthropic import Anthropic
+        from openai import OpenAI
 
-        client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        client = OpenAI(api_key=os.getenv("XAI_API_KEY", base_url="https://api.x.ai/v1"))
 
         # Промпт для анализа ответа и извлечения кода
         analysis_prompt = f"""Ты - ассистент разработчика. Проанализируй ответ бота и извлеки из него КОД для применения.

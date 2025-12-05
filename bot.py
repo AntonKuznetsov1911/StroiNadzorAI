@@ -24,7 +24,7 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-import anthropic
+from openai import OpenAI
 import asyncio
 
 # Загрузка переменных окружения
@@ -443,23 +443,23 @@ except ImportError:
 
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+XAI_API_KEY = os.getenv("XAI_API_KEY")
 
 # Проверка наличия токенов
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_BOT_TOKEN не найден в .env файле!")
-if not ANTHROPIC_API_KEY:
-    raise ValueError("❌ ANTHROPIC_API_KEY не найден в .env файле!")
+if not XAI_API_KEY:
+    raise ValueError("❌ XAI_API_KEY не найден в .env файле!")
 
 # Инициализация Claude клиента
-anthropic_client = None
+grok_client = None
 
-def get_anthropic_client():
+def get_grok_client():
     """Получить Anthropic клиент (ленивая инициализация)"""
-    global anthropic_client
-    if anthropic_client is None:
-        anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    return anthropic_client
+    global grok_client
+    if grok_client is None:
+        grok_client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+    return grok_client
 
 # Инициализация Gemini генератора
 gemini_generator = None
@@ -508,15 +508,15 @@ def check_rate_limit(user_id: int) -> bool:
 
 import time
 
-def call_claude_with_retry(client, **kwargs):
+def call_grok_with_retry(client, **kwargs):
     """
     Вызов Claude API с retry logic и exponential backoff
     """
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            return client.messages.create(**kwargs)
-        except anthropic.RateLimitError as e:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
             if attempt < max_retries - 1:
                 wait_time = 2 ** attempt  # 1s, 2s, 4s
                 logger.warning(f"Claude API rate limit hit (attempt {attempt + 1}/{max_retries}), waiting {wait_time}s")
@@ -524,10 +524,10 @@ def call_claude_with_retry(client, **kwargs):
             else:
                 logger.error(f"Claude API rate limit exceeded after {max_retries} attempts")
                 raise Exception("⚠️ Claude API временно недоступен. Попробуйте через минуту.")
-        except anthropic.APIConnectionError as e:
+        except Exception as e:
             logger.error(f"Claude API connection error: {e}")
             raise Exception("❌ Проблемы с подключением к AI сервису. Проверьте интернет-соединение.")
-        except anthropic.APIError as e:
+        except Exception as e:
             logger.error(f"Claude API error: {e}")
             raise Exception("⚠️ Временные проблемы с AI сервисом. Попробуйте позже.")
         except Exception as e:
@@ -549,7 +549,7 @@ def classify_user_intent(user_message: str) -> dict:
     - complex_analysis: сложный анализ, расчеты, детальная экспертиза
     """
     try:
-        client = get_anthropic_client()
+        client = get_grok_client()
 
         classification_prompt = f"""Определи тип запроса пользователя. Ответь ТОЛЬКО одним словом:
 
@@ -563,15 +563,15 @@ def classify_user_intent(user_message: str) -> dict:
 
 Ответь ТОЛЬКО одним словом из списка выше:"""
 
-        response = call_claude_with_retry(
+        response = call_grok_with_retry(
             client,
-            model="claude-3-5-haiku-20241022",
+            model="grok-2-latest",
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
         )
 
-        intent_type = response.content[0].text.strip().lower()
+        intent_type = response.choices[0].message.content.strip().lower()
 
         # Валидация ответа
         valid_types = ["simple_save", "simple_question", "technical_question", "complex_analysis"]
@@ -581,13 +581,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "claude-3-5-haiku-20241022"
+            model = "grok-2-latest"
             max_tokens = 500
         elif intent_type == "technical_question":
-            model = "claude-sonnet-4-5-20250929"
+            model = "grok-2-latest"
             max_tokens = 2500
         else:  # complex_analysis
-            model = "claude-sonnet-4-5-20250929"
+            model = "grok-2-latest"
             max_tokens = 3000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -603,7 +603,7 @@ def classify_user_intent(user_message: str) -> dict:
         # При ошибке используем Sonnet для надежности
         return {
             "intent": "technical_question",
-            "model": "claude-sonnet-4-5-20250929",
+            "model": "grok-2-latest",
             "max_tokens": 2500
         }
 
@@ -713,16 +713,16 @@ def get_conversation_context(user_id: int) -> list:
     recent_messages = user_conversations[user_id][-MAX_CONTEXT_MESSAGES:]
 
     # Преобразуем в формат Claude API
-    claude_messages = []
+    grok_messages = []
     for msg in recent_messages:
         # Пропускаем сообщения с изображениями (они уже обработаны)
         if not msg.get('image_analyzed', False):
-            claude_messages.append({
+            grok_messages.append({
                 'role': msg['role'],
                 'content': msg['content']
             })
 
-    return claude_messages
+    return grok_messages
 
 def clear_user_history(user_id: int):
     """Очистить историю диалога пользователя"""
@@ -2765,13 +2765,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_message += f"\n\nДополнительная информация от пользователя: {caption}"
 
         # Вызываем Claude API для анализа изображения с retry logic
-        client = get_anthropic_client()
+        client = get_grok_client()
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: call_claude_with_retry(
+            lambda: call_grok_with_retry(
                 client,
-                model="claude-sonnet-4-5-20250929",
+                model="grok-2-latest",
                 max_tokens=2500,
                 system=system_prompt,
                 messages=[
@@ -2796,7 +2796,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 temperature=0.7
             )
         )
-        analysis = response.content[0].text
+        analysis = response.choices[0].message.content
 
         # Удаляем сообщение "анализирую фотографию"
         try:
@@ -3017,20 +3017,20 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {pdf_text}"""
 
                     # Отправляем на анализ Claude
-                    client = get_anthropic_client()
+                    client = get_grok_client()
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
                         None,
-                        lambda: call_claude_with_retry(
+                        lambda: call_grok_with_retry(
                             client,
-                            model="claude-sonnet-4-5-20250929",
+                            model="grok-2-latest",
                             max_tokens=3000,
                             system="Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам.",
                             messages=[{"role": "user", "content": analysis_prompt}],
                             temperature=0.3
                         )
                     )
-                    expert_opinion = response.content[0].text
+                    expert_opinion = response.choices[0].message.content
 
                     # Сохраняем анализ в проект
                     if expert_opinion:
@@ -3666,11 +3666,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await generating_msg.edit_text(f"❌ Ошибка: {str(e)}")
 
         # Вызываем Claude API с контекстом истории и retry logic
-        client = get_anthropic_client()
+        client = get_grok_client()
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: call_claude_with_retry(
+            lambda: call_grok_with_retry(
                 client,
                 model=selected_model,
                 max_tokens=selected_max_tokens,
@@ -3679,7 +3679,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 temperature=0.7
             )
         )
-        answer = response.content[0].text
+        answer = response.choices[0].message.content
 
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)

@@ -6,7 +6,7 @@
 import os
 import logging
 from typing import Optional, Dict
-import anthropic
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class ConstructionPromptEngineer:
 
     def __init__(self):
         """Инициализация промпт-инженера"""
-        self.claude_api_key = os.getenv('ANTHROPIC_API_KEY')
+        self.claude_api_key = os.getenv('XAI_API_KEY')
 
         # Словарь строительных терминов RU -> EN
         self.construction_terms = {
@@ -129,7 +129,7 @@ class ConstructionPromptEngineer:
             Dict с промптами
         """
         try:
-            client = anthropic.Anthropic(api_key=self.claude_api_key)
+            client = anthropic.OpenAI(api_key=self.claude_api_key, base_url="https://api.x.ai/v1")
 
             system_prompt = f"""Ты - эксперт по созданию промптов для AI-генерации технических строительных изображений.
 
