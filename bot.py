@@ -595,6 +595,46 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature):
+    """
+    Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
+
+    Args:
+        client: XAIClient instance
+        model: Модель для использования
+        messages: Список сообщений
+        max_tokens: Максимум токенов
+        temperature: Температура
+
+    Yields:
+        str - части текста по мере получения от API
+    """
+    try:
+        # Используем streaming метод xAI
+        async for chunk in client.chat_completions_create_stream(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature
+        ):
+            yield chunk
+
+    except Exception as grok_error:
+        logger.warning(f"⚠️ xAI Grok streaming недоступен: {str(grok_error)}")
+
+        # Fallback на обычный режим без streaming
+        logger.info("🔄 Переключение на обычный режим без streaming...")
+        response = call_grok_with_retry(
+            client=client,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        # Отдаём весь ответ целиком
+        yield response["choices"][0]["message"]["content"]
+
+
 # === СИСТЕМА КЛАССИФИКАЦИИ НАМЕРЕНИЙ (INTENT CLASSIFICATION) ===
 
 def classify_user_intent(user_message: str) -> dict:
@@ -3730,23 +3770,86 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Ошибка генерации: {e}")
                 await generating_msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-        # Вызываем Claude API с контекстом истории и retry logic
+        # 🎯 STREAMING РЕЖИМ: Вызываем AI API с постепенной отдачей ответа
         client = get_grok_client()
-        loop = asyncio.get_event_loop()
         # Добавляем system prompt в начало истории
         messages_with_system = [{"role": "system", "content": system_prompt}] + conversation_history
 
-        response = await loop.run_in_executor(
-            None,
-            lambda: call_grok_with_retry(
+        # Переменные для streaming
+        answer = ""
+        last_update_time = 0
+        update_interval = 1.5  # Обновляем сообщение раз в 1.5 секунды
+
+        # Отправляем начальное сообщение для streaming
+        streaming_msg = await update.message.reply_text("💬 ")
+
+        try:
+            # Удаляем thinking message так как теперь будем показывать процесс в реальном времени
+            try:
+                await thinking_message.delete()
+            except:
+                pass
+
+            # Показываем индикатор "печатает..."
+            await update.message.chat.send_action("typing")
+
+            # Получаем ответ частями через streaming
+            async for chunk in call_grok_with_streaming(
                 client,
                 model=selected_model,
+                messages=messages_with_system,
                 max_tokens=selected_max_tokens,
-                temperature=0.7,
-                messages=messages_with_system
+                temperature=0.7
+            ):
+                answer += chunk
+
+                # Обновляем сообщение периодически (не чаще раза в 1.5 сек)
+                import time
+                current_time = time.time()
+                if current_time - last_update_time >= update_interval:
+                    try:
+                        # Показываем текущий ответ с индикатором печатания
+                        display_text = f"💬 **Ответ:**\n\n{answer}..."
+                        await streaming_msg.edit_text(display_text[:4096])  # Лимит Telegram
+                        last_update_time = current_time
+                    except Exception as edit_error:
+                        # Игнорируем ошибки редактирования (например, если текст не изменился)
+                        pass
+
+            # Финальное обновление - показываем полный ответ без "..."
+            try:
+                display_text = f"💬 **Ответ:**\n\n{answer}"
+                await streaming_msg.edit_text(display_text[:4096])
+            except:
+                pass
+
+        except Exception as stream_error:
+            logger.error(f"❌ Ошибка streaming: {stream_error}")
+            # Если streaming не сработал, пробуем обычный режим
+            try:
+                await streaming_msg.delete()
+            except:
+                pass
+
+            thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: call_grok_with_retry(
+                    client,
+                    model=selected_model,
+                    max_tokens=selected_max_tokens,
+                    temperature=0.7,
+                    messages=messages_with_system
+                )
             )
-        )
-        answer = response["choices"][0]["message"]["content"]
+            answer = response["choices"][0]["message"]["content"]
+
+            try:
+                await thinking_message.delete()
+            except:
+                pass
 
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
@@ -3805,7 +3908,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if reg_code in answer:
                 mentioned_regs.append(reg_code)
 
-        # Формируем ответ
+        # Формируем финальный ответ
         result = f"💬 **Ответ:**\n\n{answer}\n\n"
 
         # Добавляем результаты веб-поиска (если были)
@@ -3826,15 +3929,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
 
-        # Удаляем сообщение "думаю над вопросом"
-        try:
-            await thinking_message.delete()
-        except Exception as e:
-            logger.warning(f"Could not delete thinking message: {e}")
+        # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
+        reply_markup = None
+        if IMPROVEMENTS_V3_AVAILABLE:
+            reply_markup = create_answer_buttons(related_questions=related_questions)
 
-        # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
-        max_length = 4000  # Оставляем запас
+        # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
+        user_id = update.effective_user.id
+        if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
+            reply_markup = add_apply_button(reply_markup)
+
+        # Обновляем streaming сообщение финальным ответом с кнопками
+        max_length = 4000  # Лимит Telegram
         if len(result) > max_length:
+            # Если сообщение слишком длинное, удаляем streaming_msg и отправляем по частям
+            try:
+                await streaming_msg.delete()
+            except:
+                pass
+
             parts = []
             current_part = ""
             for line in result.split('\n'):
@@ -3846,13 +3959,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if current_part:
                 parts.append(current_part)
 
-            # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
+            # Отправляем по частям
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                user_id = update.effective_user.id
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-                    part_reply_markup = add_apply_button()
+                if i == len(parts) - 1:
+                    part_reply_markup = reply_markup
 
                 if i == 0:
                     await update.message.reply_text(part, reply_markup=part_reply_markup)
@@ -3862,18 +3973,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=part_reply_markup
                     )
         else:
-            # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
-            reply_markup = None
-            if IMPROVEMENTS_V3_AVAILABLE:
-                reply_markup = create_answer_buttons(related_questions=related_questions)
-
-            # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
-            user_id = update.effective_user.id
-            if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-                reply_markup = add_apply_button(reply_markup)
-
-            # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
-            await update.message.reply_text(result, reply_markup=reply_markup)
+            # Обновляем streaming сообщение финальным ответом с кнопками
+            try:
+                await streaming_msg.edit_text(result, reply_markup=reply_markup)
+            except Exception as e:
+                # Если не удалось отредактировать, отправляем новое сообщение
+                logger.warning(f"Could not edit streaming message: {e}")
+                try:
+                    await streaming_msg.delete()
+                except:
+                    pass
+                await update.message.reply_text(result, reply_markup=reply_markup)
 
         logger.info(f"Question answered for user {update.effective_user.id} by Claude")
 
@@ -3883,6 +3993,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "думаю над вопросом" даже в случае ошибки
         try:
             await thinking_message.delete()
+        except:
+            pass
+
+        # Удаляем streaming_msg если он существует
+        try:
+            if 'streaming_msg' in locals():
+                await streaming_msg.delete()
         except:
             pass
 

@@ -109,6 +109,70 @@ class XAIClient:
             logger.error(f"Unexpected xAI API error: {e}")
             raise Exception("❌ Неожиданная ошибка при обращении к xAI API.")
 
+    async def chat_completions_create_stream(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        timeout: int = 120
+    ):
+        """
+        Streaming версия chat completions (асинхронный генератор)
+
+        Yields:
+            str - части текста по мере их получения от API
+        """
+        url = f"{self.base_url}/chat/completions"
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream('POST', url, json=payload, headers=self.headers) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if line.startswith('data: '):
+                            data = line[6:]  # Убираем 'data: '
+
+                            if data == '[DONE]':
+                                break
+
+                            try:
+                                import json
+                                chunk = json.loads(data)
+
+                                # Извлекаем текст из чанка
+                                if 'choices' in chunk and len(chunk['choices']) > 0:
+                                    delta = chunk['choices'][0].get('delta', {})
+                                    content = delta.get('content', '')
+                                    if content:
+                                        yield content
+                            except json.JSONDecodeError:
+                                continue
+
+        except httpx.TimeoutException:
+            logger.error(f"xAI API streaming timeout after {timeout}s")
+            raise Exception("⚠️ Превышено время ожидания ответа от AI.")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"xAI API streaming HTTP error: {e.response.status_code}")
+            if e.response.status_code == 429:
+                raise Exception("⚠️ Превышен лимит запросов к xAI API. Попробуйте через минуту.")
+            elif e.response.status_code == 401:
+                raise Exception("❌ Неверный API ключ xAI.")
+            else:
+                raise Exception(f"⚠️ Ошибка xAI API: {e.response.status_code}")
+        except Exception as e:
+            logger.error(f"Unexpected xAI streaming error: {e}")
+            raise Exception("❌ Ошибка при получении ответа от AI.")
+
 
 def call_xai_with_retry(client: XAIClient, model: str, messages: List[Dict[str, str]],
                         max_tokens: int = 1000, temperature: float = 0.7,
