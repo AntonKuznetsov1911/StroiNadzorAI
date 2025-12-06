@@ -147,6 +147,9 @@ try:
         create_calculators_menu,
         create_regulations_category_menu,
         create_region_selection_menu,
+        create_related_questions_buttons,
+        generate_smart_related_questions_prompt,
+        parse_generated_questions,
         get_improved_help_text,
         REGULATIONS_CATEGORIES,
         CALCULATORS,
@@ -3748,6 +3751,38 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
 
+        # 🎯 ГЕНЕРАЦИЯ УМНЫХ СВЯЗАННЫХ ВОПРОСОВ (v3.1)
+        related_questions = []
+        if IMPROVEMENTS_V3_AVAILABLE:
+            try:
+                # Создаём промпт для генерации связанных вопросов
+                related_q_prompt = generate_smart_related_questions_prompt(question, answer)
+
+                # Генерируем вопросы используя тот же API
+                related_response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model="grok-2-1212",  # Используем быструю модель
+                        max_tokens=300,
+                        temperature=0.8,
+                        messages=[{"role": "user", "content": related_q_prompt}]
+                    )
+                )
+                related_q_text = related_response["choices"][0]["message"]["content"]
+
+                # Парсим сгенерированные вопросы
+                related_questions = parse_generated_questions(related_q_text)
+
+                # Сохраняем в контексте пользователя для обработки кликов
+                if related_questions:
+                    context.user_data["related_questions"] = related_questions
+                    logger.info(f"✅ Сгенерировано {len(related_questions)} связанных вопросов")
+
+            except Exception as e:
+                logger.error(f"❌ Ошибка генерации связанных вопросов: {e}")
+                related_questions = []
+
         # Сохраняем в активный проект (если есть)
         project_saved = False
         saved_project_name = None
@@ -3827,10 +3862,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=part_reply_markup
                     )
         else:
-            # Создаём интерактивные кнопки под ответом (v3.0)
+            # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
             reply_markup = None
             if IMPROVEMENTS_V3_AVAILABLE:
-                reply_markup = create_answer_buttons()
+                reply_markup = create_answer_buttons(related_questions=related_questions)
 
             # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
             user_id = update.effective_user.id
@@ -4140,6 +4175,63 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Я предоставлю конкретный пример с цифрами и расчётами!",
             parse_mode='Markdown'
         )
+
+    elif query.data == "show_related_questions":
+        # Кнопка "Связанные вопросы" - показать умные связанные вопросы (v3.1)
+        if IMPROVEMENTS_V3_AVAILABLE:
+            related_questions = context.user_data.get("related_questions", [])
+            if related_questions:
+                keyboard = create_related_questions_buttons(related_questions)
+                # Формируем текст с вопросами для предпросмотра
+                questions_preview = "\n\n".join([f"❓ {q}" for q in related_questions])
+                await query.edit_message_reply_markup(reply_markup=keyboard)
+                logger.info("✅ Показаны связанные вопросы")
+            else:
+                await query.answer("⚠️ Связанные вопросы не найдены", show_alert=True)
+        else:
+            await query.answer("⚠️ Функция недоступна", show_alert=True)
+
+    elif query.data == "hide_related_questions":
+        # Кнопка "Назад" - вернуть стандартные кнопки
+        if IMPROVEMENTS_V3_AVAILABLE:
+            related_questions = context.user_data.get("related_questions", [])
+            keyboard = create_answer_buttons(related_questions=related_questions)
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+            logger.info("✅ Скрыты связанные вопросы")
+        else:
+            await query.answer("⚠️ Функция недоступна", show_alert=True)
+
+    elif query.data.startswith("related_q_"):
+        # Клик на связанный вопрос - отправляем его как новый вопрос
+        try:
+            question_index = int(query.data.split("_")[-1])
+            related_questions = context.user_data.get("related_questions", [])
+
+            if question_index < len(related_questions):
+                selected_question = related_questions[question_index]
+
+                # Отправляем вопрос от имени пользователя
+                await query.answer(f"Задаю вопрос: {selected_question[:50]}...")
+
+                # Создаём фейковое сообщение с вопросом для обработки
+                from telegram import Message, Chat, User as TelegramUser
+                fake_message = Message(
+                    message_id=0,
+                    date=datetime.now(),
+                    chat=query.message.chat,
+                    from_user=query.from_user,
+                    text=selected_question
+                )
+                fake_update = Update(update_id=0, message=fake_message)
+
+                # Обрабатываем как обычный текстовый вопрос
+                await handle_text(fake_update, context)
+                logger.info(f"✅ Обработан связанный вопрос #{question_index}")
+            else:
+                await query.answer("⚠️ Вопрос не найден", show_alert=True)
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки связанного вопроса: {e}")
+            await query.answer("⚠️ Ошибка обработки вопроса", show_alert=True)
 
     elif query.data == "show_regulations":
         # Кнопка "Нормативы" - показать категории

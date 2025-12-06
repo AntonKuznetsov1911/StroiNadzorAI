@@ -9,21 +9,28 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 # 1. ИНТЕРАКТИВНЫЕ КНОПКИ ПОД ОТВЕТАМИ
 # ========================================
 
-def create_answer_buttons(context_data=None):
+def create_answer_buttons(context_data=None, related_questions=None):
     """
     Создать интерактивные кнопки для ответа
 
     Args:
         context_data: dict с контекстом (упомянутые нормативы, теги и т.д.)
+        related_questions: list of str - список связанных вопросов (если есть)
 
     Returns:
         InlineKeyboardMarkup
     """
-    buttons = [
-        [
-            InlineKeyboardButton("🔍 Уточнить", callback_data="clarify"),
-            InlineKeyboardButton("💡 Пример", callback_data="example")
-        ],
+    buttons = []
+
+    # Если есть умные связанные вопросы, добавляем их в начало
+    if related_questions and len(related_questions) > 0:
+        buttons.append([InlineKeyboardButton(
+            "💡 Связанные вопросы ▾",
+            callback_data="show_related_questions"
+        )])
+
+    # Основные кнопки действий
+    buttons.extend([
         [
             InlineKeyboardButton("📚 Нормативы", callback_data="show_regulations"),
             InlineKeyboardButton("🧮 Калькулятор", callback_data="calculator")
@@ -32,7 +39,36 @@ def create_answer_buttons(context_data=None):
             InlineKeyboardButton("📎 Экспорт PDF", callback_data="export_pdf"),
             InlineKeyboardButton("💾 Сохранить", callback_data="save_query")
         ]
-    ]
+    ])
+
+    return InlineKeyboardMarkup(buttons)
+
+
+def create_related_questions_buttons(related_questions):
+    """
+    Создать кнопки со связанными вопросами
+
+    Args:
+        related_questions: list of str - список связанных вопросов
+
+    Returns:
+        InlineKeyboardMarkup
+    """
+    buttons = []
+
+    for i, question in enumerate(related_questions[:3]):  # Максимум 3 вопроса
+        # Обрезаем вопрос если слишком длинный для кнопки
+        display_text = question if len(question) <= 60 else question[:57] + "..."
+        buttons.append([InlineKeyboardButton(
+            f"❓ {display_text}",
+            callback_data=f"related_q_{i}"
+        )])
+
+    # Кнопка "Назад"
+    buttons.append([InlineKeyboardButton(
+        "« Назад",
+        callback_data="hide_related_questions"
+    )])
 
     return InlineKeyboardMarkup(buttons)
 
@@ -60,7 +96,7 @@ def create_quick_actions_menu():
 
 
 # ========================================
-# 2. КОНТЕКСТНЫЕ ПОДСКАЗКИ
+# 2. КОНТЕКСТНЫЕ ПОДСКАЗКИ И УМНЫЕ СВЯЗАННЫЕ ВОПРОСЫ
 # ========================================
 
 def get_contextual_suggestions(question, history=None):
@@ -120,6 +156,68 @@ def get_contextual_suggestions(question, history=None):
             break
 
     return suggestions[:3]  # Максимум 3 подсказки
+
+
+def generate_smart_related_questions_prompt(question, answer):
+    """
+    Создать промпт для генерации умных связанных вопросов
+
+    Args:
+        question: str - исходный вопрос пользователя
+        answer: str - ответ бота
+
+    Returns:
+        str - промпт для AI
+    """
+    prompt = f"""На основе вопроса пользователя и данного ответа, сгенерируй 3 связанных вопроса, которые пользователь может захотеть задать далее.
+
+ВОПРОС ПОЛЬЗОВАТЕЛЯ:
+{question}
+
+ОТВЕТ БОТА:
+{answer[:1000]}...
+
+ТРЕБОВАНИЯ К СВЯЗАННЫМ ВОПРОСАМ:
+1. Вопросы должны быть логическим продолжением текущей темы
+2. Каждый вопрос должен углублять понимание или раскрывать смежные аспекты
+3. Вопросы должны быть конкретными и практическими
+4. Длина каждого вопроса: 30-60 символов
+5. Вопросы должны быть разными по направлению:
+   - Первый: углубление в текущую тему
+   - Второй: практическое применение
+   - Третий: смежная тема или нормативы
+
+Верни ТОЛЬКО 3 вопроса, каждый с новой строки, без нумерации и без дополнительного текста.
+
+Пример формата ответа:
+Какие требования к армированию ленточного фундамента?
+Как рассчитать толщину защитного слоя бетона?
+Какие СП регламентируют устройство фундаментов?"""
+
+    return prompt
+
+
+def parse_generated_questions(response_text):
+    """
+    Парсит ответ AI и извлекает список вопросов
+
+    Args:
+        response_text: str - ответ от AI
+
+    Returns:
+        list of str - список вопросов
+    """
+    lines = response_text.strip().split('\n')
+    questions = []
+
+    for line in lines:
+        line = line.strip()
+        # Убираем нумерацию если есть
+        line = line.lstrip('0123456789.- ')
+        if line and len(line) > 10 and '?' in line:
+            questions.append(line)
+
+    return questions[:3]  # Максимум 3 вопроса
 
 
 def extract_topic_from_history(history):
