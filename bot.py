@@ -3789,8 +3789,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Переменные для streaming
             last_update_time = 0
             last_update_length = 0
-            update_interval = 0.3  # Обновляем каждые 0.3 секунды для плавности
-            chars_threshold = 20  # Или каждые 20 новых символов
+            update_interval = 0.15  # Обновляем каждые 0.15 секунды - быстро и плавно
+            chars_threshold = 8  # Или каждые 8 новых символов
+            typing_action_interval = 3  # Индикатор "печатает" раз в 3 секунды
+            last_typing_action = 0
 
             logger.info("🚀 Начинаем двухфазную генерацию...")
 
@@ -3819,15 +3821,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await streaming_msg.edit_text(display_text[:4096])
                         last_update_time = current_time
                         last_update_length = len(answer)
-                        # Показываем индикатор печатания
-                        await update.message.chat.send_action("typing")
+
+                        # Показываем индикатор печатания редко (не замедляет)
+                        if current_time - last_typing_action >= typing_action_interval:
+                            await update.message.chat.send_action("typing")
+                            last_typing_action = current_time
                     except Exception:
                         pass
 
             logger.info(f"✅ Фаза 1 завершена: {len(first_phase_answer)} символов")
 
-            # ФАЗА 2: Продолжение от основной модели (если нужно)
-            if len(first_phase_answer) >= 400:  # Если первая фаза дала достаточно текста
+            # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
+            # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
+            if len(first_phase_answer) >= 400 and selected_model != "grok-2-1212":
                 logger.info("📝 Фаза 2: Основная модель для продолжения...")
 
                 # Создаём промпт для продолжения
@@ -3856,7 +3862,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await streaming_msg.edit_text(display_text[:4096])
                             last_update_time = current_time
                             last_update_length = len(answer)
-                            await update.message.chat.send_action("typing")
+
+                            # Показываем индикатор печатания редко (не замедляет)
+                            if current_time - last_typing_action >= typing_action_interval:
+                                await update.message.chat.send_action("typing")
+                                last_typing_action = current_time
                         except Exception:
                             pass
 
