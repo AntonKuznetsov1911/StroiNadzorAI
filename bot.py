@@ -3976,12 +3976,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     logger.info("✅ Фаза 2 завершена")
 
-                # Финальное обновление без курсора - пока показываем просто ответ
-                # Полное форматирование будет добавлено ниже
+                # Финальное обновление без курсора
                 try:
-                    await streaming_msg.edit_text(answer[:4096])
-                except:
-                    pass
+                    # Если ответ короче 4096 символов - обновляем сообщение
+                    if len(answer) <= 4096:
+                        await streaming_msg.edit_text(answer)
+                    else:
+                        # Если ответ длинный - отправляем полную версию в новом сообщении
+                        await streaming_msg.edit_text(f"{answer[:4000]}...\n\n⚠️ Ответ был слишком длинным. Полная версия ниже:")
+                        # Отправляем полный ответ в отдельном сообщении
+                        await update.message.reply_text(answer)
+                except Exception as e:
+                    logger.error(f"Ошибка финального обновления streaming: {e}")
+                    # Fallback: отправляем полный ответ в любом случае
+                    try:
+                        await update.message.reply_text(answer)
+                    except:
+                        pass
 
             except Exception as stream_error:
                 logger.error(f"❌ Ошибка streaming: {stream_error}")
