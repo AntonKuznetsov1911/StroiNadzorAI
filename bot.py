@@ -489,6 +489,11 @@ user_request_times = defaultdict(list)
 RATE_LIMIT_MAX_REQUESTS = 10  # Максимум запросов
 RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 
+# 🎯 НАСТРОЙКА STREAMING РЕЖИМА
+# True = ответы появляются постепенно (как в ChatGPT)
+# False = ответы приходят сразу целиком (классический режим)
+STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
+
 def check_rate_limit(user_id: int) -> bool:
     """
     Проверка rate limit для пользователя
@@ -3770,95 +3775,57 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Ошибка генерации: {e}")
                 await generating_msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-        # 🎯 ДВУХФАЗНАЯ ГЕНЕРАЦИЯ: Быстрый старт + полный ответ
+        # 🎯 ГЕНЕРАЦИЯ ОТВЕТА (с выбором режима)
         client = get_grok_client()
+        loop = asyncio.get_event_loop()
         # Добавляем system prompt в начало истории
         messages_with_system = [{"role": "system", "content": system_prompt}] + conversation_history
 
-        # ФАЗА 1: Быстрый старт (grok-2-1212 - самая быстрая модель)
         answer = ""
-        streaming_msg = await update.message.reply_text("⏳ Генерирую ответ...")
 
-        try:
-            # Удаляем thinking message
+        # === STREAMING РЕЖИМ (постепенное появление текста) ===
+        if STREAMING_ENABLED:
+            streaming_msg = await update.message.reply_text("⏳ Генерирую ответ...")
+
             try:
-                await thinking_message.delete()
-            except:
-                pass
+                # Удаляем thinking message
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
 
-            # Переменные для streaming
-            last_update_time = 0
-            last_update_length = 0
-            update_interval = 0.15  # Обновляем каждые 0.15 секунды - быстро и плавно
-            chars_threshold = 8  # Или каждые 8 новых символов
-            typing_action_interval = 3  # Индикатор "печатает" раз в 3 секунды
-            last_typing_action = 0
+                # Переменные для streaming
+                last_update_time = 0
+                last_update_length = 0
+                update_interval = 0.15  # Обновляем каждые 0.15 секунды - быстро и плавно
+                chars_threshold = 8  # Или каждые 8 новых символов
+                typing_action_interval = 3  # Индикатор "печатает" раз в 3 секунды
+                last_typing_action = 0
 
-            logger.info("🚀 Начинаем двухфазную генерацию...")
+                logger.info("🚀 Начинаем двухфазную генерацию...")
 
-            # ФАЗА 1: Быстрое начало (первые 300-500 токенов от быстрой модели)
-            first_phase_answer = ""
-            logger.info("📝 Фаза 1: Быстрая модель для начала ответа...")
-
-            async for chunk in call_grok_with_streaming(
-                client,
-                model="grok-2-1212",  # Быстрая модель
-                messages=messages_with_system,
-                max_tokens=500,  # Только начало
-                temperature=0.7
-            ):
-                first_phase_answer += chunk
-                answer += chunk
-
-                # Обновляем сообщение часто для видимости печатания
-                import time
-                current_time = time.time()
-                chars_diff = len(answer) - last_update_length
-
-                if current_time - last_update_time >= update_interval or chars_diff >= chars_threshold:
-                    try:
-                        display_text = f"{answer}▊"  # Курсор печатания
-                        await streaming_msg.edit_text(display_text[:4096])
-                        last_update_time = current_time
-                        last_update_length = len(answer)
-
-                        # Показываем индикатор печатания редко (не замедляет)
-                        if current_time - last_typing_action >= typing_action_interval:
-                            await update.message.chat.send_action("typing")
-                            last_typing_action = current_time
-                    except Exception:
-                        pass
-
-            logger.info(f"✅ Фаза 1 завершена: {len(first_phase_answer)} символов")
-
-            # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
-            # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
-            if len(first_phase_answer) >= 400 and selected_model != "grok-2-1212":
-                logger.info("📝 Фаза 2: Основная модель для продолжения...")
-
-                # Создаём промпт для продолжения
-                continuation_messages = messages_with_system + [
-                    {"role": "assistant", "content": first_phase_answer},
-                    {"role": "user", "content": "Продолжи ответ, добавь детали, примеры и ссылки на нормативы."}
-                ]
+                # ФАЗА 1: Быстрое начало (первые 300-500 токенов от быстрой модели)
+                first_phase_answer = ""
+                logger.info("📝 Фаза 1: Быстрая модель для начала ответа...")
 
                 async for chunk in call_grok_with_streaming(
                     client,
-                    model=selected_model,  # Основная модель
-                    messages=continuation_messages,
-                    max_tokens=selected_max_tokens - 500,
+                    model="grok-2-1212",  # Быстрая модель
+                    messages=messages_with_system,
+                    max_tokens=500,  # Только начало
                     temperature=0.7
                 ):
+                    first_phase_answer += chunk
                     answer += chunk
 
-                    # Обновляем сообщение часто
+                    # Обновляем сообщение часто для видимости печатания
                     import time
                     current_time = time.time()
                     chars_diff = len(answer) - last_update_length
 
                     if current_time - last_update_time >= update_interval or chars_diff >= chars_threshold:
                         try:
-                            display_text = f"{answer}▊"
+                            display_text = f"{answer}▊"  # Курсор печатания
                             await streaming_msg.edit_text(display_text[:4096])
                             last_update_time = current_time
                             last_update_length = len(answer)
@@ -3870,26 +3837,88 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         except Exception:
                             pass
 
-                logger.info("✅ Фаза 2 завершена")
+                logger.info(f"✅ Фаза 1 завершена: {len(first_phase_answer)} символов")
 
-            # Финальное обновление без курсора - пока показываем просто ответ
-            # Полное форматирование будет добавлено ниже
-            try:
-                await streaming_msg.edit_text(answer[:4096])
-            except:
-                pass
+                # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
+                # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
+                if len(first_phase_answer) >= 400 and selected_model != "grok-2-1212":
+                    logger.info("📝 Фаза 2: Основная модель для продолжения...")
 
-        except Exception as stream_error:
-            logger.error(f"❌ Ошибка streaming: {stream_error}")
-            # Fallback на обычный режим
-            try:
-                await streaming_msg.delete()
-            except:
-                pass
+                    # Создаём промпт для продолжения
+                    continuation_messages = messages_with_system + [
+                        {"role": "assistant", "content": first_phase_answer},
+                        {"role": "user", "content": "Продолжи ответ, добавь детали, примеры и ссылки на нормативы."}
+                    ]
 
-            thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
+                    async for chunk in call_grok_with_streaming(
+                        client,
+                        model=selected_model,  # Основная модель
+                        messages=continuation_messages,
+                        max_tokens=selected_max_tokens - 500,
+                        temperature=0.7
+                    ):
+                        answer += chunk
 
-            loop = asyncio.get_event_loop()
+                        # Обновляем сообщение часто
+                        import time
+                        current_time = time.time()
+                        chars_diff = len(answer) - last_update_length
+
+                        if current_time - last_update_time >= update_interval or chars_diff >= chars_threshold:
+                            try:
+                                display_text = f"{answer}▊"
+                                await streaming_msg.edit_text(display_text[:4096])
+                                last_update_time = current_time
+                                last_update_length = len(answer)
+
+                                # Показываем индикатор печатания редко (не замедляет)
+                                if current_time - last_typing_action >= typing_action_interval:
+                                    await update.message.chat.send_action("typing")
+                                    last_typing_action = current_time
+                            except Exception:
+                                pass
+
+                    logger.info("✅ Фаза 2 завершена")
+
+                # Финальное обновление без курсора - пока показываем просто ответ
+                # Полное форматирование будет добавлено ниже
+                try:
+                    await streaming_msg.edit_text(answer[:4096])
+                except:
+                    pass
+
+            except Exception as stream_error:
+                logger.error(f"❌ Ошибка streaming: {stream_error}")
+                # Fallback на обычный режим
+                try:
+                    await streaming_msg.delete()
+                except:
+                    pass
+
+                thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
+
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model=selected_model,
+                        max_tokens=selected_max_tokens,
+                        temperature=0.7,
+                        messages=messages_with_system
+                    )
+                )
+                answer = response["choices"][0]["message"]["content"]
+
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
+
+        # === ОБЫЧНЫЙ РЕЖИМ (классический - ответ приходит сразу целиком) ===
+        else:
+            logger.info("📝 Обычный режим: генерация ответа без streaming...")
+
             response = await loop.run_in_executor(
                 None,
                 lambda: call_grok_with_retry(
