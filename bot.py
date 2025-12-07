@@ -551,7 +551,7 @@ def get_claude_client():
         claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return claude_client
 
-def call_grok_with_retry(client, model, messages, max_tokens, temperature):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools=None):
     """
     Вызов xAI Grok API с автоматическим fallback на Claude при сбое
 
@@ -559,6 +559,9 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
     1. Пытается использовать xAI Grok (основной)
     2. Если ошибка - автоматически переключается на Claude (резерв)
     3. Логирует какой API был использован
+
+    Args:
+        tools: Список инструментов [{"type": "web_search"}, {"type": "x_search"}]
     """
     # Сначала пытаемся Grok
     try:
@@ -567,7 +570,8 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
             model=model,
             messages=messages,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
+            tools=tools
         )
         logger.info("✅ Ответ получен от xAI Grok")
         return response
@@ -2883,6 +2887,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Вызываем xAI Grok API для анализа изображения с retry logic
         client = get_grok_client()
         loop = asyncio.get_event_loop()
+
+        # Включаем web_search для анализа фото (поиск информации о дефектах)
+        photo_tools = [
+            {"type": "web_search"},
+            {"type": "x_search"}
+        ]
+
         response = await loop.run_in_executor(
             None,
             lambda: call_grok_with_retry(
@@ -2912,7 +2923,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             }
                         ]
                     }
-                ]
+                ],
+                tools=photo_tools
             )
         )
         analysis = response["choices"][0]["message"]["content"]
@@ -3138,6 +3150,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Отправляем на анализ Grok
                     client = get_grok_client()
                     loop = asyncio.get_event_loop()
+
+                    # Включаем web_search для анализа документов (поиск нормативов)
+                    doc_tools = [
+                        {"type": "web_search"},
+                        {"type": "x_search"}
+                    ]
+
                     response = await loop.run_in_executor(
                         None,
                         lambda: call_grok_with_retry(
@@ -3148,7 +3167,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             messages=[
                                 {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
                                 {"role": "user", "content": analysis_prompt}
-                            ]
+                            ],
+                            tools=doc_tools
                         )
                     )
                     expert_opinion = response["choices"][0]["message"]["content"]
@@ -3706,6 +3726,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         selected_model = intent_info["model"]
         selected_max_tokens = intent_info["max_tokens"]
+        intent_type = intent_info.get("intent_type", "technical_question")
+
+        # 🌐 ОПРЕДЕЛЯЕМ НУЖНЫ ЛИ ИНСТРУМЕНТЫ (web_search, x_search)
+        # Включаем для технических и сложных вопросов, отключаем для простых
+        grok_tools = None
+        if intent_type in ["technical_question", "complex_analysis"]:
+            grok_tools = [
+                {"type": "web_search"},  # Поиск в интернете
+                {"type": "x_search"}     # Поиск в X (Twitter)
+            ]
+            logger.info("🌐 Grok Tools включены: web_search, x_search")
 
         # Универсальный системный промпт для всех типов запросов
         # Оптимизирован для Grok 2-1212 Reasoning
@@ -3992,7 +4023,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         model=selected_model,
                         max_tokens=selected_max_tokens,
                         temperature=0.7,
-                        messages=messages_with_system
+                        messages=messages_with_system,
+                        tools=grok_tools
                     )
                 )
                 answer = response["choices"][0]["message"]["content"]
@@ -4013,7 +4045,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model=selected_model,
                     max_tokens=selected_max_tokens,
                     temperature=0.7,
-                    messages=messages_with_system
+                    messages=messages_with_system,
+                    tools=grok_tools
                 )
             )
             answer = response["choices"][0]["message"]["content"]
