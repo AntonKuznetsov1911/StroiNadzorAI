@@ -494,6 +494,16 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 # False = ответы приходят сразу целиком (классический режим)
 STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
 
+# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
+# Основная модель: grok-2-1212-reasoning
+#   - Улучшенная reasoning способность для глубокого анализа
+#   - Используется для технических вопросов, анализа фото и документов
+#   - Более точные и профессиональные ответы
+# Быстрая модель: grok-2-1212
+#   - Для классификации запросов и простых вопросов
+#   - Быстрая генерация ответов
+# Fallback: Claude Sonnet 4.5 (при недоступности Grok)
+
 def check_rate_limit(user_id: int) -> bool:
     """
     Проверка rate limit для пользователя
@@ -670,7 +680,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model="grok-4.1",
+            model="grok-2-1212",  # Быстрая модель для классификации
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -686,13 +696,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "grok-4.1"
+            model = "grok-2-1212"  # Быстрая модель для простых запросов
             max_tokens = 500
         elif intent_type == "technical_question":
-            model = "grok-4.1"
+            model = "grok-2-1212-reasoning"  # Reasoning модель для технических вопросов
             max_tokens = 2500
         else:  # complex_analysis
-            model = "grok-4.1"
+            model = "grok-2-1212-reasoning"  # Reasoning модель для сложного анализа
             max_tokens = 3000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -705,10 +715,10 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем Grok 4.1 для надежности
+        # При ошибке используем Grok Reasoning для надежности
         return {
             "intent": "technical_question",
-            "model": "grok-4.1",
+            "model": "grok-2-1212-reasoning",
             "max_tokens": 2500
         }
 
@@ -2876,7 +2886,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_grok_with_retry(
                 client,
-                model="grok-4.1",
+                model="grok-2-1212-reasoning",  # Reasoning модель для анализа изображений
                 max_tokens=2500,
                 temperature=0.7,
                 messages=[
@@ -3131,7 +3141,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         None,
                         lambda: call_grok_with_retry(
                             client,
-                            model="grok-4.1",
+                            model="grok-2-1212-reasoning",  # Reasoning модель для анализа документов
                             max_tokens=3000,
                             temperature=0.3,
                             messages=[
