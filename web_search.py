@@ -1,15 +1,20 @@
 """
 Модуль для поиска актуальной информации на сайтах строительных нормативов РФ
++ общий поиск через SerpAPI (Google/Yandex)
 """
 
 import requests
 from bs4 import BeautifulSoup
 import logging
 import re
+import os
 from typing import Optional, Dict, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# SerpAPI ключ для общего поиска в интернете
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 
 
 # === ПАРСИНГ DOCS.CNTD.RU (БАЗА НОРМАТИВОВ) ===
@@ -188,6 +193,128 @@ def search_minstroy_news(keywords: List[str], max_results: int = 3) -> List[Dict
         return []
 
 
+# === ОБЩИЙ ПОИСК В ИНТЕРНЕТЕ ЧЕРЕЗ SERPAPI (Google/Yandex) ===
+
+def search_with_serpapi(query: str, search_engine: str = "google", num_results: int = 5) -> Optional[str]:
+    """
+    Поиск в интернете через SerpAPI (Google или Yandex)
+
+    Args:
+        query: Поисковый запрос
+        search_engine: Поисковая система ("google" или "yandex")
+        num_results: Количество результатов
+
+    Returns:
+        Отформатированные результаты поиска или None
+    """
+    if not SERPAPI_KEY:
+        logger.warning("⚠️ SERPAPI_KEY не установлен, общий поиск недоступен")
+        return None
+
+    try:
+        logger.info(f"🔍 SerpAPI поиск [{search_engine}]: {query}")
+
+        # Параметры запроса к SerpAPI
+        params = {
+            "engine": search_engine,
+            "q": query,
+            "api_key": SERPAPI_KEY,
+            "num": num_results,
+            "hl": "ru",  # Язык интерфейса
+            "gl": "ru"   # Геолокация (Россия)
+        }
+
+        # Для Яндекса добавляем специфичные параметры
+        if search_engine == "yandex":
+            params["lr"] = "213"  # Регион Москва
+
+        response = requests.get("https://serpapi.com/search", params=params, timeout=15)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Извлекаем результаты
+        results = []
+
+        # Для Google
+        if search_engine == "google" and "organic_results" in data:
+            for item in data["organic_results"][:num_results]:
+                results.append({
+                    "title": item.get("title", ""),
+                    "snippet": item.get("snippet", ""),
+                    "link": item.get("link", ""),
+                    "date": item.get("date", "")
+                })
+
+        # Для Яндекса
+        elif search_engine == "yandex" and "organic_results" in data:
+            for item in data["organic_results"][:num_results]:
+                results.append({
+                    "title": item.get("title", ""),
+                    "snippet": item.get("snippet", ""),
+                    "link": item.get("link", ""),
+                    "date": item.get("date", "")
+                })
+
+        if not results:
+            logger.warning(f"SerpAPI не вернул результаты для: {query}")
+            return None
+
+        # Форматируем результаты
+        formatted = f"🌐 **РЕЗУЛЬТАТЫ ПОИСКА ({search_engine.upper()}):**\n\n"
+
+        for i, result in enumerate(results, 1):
+            formatted += f"**{i}. {result['title']}**\n"
+            if result['snippet']:
+                formatted += f"{result['snippet']}\n"
+            if result['date']:
+                formatted += f"📅 {result['date']}\n"
+            formatted += f"🔗 {result['link']}\n\n"
+
+        formatted += f"*Поиск выполнен: {datetime.now().strftime('%d.%m.%Y %H:%M')}*\n"
+
+        logger.info(f"✅ SerpAPI вернул {len(results)} результатов")
+        return formatted
+
+    except requests.RequestException as e:
+        logger.error(f"❌ Ошибка запроса к SerpAPI: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки данных SerpAPI: {e}")
+        return None
+
+
+def detect_search_type(user_message: str) -> str:
+    """
+    Определить тип поиска на основе запроса пользователя
+
+    Args:
+        user_message: Сообщение пользователя
+
+    Returns:
+        "regulations" - поиск нормативов
+        "general" - общий поиск в интернете
+        "none" - поиск не нужен
+    """
+    message_lower = user_message.lower()
+
+    # Триггеры для поиска нормативов
+    regulation_triggers = ["сп ", "гост ", "снип ", "ппб ", "норматив", "стандарт"]
+    if any(trigger in message_lower for trigger in regulation_triggers):
+        return "regulations"
+
+    # Триггеры для общего поиска (новости, цены, события, актуальность)
+    general_triggers = [
+        "новост", "цена", "стоимость", "сколько стоит",
+        "событи", "что произошло", "как дела", "расскажи о",
+        "актуальн", "свежи", "последн", "2025", "2026", "2027"
+    ]
+    if any(trigger in message_lower for trigger in general_triggers):
+        return "general"
+
+    return "none"
+
+
 # === ОПРЕДЕЛЕНИЕ НЕОБХОДИМОСТИ ПОИСКА ===
 
 def should_perform_web_search(user_message: str) -> bool:
@@ -256,53 +383,78 @@ def perform_web_search(user_message: str) -> Optional[str]:
     """
     Выполнить веб-поиск на основе сообщения пользователя
 
+    Поддерживает 3 типа поиска:
+    1. Поиск нормативов (СП, ГОСТ, СНиП) на docs.cntd.ru
+    2. Новости Минстроя на minstroyrf.gov.ru
+    3. Общий поиск (новости, цены, события) через SerpAPI
+
     Args:
         user_message: Сообщение пользователя
 
     Returns:
         Результаты поиска в текстовом формате или None
     """
-    if not should_perform_web_search(user_message):
+    # Определяем тип поиска
+    search_type = detect_search_type(user_message)
+
+    if search_type == "none":
         return None
 
-    logger.info(f"🌐 Активирован веб-поиск для: {user_message[:100]}...")
+    logger.info(f"🌐 Активирован веб-поиск [{search_type}] для: {user_message[:100]}...")
 
-    results_text = "🌐 **РЕЗУЛЬТАТЫ ВЕБ-ПОИСКА:**\n\n"
-    found_anything = False
+    # === ТИП 1: ОБЩИЙ ПОИСК ЧЕРЕЗ SERPAPI ===
+    if search_type == "general":
+        # Для общих запросов используем SerpAPI (Google/Yandex)
+        serpapi_results = search_with_serpapi(user_message, search_engine="google", num_results=5)
 
-    # 1. Ищем упомянутые нормативы
-    regulation_codes = extract_regulation_codes(user_message)
-    if regulation_codes:
-        results_text += "📚 **ПРОВЕРКА НОРМАТИВОВ:**\n"
-        for code in regulation_codes[:3]:  # Максимум 3 норматива
-            reg_info = search_regulation_cntd(code)
-            if reg_info:
-                results_text += f"\n• **{reg_info['code']}**\n"
-                results_text += f"  Название: {reg_info['title']}\n"
-                results_text += f"  Статус: {reg_info['status']}\n"
-                if reg_info['valid_from']:
-                    results_text += f"  Действует с: {reg_info['valid_from']}\n"
-                results_text += f"  Ссылка: {reg_info['link']}\n"
-                found_anything = True
-        results_text += "\n"
+        if serpapi_results:
+            logger.info("✅ Общий поиск выполнен через SerpAPI")
+            return serpapi_results
+        else:
+            logger.warning("⚠️ SerpAPI не вернул результаты или недоступен")
+            # Fallback: пробуем найти хоть что-то в нормативах
+            search_type = "regulations"
 
-    # 2. Ищем новости Минстроя (если упоминаются года 2025-2027)
-    if any(year in user_message for year in ["2025", "2026", "2027"]):
-        keywords = ["норматив", "СП", "строительство", "требования"]
-        news = search_minstroy_news(keywords, max_results=2)
-        if news:
-            results_text += "📰 **АКТУАЛЬНЫЕ НОВОСТИ МИНСТРОЯ:**\n"
-            for item in news:
-                results_text += f"\n• **{item['title']}**\n"
-                results_text += f"  Дата: {item['date']}\n"
-                results_text += f"  Ссылка: {item['link']}\n"
-                found_anything = True
+    # === ТИП 2: ПОИСК НОРМАТИВОВ И НОВОСТЕЙ МИНСТРОЯ ===
+    if search_type == "regulations":
+        results_text = "🌐 **РЕЗУЛЬТАТЫ ВЕБ-ПОИСКА:**\n\n"
+        found_anything = False
+
+        # 1. Ищем упомянутые нормативы
+        regulation_codes = extract_regulation_codes(user_message)
+        if regulation_codes:
+            results_text += "📚 **ПРОВЕРКА НОРМАТИВОВ:**\n"
+            for code in regulation_codes[:3]:  # Максимум 3 норматива
+                reg_info = search_regulation_cntd(code)
+                if reg_info:
+                    results_text += f"\n• **{reg_info['code']}**\n"
+                    results_text += f"  Название: {reg_info['title']}\n"
+                    results_text += f"  Статус: {reg_info['status']}\n"
+                    if reg_info['valid_from']:
+                        results_text += f"  Действует с: {reg_info['valid_from']}\n"
+                    results_text += f"  Ссылка: {reg_info['link']}\n"
+                    found_anything = True
             results_text += "\n"
 
-    if not found_anything:
-        return None
+        # 2. Ищем новости Минстроя (если упоминаются года 2025-2027)
+        if any(year in user_message for year in ["2025", "2026", "2027"]):
+            keywords = ["норматив", "СП", "строительство", "требования"]
+            news = search_minstroy_news(keywords, max_results=2)
+            if news:
+                results_text += "📰 **АКТУАЛЬНЫЕ НОВОСТИ МИНСТРОЯ:**\n"
+                for item in news:
+                    results_text += f"\n• **{item['title']}**\n"
+                    results_text += f"  Дата: {item['date']}\n"
+                    results_text += f"  Ссылка: {item['link']}\n"
+                    found_anything = True
+                results_text += "\n"
 
-    results_text += f"*Поиск выполнен: {datetime.now().strftime('%d.%m.%Y %H:%M')}*\n"
-    results_text += "*Данные актуальны на момент поиска*"
+        if not found_anything:
+            return None
 
-    return results_text
+        results_text += f"*Поиск выполнен: {datetime.now().strftime('%d.%m.%Y %H:%M')}*\n"
+        results_text += "*Данные актуальны на момент поиска*"
+
+        return results_text
+
+    return None

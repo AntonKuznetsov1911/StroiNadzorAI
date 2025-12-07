@@ -234,6 +234,15 @@ except ImportError as e:
     WEB_SEARCH_AVAILABLE = False
     logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
 
+# Модуль погоды (Яндекс Погода API)
+try:
+    from weather import get_weather, is_weather_query
+    WEATHER_AVAILABLE = True
+    logger.info("✅ Модуль погоды загружен (Яндекс Погода API)")
+except ImportError as e:
+    WEATHER_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль weather.py не найден: {e}")
+
 # Модуль генерации изображений
 try:
     from image_generator import (
@@ -3752,6 +3761,35 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Погода: Извините, у меня нет доступа к актуальным данным о погоде. Проверьте на Яндекс.Погода или Gismeteo для точной информации о погоде в вашем городе.
 • Бытовой: Как сварить кофе? Залейте молотый кофе горячей водой 90-95°C, настаивайте 4-5 минут, процедите.
 • Профессиональный: По охране труда - Согласно Приказу Минтруда № 782н, на высоте >1.8м используйте СИЗ (страховочная привязь, каска). Группа безопасности - 2-я для высоты >5м."""
+
+        # 🌤️ ПОГОДА: Проверяем, является ли это запросом о погоде
+        if WEATHER_AVAILABLE and is_weather_query(question):
+            try:
+                logger.info("🌤️ Обнаружен запрос о погоде")
+                weather_response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: get_weather(question)
+                )
+
+                if weather_response:
+                    # Удаляем thinking message
+                    try:
+                        await thinking_message.delete()
+                    except:
+                        pass
+
+                    # Отправляем погоду
+                    await update.message.reply_text(weather_response, parse_mode="Markdown")
+
+                    # Добавляем в историю
+                    await add_message_to_history_async(user_id, 'user', question)
+                    await add_message_to_history_async(user_id, 'assistant', weather_response)
+
+                    logger.info("✅ Погода отправлена пользователю")
+                    return  # Прерываем обработку
+            except Exception as e:
+                logger.error(f"Ошибка получения погоды: {e}")
+                # Продолжаем обычную обработку если погода не получена
 
         # 🌐 ВЕБ-ПОИСК: Проверяем, нужен ли поиск актуальной информации
         web_search_results = None
