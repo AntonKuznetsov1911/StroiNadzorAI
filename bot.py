@@ -1,4 +1,4 @@
-"""
+9()"""
 Telegram бот СтройНадзорAI - AI консультант по строительным нормативам
 С поддержкой технического анализа фотографий
 """
@@ -710,13 +710,13 @@ def classify_user_intent(user_message: str) -> dict:
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
             model = "grok-2-1212"  # Быстрая модель для простых запросов
-            max_tokens = 500
+            max_tokens = 1000
         elif intent_type == "technical_question":
             model = "grok-2-1212-reasoning"  # Reasoning модель для технических вопросов
-            max_tokens = 2500
+            max_tokens = 5000
         else:  # complex_analysis
             model = "grok-2-1212-reasoning"  # Reasoning модель для сложного анализа
-            max_tokens = 3000
+            max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
 
@@ -732,7 +732,7 @@ def classify_user_intent(user_message: str) -> dict:
         return {
             "intent": "technical_question",
             "model": "grok-2-1212-reasoning",
-            "max_tokens": 2500
+            "max_tokens": 5000
         }
 
 
@@ -2899,7 +2899,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lambda: call_grok_with_retry(
                 client,
                 model="grok-2-1212-reasoning",  # Reasoning модель для анализа изображений
-                max_tokens=2500,
+                max_tokens=6000,
                 temperature=0.7,
                 messages=[
                     {
@@ -3162,7 +3162,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         lambda: call_grok_with_retry(
                             client,
                             model="grok-2-1212-reasoning",  # Reasoning модель для анализа документов
-                            max_tokens=3000,
+                            max_tokens=6000,
                             temperature=0.3,
                             messages=[
                                 {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},

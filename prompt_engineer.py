@@ -149,7 +149,7 @@ STYLE: [краткое описание стиля]"""
 
             message = client.messages.create(
                 model="claude-sonnet-4-5-20250929",
-                max_tokens=1000,
+                max_tokens=3000,
                 messages=[{
                     "role": "user",
                     "content": f"Создай детальный промпт для генерации строительной схемы:\n\n\"{user_request}\""
