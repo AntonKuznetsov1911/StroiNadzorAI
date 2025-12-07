@@ -623,7 +623,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
-async def call_grok_with_streaming(client, model, messages, max_tokens, temperature):
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, tools=None):
     """
     Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
 
@@ -633,6 +633,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
         messages: Список сообщений
         max_tokens: Максимум токенов
         temperature: Температура
+        tools: Список инструментов [{"type": "web_search"}, {"type": "x_search"}]
 
     Yields:
         str - части текста по мере получения от API
@@ -643,7 +644,8 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             model=model,
             messages=messages,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
+            tools=tools
         ):
             yield chunk
 
@@ -657,7 +659,8 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             model=model,
             messages=messages,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
+            tools=tools
         )
         # Отдаём весь ответ целиком
         yield response["choices"][0]["message"]["content"]
@@ -2937,7 +2940,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Формируем ответ
         result = f"🔍 **Анализ фотографии:**\n\n{analysis}\n\n"
-        result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
+        result += f"⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
 
         # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
         max_length = 4000  # Оставляем запас
@@ -3909,7 +3912,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     model="grok-2-1212",  # Быстрая модель
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
-                    temperature=0.7
+                    temperature=0.7,
+                    tools=grok_tools
                 ):
                     first_phase_answer += chunk
                     answer += chunk
@@ -3951,7 +3955,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         model=selected_model,  # Основная модель
                         messages=continuation_messages,
                         max_tokens=selected_max_tokens - 500,
-                        temperature=0.7
+                        temperature=0.7,
+                        tools=grok_tools
                     ):
                         answer += chunk
 
@@ -4124,7 +4129,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if project_saved:
             result += f"📁 Сохранено в проект: **{saved_project_name}**\n"
 
-        result += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
+        result += f"⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
 
         # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
         reply_markup = None
