@@ -1,4 +1,4 @@
-9()"""
+"""
 Telegram бот СтройНадзорAI - AI консультант по строительным нормативам
 С поддержкой технического анализа фотографий
 """
@@ -3985,12 +3985,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         # Если ответ длинный - отправляем полную версию в новом сообщении
                         await streaming_msg.edit_text(f"{answer[:4000]}...\n\n⚠️ Ответ был слишком длинным. Полная версия ниже:")
                         # Отправляем полный ответ в отдельном сообщении
-                        await update.message.reply_text(answer)
+                        chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
+                        for chunk in chunks:
+                            await update.message.reply_text(chunk)
                 except Exception as e:
                     logger.error(f"Ошибка финального обновления streaming: {e}")
                     # Fallback: отправляем полный ответ в любом случае
                     try:
-                        await update.message.reply_text(answer)
+                        chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
+                        for chunk in chunks:
+                            await update.message.reply_text(chunk)
                     except:
                         pass
 
