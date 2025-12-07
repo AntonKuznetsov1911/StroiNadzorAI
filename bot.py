@@ -192,7 +192,7 @@ except ImportError:
     CALCULATORS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculators.py не найден")
 
-# Интерактивные обработчики калькуляторов v3.3
+# Интерактивные обработчики калькуляторов v4.0
 try:
     from calculator_handlers import (
         create_concrete_calculator_handler,
@@ -202,11 +202,25 @@ try:
         create_water_calculator_handler,
         create_winter_calculator_handler,
         create_math_calculator_handler,
+        create_brick_calculator_handler,
+        create_tile_calculator_handler,
+        create_paint_calculator_handler,
+        create_wall_area_calculator_handler,
+        create_roof_calculator_handler,
+        create_plaster_calculator_handler,
+        create_wallpaper_calculator_handler,
+        create_laminate_calculator_handler,
+        create_insulation_calculator_handler,
+        create_foundation_calculator_handler,
+        create_stairs_calculator_handler,
+        create_drywall_calculator_handler,
+        create_earthwork_calculator_handler,
+        create_labor_calculator_handler,
         quick_concrete,
         quick_math
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.5 (все 7) загружены")
+    logger.info("✅ Интерактивные калькуляторы v4.0 (все 21) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -5528,12 +5542,41 @@ def main():
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
 
-    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0 ===
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v4.0 ===
     # Интерактивные калькуляторы вызываются через меню /calculators и команды
+    if CALCULATOR_HANDLERS_AVAILABLE:
+        # Основные 7 калькуляторов
+        application.add_handler(create_concrete_calculator_handler())
+        application.add_handler(create_rebar_calculator_handler())
+        application.add_handler(create_formwork_calculator_handler())
+        application.add_handler(create_electrical_calculator_handler())
+        application.add_handler(create_water_calculator_handler())
+        application.add_handler(create_winter_calculator_handler())
+        application.add_handler(create_math_calculator_handler())
+
+        # Новые 14 калькуляторов
+        application.add_handler(create_brick_calculator_handler())
+        application.add_handler(create_tile_calculator_handler())
+        application.add_handler(create_paint_calculator_handler())
+        application.add_handler(create_wall_area_calculator_handler())
+        application.add_handler(create_roof_calculator_handler())
+        application.add_handler(create_plaster_calculator_handler())
+        application.add_handler(create_wallpaper_calculator_handler())
+        application.add_handler(create_laminate_calculator_handler())
+        application.add_handler(create_insulation_calculator_handler())
+        application.add_handler(create_foundation_calculator_handler())
+        application.add_handler(create_stairs_calculator_handler())
+        application.add_handler(create_drywall_calculator_handler())
+        application.add_handler(create_earthwork_calculator_handler())
+        application.add_handler(create_labor_calculator_handler())
+
+        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21)")
+
+    # Старая система калькуляторов (для обратной совместимости)
     if INTERACTIVE_CALCS_AVAILABLE:
         application.add_handler(create_concrete_calculator_handler())
         application.add_handler(create_rebar_calculator_handler())
-        logger.info("✅ Интерактивные калькуляторы v5.0 зарегистрированы (бетон, арматура)")
+        logger.info("✅ Старая система калькуляторов также активна")
 
     # === КАТЕГОРИЗАЦИЯ НОРМАТИВОВ v1.0 ===
     if REGULATIONS_CATEGORIES_AVAILABLE:
