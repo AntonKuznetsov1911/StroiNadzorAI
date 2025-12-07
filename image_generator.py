@@ -93,7 +93,7 @@ def should_generate_image(user_message: str) -> bool:
 
 # === ГЛАВНАЯ ФУНКЦИЯ ГЕНЕРАЦИИ ===
 
-def generate_construction_image(user_request: str, use_hd: bool = False) -> Optional[Dict]:
+async def generate_construction_image(user_request: str, use_hd: bool = False) -> Optional[Dict]:
     """
     Сгенерировать изображение на основе запроса пользователя
     Использует Stable Diffusion Web UI
@@ -119,7 +119,7 @@ def generate_construction_image(user_request: str, use_hd: bool = False) -> Opti
             return None
 
         logger.info("🚀 Используем Stable Diffusion для генерации")
-        return generate_with_sd(user_request, schematic_type, use_hd)
+        return await generate_with_sd(user_request, schematic_type, use_hd)
 
     except Exception as e:
         logger.error(f"❌ Ошибка генерации изображения: {e}")
@@ -128,7 +128,7 @@ def generate_construction_image(user_request: str, use_hd: bool = False) -> Opti
         return None
 
 
-def generate_with_sd(
+async def generate_with_sd(
     user_request: str,
     schematic_type: str,
     use_hd: bool = False
@@ -162,14 +162,11 @@ def generate_with_sd(
 
         logger.info(f"📝 Финальный промпт: {prompt[:100]}...")
 
-        # Генерируем
-        import asyncio
-        image_data = asyncio.run(
-            sd_gen.generate_construction_schematic(
-                description=user_request,
-                schematic_type=schematic_type,
-                style="technical"
-            )
+        # Генерируем (теперь с await)
+        image_data = await sd_gen.generate_construction_schematic(
+            description=user_request,
+            schematic_type=schematic_type,
+            style="technical"
         )
 
         if image_data:

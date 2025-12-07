@@ -3853,10 +3853,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 # Генерируем изображение
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: generate_construction_image(question, use_hd=False)
-                )
+                result = await generate_construction_image(question, use_hd=False)
 
                 if result and result.get("image_data"):
                     # Удаляем сообщение о генерации
@@ -5410,16 +5407,13 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отправляем сообщение о процессе
     generating_message = await update.message.reply_text(
         "🎨 Создаю техническую схему...\n"
-        "Это займет 5-15 секунд\n\n"
-        "💡 Используется Gemini AI"
+        "Это займет 10-30 секунд\n\n"
+        "💡 Используется Stable Diffusion"
     )
 
     try:
         # Генерируем изображение
-        result = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: generate_construction_image(user_request, use_hd=False)
-        )
+        result = await generate_construction_image(user_request, use_hd=False)
 
         if result and result.get("image_data"):
             # Удаляем сообщение о генерации
