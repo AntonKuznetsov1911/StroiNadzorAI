@@ -4533,6 +4533,84 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"❌ Ошибка обработки связанного вопроса: {e}")
             await query.answer("⚠️ Ошибка обработки вопроса", show_alert=True)
 
+
+    # ===== New inline "menu in one row" actions =====
+
+    elif query.data == "answer_hide":
+        # Скрыть всё и оставить только ответ на вопрос
+        last_answer = context.user_data.get("last_answer")
+        if not last_answer:
+            await query.answer("⚠️ Нет ответа для скрытия", show_alert=True)
+            return
+
+        try:
+            await query.edit_message_text(last_answer)
+            await query.answer("🫥 Скрыто")
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_hide: {e}")
+            await query.answer("⚠️ Не удалось скрыть", show_alert=True)
+
+    elif query.data == "answer_menu":
+        # Показать/вернуть меню под ответ
+        if not IMPROVEMENTS_V3_AVAILABLE:
+            await query.answer("⚠️ Функция недоступна", show_alert=True)
+            return
+
+        related_questions = context.user_data.get("related_questions", [])
+        keyboard = create_answer_buttons(related_questions=related_questions)
+        try:
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+            await query.answer("☰ Меню")
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_menu: {e}")
+            await query.answer("⚠️ Не удалось показать меню", show_alert=True)
+
+    elif query.data == "answer_more":
+        # Попросить модель дать ещё одну версию ответа
+        original_q = context.user_data.get("last_question")
+        last_answer = context.user_data.get("last_answer")
+        if not original_q:
+            await query.answer("⚠️ Не найден исходный вопрос", show_alert=True)
+            return
+
+        await query.answer("🔁 Генерирую ещё вариант…")
+
+        try:
+            # Отправляем короткий follow-up промпт в общий обработчик (как новый вопрос)
+            followup = (
+                f"Дай альтернативную версию ответа на вопрос: {original_q}\n\n"
+                f"Текущий ответ (для контекста):\n{last_answer}\n\n"
+                "Сделай по-другому: другая структура/формулировки, но без выдуманных фактов."
+            )
+
+            from telegram import Message, Update
+            fake_message = Message(
+                message_id=0,
+                date=datetime.now(),
+                chat=query.message.chat,
+                from_user=query.from_user,
+                text=followup,
+            )
+            fake_update = Update(update_id=0, message=fake_message)
+            await handle_text(fake_update, context)
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_more: {e}")
+            await query.answer("⚠️ Не удалось сгенерировать вариант", show_alert=True)
+
+    elif query.data == "answer_edit":
+        # Подсказка пользователю как уточнить/переоформить запрос
+        await query.answer("✏️", show_alert=False)
+        try:
+            await query.message.reply_text(
+                "✏️ Напишите уточнение одним сообщением — я переработаю ответ.\n\n"
+                "Примеры:\n"
+                "• «Сделай короче и по пунктам»\n"
+                "• «Дай 2 варианта решения»\n"
+                "• «Укажи риски и как проверить качество»"
+            )
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_edit: {e}")
+
     elif query.data == "show_regulations":
         # Кнопка "Нормативы" - показать категории
         if IMPROVEMENTS_V3_AVAILABLE:
