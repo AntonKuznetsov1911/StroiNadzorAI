@@ -66,12 +66,6 @@ def create_reply_suggestions_keyboard(related_questions=None, include_collapse=T
 
     rows = []
 
-    # 1-я строка — быстрые действия
-    rows.append([
-        KeyboardButton("🔁 Ещё вариант"),
-        KeyboardButton("✏️ Изменить ответ"),
-    ])
-
     # 2-4 строки — связанные вопросы
     for q in related_questions[:3]:
         rows.append([KeyboardButton(q if len(q) <= 60 else q[:57] + "...")])
