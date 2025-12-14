@@ -3,7 +3,12 @@
 Интерактивные кнопки, навигация, калькуляторы
 """
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 # ========================================
 # 1. ИНТЕРАКТИВНЫЕ КНОПКИ ПОД ОТВЕТАМИ
