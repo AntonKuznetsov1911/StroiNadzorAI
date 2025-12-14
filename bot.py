@@ -568,7 +568,7 @@ def get_claude_client():
         claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return claude_client
 
-def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools=None):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None):
     """
     Вызов xAI Grok API с автоматическим fallback на Claude при сбое
 
@@ -578,7 +578,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools
     3. Логирует какой API был использован
 
     Args:
-        tools: Список инструментов [{"type": "live_search", "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
     """
     # Сначала пытаемся Grok
     try:
@@ -588,7 +588,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            tools=tools
+            search_parameters=search_parameters
         )
         logger.info("✅ Ответ получен от xAI Grok")
         return response
@@ -640,7 +640,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
-async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, tools=None):
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None):
     """
     Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
 
@@ -650,7 +650,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
         messages: Список сообщений
         max_tokens: Максимум токенов
         temperature: Температура
-        tools: Список инструментов [{"type": "live_search", "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
 
     Yields:
         str - части текста по мере получения от API
@@ -662,7 +662,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            tools=tools
+            search_parameters=search_parameters
         ):
             yield chunk
 
@@ -677,7 +677,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            tools=tools
+            search_parameters=search_parameters
         )
         # Отдаём весь ответ целиком
         yield response["choices"][0]["message"]["content"]
@@ -2907,9 +2907,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         loop = asyncio.get_event_loop()
 
         # Включаем web_search для анализа фото (поиск информации о дефектах)
-        photo_tools = [
-            {"type": "live_search", "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]},
-        ]
+        search_params = {
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}
 
         response = await loop.run_in_executor(
             None,
@@ -2941,7 +2940,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                     }
                 ],
-                tools=photo_tools
+                search_parameters=search_params
             )
         )
         analysis = response["choices"][0]["message"]["content"]
@@ -3169,9 +3168,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     loop = asyncio.get_event_loop()
 
                     # Включаем web_search для анализа документов (поиск нормативов)
-                    doc_tools = [
-                        {"type": "live_search", "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]},
-                    ]
+                    search_params = {
+                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}
 
                     response = await loop.run_in_executor(
                         None,
@@ -3184,7 +3182,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
                                 {"role": "user", "content": analysis_prompt}
                             ],
-                            tools=doc_tools
+                            search_parameters=search_params
                         )
                     )
                     expert_opinion = response["choices"][0]["message"]["content"]
@@ -3728,9 +3726,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         intent_type = intent_info.get("intent_type", "technical_question")
 
         # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
-        grok_tools = [
-            {"type": "live_search", "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]},  # Поиск в интернете
-        ]
+        search_params = {
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}  # Поиск в интернете
         logger.info("🌐 Grok Tools включены для всех запросов: live_search")
 
         # Универсальный системный промпт для всех типов запросов
@@ -3899,7 +3896,7 @@ E) Запрос «найди/проверь/актуально/ссылки» �
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
-                    tools=grok_tools
+                    search_parameters=search_params
                 ):
                     first_phase_answer += chunk
                     answer += chunk
@@ -3942,7 +3939,7 @@ E) Запрос «найди/проверь/актуально/ссылки» �
                         messages=continuation_messages,
                         max_tokens=selected_max_tokens - 500,
                         temperature=0.7,
-                        tools=grok_tools
+                        search_parameters=search_params
                     ):
                         answer += chunk
 
@@ -4008,7 +4005,7 @@ E) Запрос «найди/проверь/актуально/ссылки» �
                         max_tokens=selected_max_tokens,
                         temperature=0.7,
                         messages=messages_with_system,
-                        tools=grok_tools
+                        search_parameters=search_params
                     )
                 )
                 answer = response["choices"][0]["message"]["content"]
@@ -4030,7 +4027,7 @@ E) Запрос «найди/проверь/актуально/ссылки» �
                     max_tokens=selected_max_tokens,
                     temperature=0.7,
                     messages=messages_with_system,
-                    tools=grok_tools
+                    search_parameters=search_params
                 )
             )
             answer = response["choices"][0]["message"]["content"]

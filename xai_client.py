@@ -4,7 +4,7 @@
 import httpx
 import os
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class XAIClient:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         timeout: int = 120,
-        tools: List[Dict[str, Any]] = None
+        search_parameters: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Создать chat completion запрос к xAI Grok API
@@ -37,7 +37,7 @@ class XAIClient:
             max_tokens: Максимальное количество токенов в ответе
             temperature: Температура генерации (0-2)
             timeout: Таймаут запроса в секундах
-            tools: Список инструментов [{"type": "web_search"}, {"type": "x_search"}]
+            search_parameters: Параметры поиска [{"type": "web_search"}, {"type": "x_search"}]
 
         Returns:
             Ответ от API в формате словаря
@@ -52,8 +52,8 @@ class XAIClient:
         }
 
         # Добавляем tools если переданы
-        if tools:
-            payload["tools"] = tools
+        if search_parameters:
+            payload["search_parameters"] = search_parameters
 
         try:
             with httpx.Client(timeout=timeout) as client:
@@ -82,7 +82,7 @@ class XAIClient:
         max_tokens: int = 1000,
         temperature: float = 0.7,
         timeout: int = 120,
-        tools: List[Dict[str, Any]] = None
+        search_parameters: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Асинхронная версия chat_completions_create
@@ -97,8 +97,8 @@ class XAIClient:
         }
 
         # Добавляем tools если переданы
-        if tools:
-            payload["tools"] = tools
+        if search_parameters:
+            payload["search_parameters"] = search_parameters
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -187,7 +187,7 @@ class XAIClient:
 
 def call_xai_with_retry(client: XAIClient, model: str, messages: List[Dict[str, str]],
                         max_tokens: int = 1000, temperature: float = 0.7,
-                        max_retries: int = 3, tools: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+                        max_retries: int = 3, search_parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Вызов xAI API с retry logic и exponential backoff
 
@@ -198,7 +198,7 @@ def call_xai_with_retry(client: XAIClient, model: str, messages: List[Dict[str, 
         max_tokens: Максимум токенов
         temperature: Температура
         max_retries: Максимальное количество попыток
-        tools: Список инструментов (web_search, x_search и т.д.)
+        search_parameters: Параметры поиска (web_search, x_search и т.д.)
 
     Returns:
         Ответ от API
