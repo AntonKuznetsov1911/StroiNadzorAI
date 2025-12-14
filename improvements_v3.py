@@ -44,30 +44,14 @@ def create_answer_buttons(context_data=None, related_questions=None):
 
 
 def create_related_questions_buttons(related_questions):
-    """
-    Создать кнопки со связанными вопросами
-
-    Args:
-        related_questions: list of str - список связанных вопросов
-
-    Returns:
-        InlineKeyboardMarkup
-    """
+    """Legacy: кнопки связанных вопросов (не используется в новом "меню в строке")."""
     buttons = []
 
-    for i, question in enumerate(related_questions[:3]):  # Максимум 3 вопроса
-        # Обрезаем вопрос если слишком длинный для кнопки
-        display_text = question if len(question) <= 60 else question[:57] + "..."
-        buttons.append([InlineKeyboardButton(
-            f"❓ {display_text}",
-            callback_data=f"related_q_{i}"
-        )])
+    for i, question in enumerate(related_questions[:3]):
+        display_text = question if len(question) <= 72 else question[:69] + "..."
+        buttons.append([InlineKeyboardButton(display_text, callback_data=f"related_q_{i}")])
 
-    # Кнопка "Назад"
-    buttons.append([InlineKeyboardButton(
-        "« Назад",
-        callback_data="hide_related_questions"
-    )])
+    buttons.append([InlineKeyboardButton("« Назад", callback_data="answer_back")])
 
     return InlineKeyboardMarkup(buttons)
 
