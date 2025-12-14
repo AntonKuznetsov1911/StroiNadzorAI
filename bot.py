@@ -578,7 +578,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, tools
     3. Логирует какой API был использован
 
     Args:
-        tools: Список инструментов [{"type": "live_search"}, {"type": "x_search"}]
+        tools: Список инструментов [{"type": "live_search", "sources": ["web", "news", "x"]}, {"type": "x_search"}]
     """
     # Сначала пытаемся Grok
     try:
@@ -650,7 +650,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
         messages: Список сообщений
         max_tokens: Максимум токенов
         temperature: Температура
-        tools: Список инструментов [{"type": "live_search"}, {"type": "x_search"}]
+        tools: Список инструментов [{"type": "live_search", "sources": ["web", "news", "x"]}, {"type": "x_search"}]
 
     Yields:
         str - части текста по мере получения от API
@@ -2908,7 +2908,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Включаем web_search для анализа фото (поиск информации о дефектах)
         photo_tools = [
-            {"type": "live_search"},
+            {"type": "live_search", "sources": ["web", "news", "x"]},
             {"type": "x_search"}
         ]
 
@@ -3171,7 +3171,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Включаем web_search для анализа документов (поиск нормативов)
                     doc_tools = [
-                        {"type": "live_search"},
+                        {"type": "live_search", "sources": ["web", "news", "x"]},
                         {"type": "x_search"}
                     ]
 
@@ -3731,7 +3731,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
         grok_tools = [
-            {"type": "live_search"},  # Поиск в интернете
+            {"type": "live_search", "sources": ["web", "news", "x"]},  # Поиск в интернете
             {"type": "x_search"}     # Поиск в X (Twitter)
         ]
         logger.info("🌐 Grok Tools включены для всех запросов: live_search, x_search")
