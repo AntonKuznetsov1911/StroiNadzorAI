@@ -4476,30 +4476,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
+    # legacy callbacks (раньше был отдельный экран связанных вопросов)
     elif query.data == "show_related_questions":
-        # Кнопка "Связанные вопросы" - показать умные связанные вопросы (v3.1)
-        if IMPROVEMENTS_V3_AVAILABLE:
-            related_questions = context.user_data.get("related_questions", [])
-            if related_questions:
-                keyboard = create_related_questions_buttons(related_questions)
-                # Формируем текст с вопросами для предпросмотра
-                questions_preview = "\n\n".join([f"❓ {q}" for q in related_questions])
-                await query.edit_message_reply_markup(reply_markup=keyboard)
-                logger.info("✅ Показаны связанные вопросы")
-            else:
-                await query.answer("⚠️ Связанные вопросы не найдены", show_alert=True)
-        else:
-            await query.answer("⚠️ Функция недоступна", show_alert=True)
+        await query.answer("ℹ️ Связанные вопросы теперь сразу под ответом", show_alert=True)
 
     elif query.data == "hide_related_questions":
-        # Кнопка "Назад" - вернуть стандартные кнопки
-        if IMPROVEMENTS_V3_AVAILABLE:
-            related_questions = context.user_data.get("related_questions", [])
-            keyboard = create_answer_buttons(related_questions=related_questions)
-            await query.edit_message_reply_markup(reply_markup=keyboard)
-            logger.info("✅ Скрыты связанные вопросы")
-        else:
-            await query.answer("⚠️ Функция недоступна", show_alert=True)
+        await query.answer("ℹ️ Связанные вопросы теперь сразу под ответом", show_alert=True)
 
     elif query.data.startswith("related_q_"):
         # Клик на связанный вопрос - отправляем его как новый вопрос
