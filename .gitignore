@@ -36,3 +36,7 @@ build/
 *.egg-info/
 RAILWAY_QUICK_UPDATE.html
 nul
+-e 
+# Environment files
+*.env
+*.env.*
