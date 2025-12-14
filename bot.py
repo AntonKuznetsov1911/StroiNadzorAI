@@ -4116,10 +4116,10 @@ E) Запрос «найди/проверь/актуально/ссылки» �
         context.user_data["last_project_saved"] = bool(project_saved)
         context.user_data["last_saved_project_name"] = saved_project_name if project_saved else None
 
-        # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
+        # Создаём подсказки в стиле GigaChat (reply keyboard над полем ввода)
         reply_markup = None
         if IMPROVEMENTS_V3_AVAILABLE:
-            reply_markup = create_answer_buttons(related_questions=related_questions)
+            reply_markup = create_reply_suggestions_keyboard(related_questions=related_questions)
 
         # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
         user_id = update.effective_user.id
