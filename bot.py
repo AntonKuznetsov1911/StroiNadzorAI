@@ -4105,11 +4105,9 @@ E) Запрос «найди/проверь/актуально/ссылки» �
         context.user_data["last_question"] = question
         context.user_data["last_mentioned_regs"] = mentioned_regs
 
-        # Добавляем информацию о сохранении в проект
-        if project_saved:
-            result += f"📁 Сохранено в проект: **{saved_project_name}**\n"
-
-        result += f"⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+        # Доп.данные про проект тоже сохраняем отдельно — показывать будем только по запросу
+        context.user_data["last_project_saved"] = bool(project_saved)
+        context.user_data["last_saved_project_name"] = saved_project_name if project_saved else None
 
         # Создаём интерактивные кнопки под ответом (v3.1 с умными связанными вопросами)
         reply_markup = None
