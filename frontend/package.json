@@ -1,0 +1,8 @@
+{
+  "name": "placeholder-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "start": "node -e \"console.log('placeholder frontend'); setInterval(()=>{}, 1e9)\""
+  }
+}
