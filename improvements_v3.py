@@ -42,6 +42,11 @@ def create_answer_buttons(context_data=None, related_questions=None):
         for i, q in enumerate(related_questions[:3]):
             display_text = q if len(q) <= 72 else q[:69] + "..."
             buttons.append([
+                InlineKeyboardButton(display_text, callback_data=f"related_q_{i}")
+            ])
+
+    return InlineKeyboardMarkup(buttons)
+
 
 
 def create_reply_suggestions_keyboard(related_questions=None, include_collapse=True):
