@@ -10,36 +10,34 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 # ========================================
 
 def create_answer_buttons(context_data=None, related_questions=None):
-    """
-    Создать интерактивные кнопки для ответа
+    """Создать интерактивные кнопки под ответом.
+
+    Цель: меню «в одну строку» + кнопки связанных вопросов (как в примере на скриншоте).
 
     Args:
-        context_data: dict с контекстом (упомянутые нормативы, теги и т.д.)
-        related_questions: list of str - список связанных вопросов (если есть)
+        context_data: dict (пока не используется)
+        related_questions: list[str] - связанные вопросы
 
     Returns:
         InlineKeyboardMarkup
     """
+
     buttons = []
 
-    # Если есть умные связанные вопросы, добавляем их в начало
-    if related_questions and len(related_questions) > 0:
-        buttons.append([InlineKeyboardButton(
-            "💡 Связанные вопросы ▾",
-            callback_data="show_related_questions"
-        )])
-
-    # Основные кнопки действий
-    buttons.extend([
-        [
-            InlineKeyboardButton("📚 Нормативы", callback_data="show_regulations"),
-            InlineKeyboardButton("🧮 Калькулятор", callback_data="calculator")
-        ],
-        [
-            InlineKeyboardButton("📎 Экспорт PDF", callback_data="export_pdf"),
-            InlineKeyboardButton("💾 Сохранить", callback_data="save_query")
-        ]
+    # Верхняя строка действий ("меню в строке")
+    buttons.append([
+        InlineKeyboardButton("🔁 Ещё вариант", callback_data="answer_more"),
+        InlineKeyboardButton("✏️ Изменить", callback_data="answer_edit"),
+        InlineKeyboardButton("🫥 Скрыть", callback_data="answer_hide"),
     ])
+
+    # Связанные вопросы — отдельными кнопками (крупные "плашки")
+    if related_questions:
+        for i, q in enumerate(related_questions[:3]):
+            display_text = q if len(q) <= 72 else q[:69] + "..."
+            buttons.append([
+                InlineKeyboardButton(display_text, callback_data=f"related_q_{i}")
+            ])
 
     return InlineKeyboardMarkup(buttons)
 
