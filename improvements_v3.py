@@ -28,6 +28,7 @@ def create_answer_buttons(context_data=None, related_questions=None):
     buttons.append([
         InlineKeyboardButton("🔁 Ещё вариант", callback_data="answer_more"),
         InlineKeyboardButton("✏️ Изменить", callback_data="answer_edit"),
+        InlineKeyboardButton("☰ Меню", callback_data="answer_menu"),
         InlineKeyboardButton("🫥 Скрыть", callback_data="answer_hide"),
     ])
 
