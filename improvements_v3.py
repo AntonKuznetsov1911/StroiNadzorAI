@@ -42,6 +42,40 @@ def create_answer_buttons(context_data=None, related_questions=None):
         for i, q in enumerate(related_questions[:3]):
             display_text = q if len(q) <= 72 else q[:69] + "..."
             buttons.append([
+
+
+def create_reply_suggestions_keyboard(related_questions=None, include_collapse=True):
+    """ReplyKeyboard-подсказки как у GigaChat (кнопки над полем ввода).
+
+    Важно: ReplyKeyboardMarkup показывается внизу чата и может быть свёрнут пользователем.
+
+    Args:
+        related_questions: list[str] | None
+        include_collapse: bool - добавить кнопку «Свернуть ⌄»
+
+    Returns:
+        ReplyKeyboardMarkup
+    """
+
+    related_questions = related_questions or []
+
+    rows = []
+
+    # 1-я строка — быстрые действия
+    rows.append([
+        KeyboardButton("🔁 Ещё вариант"),
+        KeyboardButton("✏️ Изменить ответ"),
+    ])
+
+    # 2-4 строки — связанные вопросы
+    for q in related_questions[:3]:
+        rows.append([KeyboardButton(q if len(q) <= 60 else q[:57] + "...")])
+
+    if include_collapse:
+        rows.append([KeyboardButton("▾ Свернуть")])
+
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False, input_field_placeholder="Задайте вопрос…")
+
                 InlineKeyboardButton(display_text, callback_data=f"related_q_{i}")
             ])
 
