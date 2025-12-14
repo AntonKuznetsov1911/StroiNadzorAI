@@ -144,6 +144,7 @@ try:
     from improvements_v3 import (
         create_answer_buttons,
         create_quick_actions_menu,
+        create_reply_suggestions_keyboard,
         create_calculators_menu,
         create_regulations_category_menu,
         create_region_selection_menu,
