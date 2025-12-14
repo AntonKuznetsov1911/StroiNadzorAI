@@ -2908,7 +2908,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Включаем web_search для анализа фото (поиск информации о дефектах)
         search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
 
         response = await loop.run_in_executor(
             None,
@@ -3169,7 +3169,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Включаем web_search для анализа документов (поиск нормативов)
                     search_params = {
-                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}
+                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
 
                     response = await loop.run_in_executor(
                         None,
@@ -3727,7 +3727,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
         search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}  # Поиск в интернете
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}  # Поиск в интернете
         logger.info("🌐 Grok Tools включены для всех запросов: live_search")
 
         # Универсальный системный промпт для всех типов запросов
