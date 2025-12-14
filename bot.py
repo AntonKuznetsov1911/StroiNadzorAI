@@ -4519,18 +4519,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ===== New inline "menu in one row" actions =====
 
     elif query.data == "answer_hide":
-        # Скрыть всё и оставить только ответ на вопрос
-        last_answer = context.user_data.get("last_answer")
-        if not last_answer:
-            await query.answer("⚠️ Нет ответа для скрытия", show_alert=True)
-            return
-
+        # Скрыть «функции» (кнопки под сообщением) и оставить только текст ответа.
+        # Это аналог системной кнопки Telegram «скрыть клавиатуру», но для InlineKeyboard.
         try:
-            await query.edit_message_text(last_answer)
+            await query.edit_message_reply_markup(reply_markup=None)
             await query.answer("🫥 Скрыто")
         except Exception as e:
             logger.error(f"❌ Ошибка answer_hide: {e}")
-            await query.answer("⚠️ Не удалось скрыть", show_alert=True)
+            await query.answer("⚠️ Не удалось скрыть кнопки", show_alert=True)
 
     elif query.data == "answer_menu":
         # Показать/вернуть меню под ответ
