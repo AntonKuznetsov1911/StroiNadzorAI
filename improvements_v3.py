@@ -81,11 +81,6 @@ def create_reply_suggestions_keyboard(related_questions=None, include_collapse=T
 
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False, input_field_placeholder="Задайте вопрос…")
 
-                InlineKeyboardButton(display_text, callback_data=f"related_q_{i}")
-            ])
-
-    return InlineKeyboardMarkup(buttons)
-
 
 def create_related_questions_buttons(related_questions):
     """Legacy: кнопки связанных вопросов (не используется в новом "меню в строке")."""
