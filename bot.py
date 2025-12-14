@@ -14,7 +14,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
