@@ -76,8 +76,6 @@ def create_reply_suggestions_keyboard(related_questions=None, include_collapse=T
     for q in related_questions[:3]:
         rows.append([KeyboardButton(q if len(q) <= 60 else q[:57] + "...")])
 
-    if include_collapse:
-        rows.append([KeyboardButton("▾ Свернуть")])
 
     return ReplyKeyboardMarkup(rows, resize_keyboard=True, one_time_keyboard=False, input_field_placeholder="Задайте вопрос…")
 

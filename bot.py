@@ -3307,12 +3307,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
 
-    # Если пользователь нажал кнопку сворачивания подсказок (GigaChat-style)
-    if question.strip() == "▾ Свернуть":
-        await update.message.reply_text("✅ Подсказки скрыты", reply_markup=ReplyKeyboardRemove())
-        return
-
-        return
 
     # === СТАРАЯ ОБРАБОТКА ШАБЛОНОВ (ЗАМЕНЕНА НА ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ v1.0) ===
     # Теперь используются ConversationHandler из document_handlers.py
