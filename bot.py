@@ -4192,6 +4192,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка кнопок"""
     query = update.callback_query
 
+
+# ===== UI helpers (inline "menu in one row") =====
+
+def _build_compact_menu_keyboard():
+    """Кнопки в одну строку под ответом."""
+    if not IMPROVEMENTS_V3_AVAILABLE:
+        return None
+    # create_answer_buttons теперь рисует строку действий + связанные вопросы
+    related = (context_tmp := None)
+    return None
+
     # Пропускаем callbacks которые относятся к ConversationHandler калькуляторов
     calculator_prefixes = [
         "concrete_class_", "concrete_wastage_",
