@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>БЫСТРАЯ НАСТРОЙКА PostgreSQL - 3 КЛИКА</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            line-height: 1.8;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .urgent {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .step {
+            background: #f8f9fa;
+            border: 3px solid #667eea;
+            padding: 30px;
+            margin-bottom: 25px;
+            border-radius: 15px;
+            font-size: 1.3em;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.5em;
+            margin-right: 15px;
+        }
+
+        .big-button {
+            display: block;
+            background: #28a745;
+            color: white;
+            padding: 25px 40px;
+            border-radius: 15px;
+            text-decoration: none;
+            text-align: center;
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 30px 0;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(40, 167, 69, 0.4);
+        }
+
+        .big-button:hover {
+            background: #218838;
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(40, 167, 69, 0.6);
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #856404;
+        }
+
+        .info {
+            background: #d1ecf1;
+            border-left: 5px solid #0c5460;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-size: 1.1em;
+        }
+
+        .screenshot {
+            background: #e9ecef;
+            border: 3px dashed #667eea;
+            padding: 30px;
+            margin: 20px 0;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.2em;
+            color: #666;
+        }
+
+        .arrow {
+            font-size: 3em;
+            text-align: center;
+            color: #667eea;
+            margin: 15px 0;
+        }
+
+        .final {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1.5em;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ БЫСТРАЯ НАСТРОЙКА</h1>
+
+        <div class="urgent">
+            🔥 ВСЕГО 3 ПРОСТЫХ ШАГА! 🔥
+        </div>
+
+        <div class="info">
+            <strong>📍 ВАШ ПРОЕКТ:</strong> calm-dream<br>
+            <strong>🆔 ID:</strong> cac8c864-c41a-4296-afc4-98cce3e8a6ad<br>
+            <strong>✅ Статус:</strong> Бот работает, но НЕТ PostgreSQL
+        </div>
+
+        <!-- ШАГ 1 -->
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>ОТКРОЙТЕ ВАШ ПРОЕКТ:</strong>
+        </div>
+
+        <a href="https://railway.app/project/cac8c864-c41a-4296-afc4-98cce3e8a6ad" class="big-button" target="_blank">
+            🚀 ОТКРЫТЬ ПРОЕКТ CALM-DREAM
+        </a>
+
+        <div class="arrow">⬇️</div>
+
+        <!-- ШАГ 2 -->
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>ДОБАВЬТЕ POSTGRESQL:</strong>
+        </div>
+
+        <div class="screenshot">
+            <p><strong>Вы увидите страницу проекта</strong></p>
+            <p style="margin-top: 15px;">Нажмите кнопку <span class="highlight">+ New</span> (правый верхний угол)</p>
+            <p style="margin-top: 15px;">↓</p>
+            <p>Выберите <span class="highlight">Database</span></p>
+            <p style="margin-top: 15px;">↓</p>
+            <p>Выберите <span class="highlight">Add PostgreSQL</span></p>
+        </div>
+
+        <div class="info">
+            💡 <strong>ПОДСКАЗКА:</strong> Кнопка "+ New" находится в правом верхнем углу страницы, рядом с настройками проекта
+        </div>
+
+        <div class="arrow">⬇️</div>
+
+        <!-- ШАГ 3 -->
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>ПОДОЖДИТЕ 2 МИНУТЫ:</strong>
+        </div>
+
+        <div class="screenshot">
+            <p>Railway автоматически:</p>
+            <p style="margin-top: 10px;">✅ Создаст PostgreSQL базу данных</p>
+            <p>✅ Добавит DATABASE_URL в переменные</p>
+            <p>✅ Перезапустит бота</p>
+            <p>✅ Бот начнёт запоминать диалоги!</p>
+        </div>
+
+        <div class="info" style="background: #d4edda; border-left-color: #28a745;">
+            <strong>🎯 ВАЖНО:</strong> Railway автоматически свяжет PostgreSQL с вашим ботом! DATABASE_URL добавится сам!
+        </div>
+
+        <!-- ПРОВЕРКА -->
+        <div class="step" style="background: #fff3cd;">
+            <span class="step-number" style="background: #ffc107;">✓</span>
+            <strong>ПРОВЕРЬТЕ РАБОТУ:</strong>
+        </div>
+
+        <div class="screenshot">
+            <p><strong>Кликните на сервис "worker" (ваш бот)</strong></p>
+            <p style="margin-top: 15px;">↓</p>
+            <p>Вкладка <span class="highlight">Deployments</span></p>
+            <p style="margin-top: 15px;">↓</p>
+            <p>Последний деплой → <span class="highlight">View Logs</span></p>
+            <p style="margin-top: 15px;">↓</p>
+            <p style="color: #28a745; font-weight: bold;">Ищите: "✅ PostgreSQL база данных инициализирована"</p>
+        </div>
+
+        <!-- ГОТОВО -->
+        <div class="final">
+            <h2 style="margin-bottom: 20px;">🎉 ВСЁ ГОТОВО!</h2>
+            <p>После этого просто напишите боту в Telegram - он будет запоминать все диалоги!</p>
+            <p style="margin-top: 20px; font-size: 0.9em;">Telegram: @stroinadzor_ai_bot</p>
+        </div>
+
+        <div class="info" style="margin-top: 30px;">
+            <strong>📱 ТЕСТИРОВАНИЕ:</strong><br>
+            1. Напишите боту любой вопрос<br>
+            2. Получите ответ<br>
+            3. Напишите "Помнишь, о чем мы говорили?"<br>
+            4. Бот вспомнит предыдущий разговор! ✅
+        </div>
+
+        <a href="https://railway.app/project/cac8c864-c41a-4296-afc4-98cce3e8a6ad" class="big-button" target="_blank" style="margin-top: 40px;">
+            🔥 НАЧАТЬ НАСТРОЙКУ СЕЙЧАС
+        </a>
+
+        <div style="text-align: center; margin-top: 40px; color: #666;">
+            <p><strong>Проект:</strong> StroiNadzorAI</p>
+            <p><strong>Railway Project:</strong> calm-dream</p>
+            <p style="margin-top: 10px;">🤖 Generated with Claude Code</p>
+        </div>
+    </div>
+</body>
+</html>
