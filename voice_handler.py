@@ -1,6 +1,6 @@
 """
 Модуль для обработки голосовых сообщений
-Поддержка: OpenAI Whisper, Google Gemini, Vosk (офлайн)
+Поддержка: OpenAI Whisper, Vosk (офлайн)
 """
 
 import os
@@ -31,16 +31,12 @@ VOSK_MODEL_DIR.mkdir(exist_ok=True)
 openai_client = None
 OPENAI_VOICE_ENABLED = False
 
-# Gemini клиент
-gemini_client = None
-GEMINI_VOICE_ENABLED = False
-
 # Vosk модель
 vosk_model = None
 VOSK_ENABLED = False
 
-# Приоритет движков: 1) OpenAI Whisper  2) Gemini  3) Vosk
-VOICE_ENGINE = None  # "openai", "gemini" или "vosk"
+# Приоритет движков: 1) OpenAI Whisper  2) Vosk
+VOICE_ENGINE = None  # "openai" или "vosk"
 
 
 def init_openai_voice():
@@ -60,27 +56,6 @@ def init_openai_voice():
         logger.debug("openai не установлен")
     except Exception as e:
         logger.warning(f"Ошибка инициализации OpenAI: {e}")
-
-    return False
-
-
-def init_gemini_voice():
-    """Инициализация Gemini для голоса"""
-    global gemini_client, GEMINI_VOICE_ENABLED
-
-    try:
-        from google import genai
-
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if api_key:
-            gemini_client = genai.Client(api_key=api_key)
-            GEMINI_VOICE_ENABLED = True
-            logger.info("✅ Gemini Voice инициализирован")
-            return True
-    except ImportError:
-        logger.debug("google-genai не установлен")
-    except Exception as e:
-        logger.warning(f"Ошибка инициализации Gemini Voice: {e}")
 
     return False
 
@@ -134,12 +109,6 @@ def init_voice_engine():
     if init_openai_voice():
         VOICE_ENGINE = "openai"
         logger.info("🎤 Голосовой движок: OpenAI Whisper")
-        return True
-
-    # Пробуем Gemini (бесплатный)
-    if init_gemini_voice():
-        VOICE_ENGINE = "gemini"
-        logger.info("🎤 Голосовой движок: Gemini API")
         return True
 
     # Пробуем Vosk (офлайн fallback)
@@ -252,61 +221,6 @@ async def transcribe_with_openai(audio_path: str) -> dict:
 
 
 # ========================================
-# РАСПОЗНАВАНИЕ ЧЕРЕЗ GEMINI
-# ========================================
-
-async def transcribe_with_gemini(audio_path: str) -> dict:
-    """Распознавание через Gemini API"""
-
-    if not GEMINI_VOICE_ENABLED or not gemini_client:
-        return {"success": False, "text": "", "error": "Gemini не инициализирован"}
-
-    try:
-        import base64
-
-        file_path = Path(audio_path)
-        with open(file_path, "rb") as f:
-            audio_data = f.read()
-
-        suffix = file_path.suffix.lower()
-        mime_types = {
-            ".ogg": "audio/ogg", ".oga": "audio/ogg",
-            ".mp3": "audio/mpeg", ".wav": "audio/wav",
-            ".m4a": "audio/mp4", ".webm": "audio/webm"
-        }
-        mime_type = mime_types.get(suffix, "audio/ogg")
-
-        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-
-        loop = asyncio.get_event_loop()
-
-        def _transcribe():
-            response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[{
-                    "role": "user",
-                    "parts": [
-                        {"inline_data": {"mime_type": mime_type, "data": audio_base64}},
-                        {"text": "Расшифруй это голосовое сообщение на русском языке. "
-                                "Верни только текст сообщения без комментариев."}
-                    ]
-                }]
-            )
-            return response.text if response.text else ""
-
-        text = await loop.run_in_executor(None, _transcribe)
-
-        if text:
-            return {"success": True, "text": text.strip(), "error": "", "engine": "gemini"}
-        else:
-            return {"success": False, "text": "", "error": "Пустой ответ от Gemini"}
-
-    except Exception as e:
-        logger.error(f"Ошибка Gemini: {e}")
-        return {"success": False, "text": "", "error": str(e)}
-
-
-# ========================================
 # РАСПОЗНАВАНИЕ ЧЕРЕЗ VOSK
 # ========================================
 
@@ -381,13 +295,12 @@ async def transcribe_voice(voice_file_path: str) -> dict:
 
     Приоритет движков:
     1. OpenAI Whisper (лучшее качество)
-    2. Gemini (бесплатный)
-    3. Vosk (офлайн fallback)
+    2. Vosk (офлайн fallback)
     """
     if not VOICE_ENGINE:
         return {
             "success": False, "text": "",
-            "error": "Голосовые сообщения отключены. Нужен OPENAI_API_KEY, GEMINI_API_KEY или Vosk модель."
+            "error": "Голосовые сообщения отключены. Нужен OPENAI_API_KEY или Vosk модель."
         }
 
     logger.info(f"🎤 Распознавание голоса ({VOICE_ENGINE}): {voice_file_path}")
@@ -395,19 +308,9 @@ async def transcribe_voice(voice_file_path: str) -> dict:
     # Используем выбранный движок
     if VOICE_ENGINE == "openai":
         result = await transcribe_with_openai(voice_file_path)
-        # Fallback на Gemini
-        if not result["success"] and GEMINI_VOICE_ENABLED:
-            logger.info("OpenAI не сработал, пробуем Gemini...")
-            result = await transcribe_with_gemini(voice_file_path)
         # Fallback на Vosk
         if not result["success"] and VOSK_ENABLED:
-            logger.info("Пробуем Vosk...")
-            result = await transcribe_with_vosk(voice_file_path)
-
-    elif VOICE_ENGINE == "gemini":
-        result = await transcribe_with_gemini(voice_file_path)
-        if not result["success"] and VOSK_ENABLED:
-            logger.info("Gemini не сработал, пробуем Vosk...")
+            logger.info("OpenAI не сработал, пробуем Vosk...")
             result = await transcribe_with_vosk(voice_file_path)
 
     elif VOICE_ENGINE == "vosk":
@@ -444,8 +347,7 @@ async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
             "error": "🎤 Голосовые сообщения отключены.\n\n"
                     "Варианты включения:\n"
                     "1️⃣ OPENAI_API_KEY (лучшее качество)\n"
-                    "2️⃣ GEMINI_API_KEY (бесплатно)\n"
-                    "3️⃣ Vosk модель (офлайн)"
+                    "2️⃣ Vosk модель (офлайн)"
         }
 
     file_path = None
