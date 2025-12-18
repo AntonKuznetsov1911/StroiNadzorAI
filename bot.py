@@ -3830,18 +3830,18 @@ E) Запрос «найди/проверь/актуально/ссылки» �
         # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
-        if IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
+        if GEMINI_AVAILABLE and should_generate_image(question):
             logger.info("🎨 Обнаружен запрос на генерацию изображения")
 
             # Отправляем сообщение о генерации
             generating_msg = await update.message.reply_text(
-                "🎨 Генерирую изображение...\n"
+                "🎨 Генерирую изображение через DALL-E 3...\n"
                 "Это займет 10-30 секунд"
             )
 
             try:
-                # Генерируем изображение
-                result = await generate_construction_image(question, use_hd=False)
+                # Генерируем изображение через DALL-E
+                result = await generate_construction_image_gemini(question)
 
                 if result and result.get("image_data"):
                     # Удаляем сообщение о генерации
@@ -3853,7 +3853,14 @@ E) Запрос «найди/проверь/актуально/ссылки» �
 
                     # Отправляем изображение
                     result["image_data"].seek(0)
-                    caption = format_generation_result(result, question)
+
+                    # Форматируем описание для DALL-E
+                    caption = f"🎨 **Изображение сгенерировано через DALL-E 3**\n\n"
+                    if result.get("text"):
+                        caption += f"📝 {result['text'][:200]}\n\n"
+                    caption += f"• Модель: {result.get('model', 'dall-e-3')}\n"
+                    caption += f"• Движок: {result.get('engine', 'openai')}\n\n"
+                    caption += "💡 *Создано с помощью OpenAI DALL-E 3*"
 
                     await update.message.reply_photo(
                         photo=result["image_data"],
