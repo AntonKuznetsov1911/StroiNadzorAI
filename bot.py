@@ -3865,7 +3865,7 @@ E) Запрос «найди/проверь/актуально/ссылки» �
 
                 logger.info("📝 Запрашиваем промпт у xAI Grok...")
                 grok_response = await client.chat_completions_create_async(
-                    model="grok-beta",
+                    model="grok-3",
                     messages=prompt_messages,
                     max_tokens=500,
                     temperature=0.7
