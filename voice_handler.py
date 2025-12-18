@@ -1,6 +1,6 @@
 """
 Модуль для обработки голосовых сообщений
-Поддержка: Google Gemini API, Vosk (офлайн)
+Поддержка: OpenAI Whisper, Google Gemini, Vosk (офлайн)
 """
 
 import os
@@ -27,6 +27,10 @@ VOSK_MODEL_DIR.mkdir(exist_ok=True)
 # ИНИЦИАЛИЗАЦИЯ ДВИЖКОВ РАСПОЗНАВАНИЯ
 # ========================================
 
+# OpenAI клиент
+openai_client = None
+OPENAI_VOICE_ENABLED = False
+
 # Gemini клиент
 gemini_client = None
 GEMINI_VOICE_ENABLED = False
@@ -35,8 +39,29 @@ GEMINI_VOICE_ENABLED = False
 vosk_model = None
 VOSK_ENABLED = False
 
-# Приоритет движков: 1) Gemini  2) Vosk
-VOICE_ENGINE = None  # "gemini" или "vosk"
+# Приоритет движков: 1) OpenAI Whisper  2) Gemini  3) Vosk
+VOICE_ENGINE = None  # "openai", "gemini" или "vosk"
+
+
+def init_openai_voice():
+    """Инициализация OpenAI Whisper для голоса"""
+    global openai_client, OPENAI_VOICE_ENABLED
+
+    try:
+        from openai import OpenAI
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            openai_client = OpenAI(api_key=api_key)
+            OPENAI_VOICE_ENABLED = True
+            logger.info("✅ OpenAI Whisper инициализирован")
+            return True
+    except ImportError:
+        logger.debug("openai не установлен")
+    except Exception as e:
+        logger.warning(f"Ошибка инициализации OpenAI: {e}")
+
+    return False
 
 
 def init_gemini_voice():
@@ -105,13 +130,19 @@ def init_voice_engine():
     """Инициализация движка распознавания голоса"""
     global VOICE_ENGINE
 
-    # Пробуем Gemini (приоритет)
+    # Пробуем OpenAI Whisper (приоритет - лучшее качество)
+    if init_openai_voice():
+        VOICE_ENGINE = "openai"
+        logger.info("🎤 Голосовой движок: OpenAI Whisper")
+        return True
+
+    # Пробуем Gemini (бесплатный)
     if init_gemini_voice():
         VOICE_ENGINE = "gemini"
         logger.info("🎤 Голосовой движок: Gemini API")
         return True
 
-    # Пробуем Vosk (fallback)
+    # Пробуем Vosk (офлайн fallback)
     if init_vosk():
         VOICE_ENGINE = "vosk"
         logger.info("🎤 Голосовой движок: Vosk (офлайн)")
@@ -130,37 +161,94 @@ init_voice_engine()
 # ========================================
 
 def convert_ogg_to_wav(ogg_path: str) -> Optional[str]:
-    """
-    Конвертирует OGG в WAV для Vosk
-
-    Args:
-        ogg_path: путь к OGG файлу
-
-    Returns:
-        путь к WAV файлу или None
-    """
+    """Конвертирует OGG в WAV для Vosk"""
     try:
         wav_path = ogg_path.replace('.ogg', '.wav')
-
-        # Используем ffmpeg для конвертации
         result = subprocess.run(
             ['ffmpeg', '-y', '-i', ogg_path, '-ar', '16000', '-ac', '1', wav_path],
             capture_output=True,
             timeout=30
         )
-
         if result.returncode == 0 and Path(wav_path).exists():
             return wav_path
-
-        logger.warning(f"ffmpeg вернул код {result.returncode}")
         return None
-
     except FileNotFoundError:
-        logger.warning("ffmpeg не установлен. Установите: apt install ffmpeg")
+        logger.warning("ffmpeg не установлен")
         return None
     except Exception as e:
-        logger.error(f"Ошибка конвертации аудио: {e}")
+        logger.error(f"Ошибка конвертации: {e}")
         return None
+
+
+def convert_ogg_to_mp3(ogg_path: str) -> Optional[str]:
+    """Конвертирует OGG в MP3 для OpenAI"""
+    try:
+        mp3_path = ogg_path.replace('.ogg', '.mp3')
+        result = subprocess.run(
+            ['ffmpeg', '-y', '-i', ogg_path, '-acodec', 'libmp3lame', '-q:a', '2', mp3_path],
+            capture_output=True,
+            timeout=30
+        )
+        if result.returncode == 0 and Path(mp3_path).exists():
+            return mp3_path
+        return None
+    except FileNotFoundError:
+        logger.warning("ffmpeg не установлен")
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка конвертации: {e}")
+        return None
+
+
+# ========================================
+# РАСПОЗНАВАНИЕ ЧЕРЕЗ OPENAI WHISPER
+# ========================================
+
+async def transcribe_with_openai(audio_path: str) -> dict:
+    """Распознавание через OpenAI Whisper API"""
+
+    if not OPENAI_VOICE_ENABLED or not openai_client:
+        return {"success": False, "text": "", "error": "OpenAI не инициализирован"}
+
+    try:
+        file_path = Path(audio_path)
+
+        # Конвертируем OGG в MP3 если нужно (Whisper лучше работает с MP3)
+        if file_path.suffix.lower() == '.ogg':
+            mp3_path = convert_ogg_to_mp3(audio_path)
+            if mp3_path:
+                file_path = Path(mp3_path)
+            # Если конвертация не удалась, пробуем с OGG
+
+        loop = asyncio.get_event_loop()
+
+        def _transcribe():
+            with open(file_path, "rb") as audio_file:
+                response = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ru",
+                    response_format="text"
+                )
+            return response
+
+        text = await loop.run_in_executor(None, _transcribe)
+
+        # Удаляем временный MP3
+        if str(file_path).endswith('.mp3') and file_path != Path(audio_path):
+            try:
+                file_path.unlink(missing_ok=True)
+            except:
+                pass
+
+        if text:
+            return {"success": True, "text": text.strip(), "error": "", "engine": "openai"}
+        else:
+            return {"success": False, "text": "", "error": "Пустой ответ от Whisper"}
+
+    except Exception as e:
+        logger.error(f"Ошибка OpenAI Whisper: {e}")
+        return {"success": False, "text": "", "error": str(e)}
 
 
 # ========================================
@@ -180,19 +268,14 @@ async def transcribe_with_gemini(audio_path: str) -> dict:
         with open(file_path, "rb") as f:
             audio_data = f.read()
 
-        # Определяем MIME тип
         suffix = file_path.suffix.lower()
         mime_types = {
-            ".ogg": "audio/ogg",
-            ".oga": "audio/ogg",
-            ".mp3": "audio/mpeg",
-            ".wav": "audio/wav",
-            ".m4a": "audio/mp4",
-            ".webm": "audio/webm"
+            ".ogg": "audio/ogg", ".oga": "audio/ogg",
+            ".mp3": "audio/mpeg", ".wav": "audio/wav",
+            ".m4a": "audio/mp4", ".webm": "audio/webm"
         }
         mime_type = mime_types.get(suffix, "audio/ogg")
 
-        # Кодируем в base64
         audio_base64 = base64.b64encode(audio_data).decode('utf-8')
 
         loop = asyncio.get_event_loop()
@@ -200,24 +283,14 @@ async def transcribe_with_gemini(audio_path: str) -> dict:
         def _transcribe():
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=[
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "inline_data": {
-                                    "mime_type": mime_type,
-                                    "data": audio_base64
-                                }
-                            },
-                            {
-                                "text": "Расшифруй это голосовое сообщение на русском языке. "
-                                       "Верни только текст сообщения без комментариев. "
-                                       "Если речь неразборчива, напиши '[неразборчиво]'."
-                            }
-                        ]
-                    }
-                ]
+                contents=[{
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {"mime_type": mime_type, "data": audio_base64}},
+                        {"text": "Расшифруй это голосовое сообщение на русском языке. "
+                                "Верни только текст сообщения без комментариев."}
+                    ]
+                }]
             )
             return response.text if response.text else ""
 
@@ -246,7 +319,6 @@ async def transcribe_with_vosk(audio_path: str) -> dict:
     try:
         from vosk import KaldiRecognizer
 
-        # Конвертируем в WAV если нужно
         if audio_path.endswith('.ogg'):
             wav_path = convert_ogg_to_wav(audio_path)
             if not wav_path:
@@ -258,10 +330,8 @@ async def transcribe_with_vosk(audio_path: str) -> dict:
 
         def _transcribe():
             wf = wave.open(wav_path, "rb")
-
-            # Проверяем формат
             if wf.getnchannels() != 1 or wf.getsampwidth() != 2:
-                return {"success": False, "text": "", "error": "Неподдерживаемый формат аудио"}
+                return ""
 
             rec = KaldiRecognizer(vosk_model, wf.getframerate())
             rec.SetWords(True)
@@ -276,18 +346,15 @@ async def transcribe_with_vosk(audio_path: str) -> dict:
                     if part.get('text'):
                         results.append(part['text'])
 
-            # Финальный результат
             final = json.loads(rec.FinalResult())
             if final.get('text'):
                 results.append(final['text'])
 
             wf.close()
-
             return " ".join(results).strip()
 
         text = await loop.run_in_executor(None, _transcribe)
 
-        # Удаляем временный WAV
         if wav_path != audio_path:
             try:
                 Path(wav_path).unlink(missing_ok=True)
@@ -312,30 +379,33 @@ async def transcribe_voice(voice_file_path: str) -> dict:
     """
     Распознаёт голосовое сообщение в текст
 
-    Автоматически выбирает движок:
-    1. Gemini (если есть API ключ)
-    2. Vosk (офлайн fallback)
-
-    Args:
-        voice_file_path: путь к голосовому файлу
-
-    Returns:
-        dict: {"success": bool, "text": str, "error": str, "engine": str}
+    Приоритет движков:
+    1. OpenAI Whisper (лучшее качество)
+    2. Gemini (бесплатный)
+    3. Vosk (офлайн fallback)
     """
     if not VOICE_ENGINE:
         return {
-            "success": False,
-            "text": "",
-            "error": "Голосовые сообщения отключены. Нужен GEMINI_API_KEY или Vosk модель."
+            "success": False, "text": "",
+            "error": "Голосовые сообщения отключены. Нужен OPENAI_API_KEY, GEMINI_API_KEY или Vosk модель."
         }
 
     logger.info(f"🎤 Распознавание голоса ({VOICE_ENGINE}): {voice_file_path}")
 
     # Используем выбранный движок
-    if VOICE_ENGINE == "gemini":
-        result = await transcribe_with_gemini(voice_file_path)
+    if VOICE_ENGINE == "openai":
+        result = await transcribe_with_openai(voice_file_path)
+        # Fallback на Gemini
+        if not result["success"] and GEMINI_VOICE_ENABLED:
+            logger.info("OpenAI не сработал, пробуем Gemini...")
+            result = await transcribe_with_gemini(voice_file_path)
+        # Fallback на Vosk
+        if not result["success"] and VOSK_ENABLED:
+            logger.info("Пробуем Vosk...")
+            result = await transcribe_with_vosk(voice_file_path)
 
-        # Если Gemini не сработал — пробуем Vosk
+    elif VOICE_ENGINE == "gemini":
+        result = await transcribe_with_gemini(voice_file_path)
         if not result["success"] and VOSK_ENABLED:
             logger.info("Gemini не сработал, пробуем Vosk...")
             result = await transcribe_with_vosk(voice_file_path)
@@ -353,17 +423,7 @@ async def transcribe_voice(voice_file_path: str) -> dict:
 
 
 async def download_voice_file(bot, file_id: str, user_id: int) -> str:
-    """
-    Скачивает голосовое сообщение из Telegram
-
-    Args:
-        bot: экземпляр бота
-        file_id: ID файла в Telegram
-        user_id: ID пользователя
-
-    Returns:
-        str: путь к скачанному файлу
-    """
+    """Скачивает голосовое сообщение из Telegram"""
     try:
         file = await bot.get_file(file_id)
         timestamp = int(datetime.now().timestamp())
@@ -377,26 +437,15 @@ async def download_voice_file(bot, file_id: str, user_id: int) -> str:
 
 
 async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
-    """
-    Полная обработка голосового сообщения
-
-    Args:
-        bot: экземпляр бота
-        voice_file_id: ID голосового файла в Telegram
-        user_id: ID пользователя
-
-    Returns:
-        dict: {"success": bool, "text": str, "error": str}
-    """
+    """Полная обработка голосового сообщения"""
     if not VOICE_ENGINE:
         return {
-            "success": False,
-            "text": "",
+            "success": False, "text": "",
             "error": "🎤 Голосовые сообщения отключены.\n\n"
                     "Варианты включения:\n"
-                    "1️⃣ Добавьте GEMINI_API_KEY (https://aistudio.google.com/apikey)\n"
-                    "2️⃣ Установите Vosk: pip install vosk\n"
-                    "   Скачайте модель: vosk-model-small-ru-0.22"
+                    "1️⃣ OPENAI_API_KEY (лучшее качество)\n"
+                    "2️⃣ GEMINI_API_KEY (бесплатно)\n"
+                    "3️⃣ Vosk модель (офлайн)"
         }
 
     file_path = None
@@ -404,18 +453,15 @@ async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
         file_path = await download_voice_file(bot, voice_file_id, user_id)
         result = await transcribe_voice(file_path)
         return result
-
     except Exception as e:
         logger.error(f"❌ Ошибка обработки голоса: {e}")
         return {"success": False, "text": "", "error": f"Ошибка: {str(e)}"}
-
     finally:
         if file_path:
             try:
                 Path(file_path).unlink(missing_ok=True)
-                # Удаляем и WAV если был создан
-                wav_path = file_path.replace('.ogg', '.wav')
-                Path(wav_path).unlink(missing_ok=True)
+                Path(file_path.replace('.ogg', '.wav')).unlink(missing_ok=True)
+                Path(file_path.replace('.ogg', '.mp3')).unlink(missing_ok=True)
             except:
                 pass
 
@@ -425,16 +471,13 @@ def cleanup_old_voice_files(max_age_hours: int = 24):
     try:
         current_time = datetime.now().timestamp()
         deleted_count = 0
-
         for file_path in VOICE_TEMP_DIR.glob("voice_*"):
             file_age_hours = (current_time - file_path.stat().st_mtime) / 3600
             if file_age_hours > max_age_hours:
                 file_path.unlink()
                 deleted_count += 1
-
         if deleted_count > 0:
             logger.info(f"🗑️ Удалено {deleted_count} старых голосовых файлов")
-
     except Exception as e:
         logger.warning(f"⚠️ Ошибка очистки: {e}")
 
