@@ -3038,12 +3038,16 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if result["success"]:
             recognized_text = result["text"]
+
+            # Показываем распознанный текст
             await thinking_msg.edit_text(
                 f"✅ Распознано:\n\n{recognized_text}\n\n⏳ Обрабатываю запрос..."
             )
 
+            # Сохраняем распознанный текст в context для handle_text
+            context.user_data['_voice_recognized_text'] = recognized_text
+
             # Обрабатываем как текстовый вопрос
-            update.message.text = recognized_text
             await handle_text(update, context)
 
         else:
@@ -3290,7 +3294,8 @@ async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
     user_id = update.effective_user.id
-    question = update.message.text
+    # Проверяем, есть ли распознанный текст из голосового сообщения
+    question = context.user_data.pop('_voice_recognized_text', None) or update.message.text
 
     # Проверка ожидания названия проекта
     if context.user_data.get("waiting_for_project_name"):
