@@ -212,7 +212,7 @@ def call_xai_with_retry(client: XAIClient, model: str, messages: List[Dict[str, 
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                tools=tools
+                search_parameters=search_parameters
             )
         except Exception as e:
             error_message = str(e)
