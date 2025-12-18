@@ -1,0 +1,13 @@
+.git
+.env
+*.bat
+*.vbs
+__pycache__
+*.pyc
+*.log
+.vscode
+.idea
+nul
+README.md
+КАК_ПОЛЬЗОВАТЬСЯ.md
+АВТОЗАПУСК.md

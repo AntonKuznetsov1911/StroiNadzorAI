@@ -14,7 +14,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -144,9 +144,13 @@ try:
     from improvements_v3 import (
         create_answer_buttons,
         create_quick_actions_menu,
+        create_reply_suggestions_keyboard,
         create_calculators_menu,
         create_regulations_category_menu,
         create_region_selection_menu,
+        create_related_questions_buttons,
+        generate_smart_related_questions_prompt,
+        parse_generated_questions,
         get_improved_help_text,
         REGULATIONS_CATEGORIES,
         CALCULATORS,
@@ -189,7 +193,7 @@ except ImportError:
     CALCULATORS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculators.py не найден")
 
-# Интерактивные обработчики калькуляторов v3.3
+# Интерактивные обработчики калькуляторов v4.0
 try:
     from calculator_handlers import (
         create_concrete_calculator_handler,
@@ -199,11 +203,25 @@ try:
         create_water_calculator_handler,
         create_winter_calculator_handler,
         create_math_calculator_handler,
+        create_brick_calculator_handler,
+        create_tile_calculator_handler,
+        create_paint_calculator_handler,
+        create_wall_area_calculator_handler,
+        create_roof_calculator_handler,
+        create_plaster_calculator_handler,
+        create_wallpaper_calculator_handler,
+        create_laminate_calculator_handler,
+        create_insulation_calculator_handler,
+        create_foundation_calculator_handler,
+        create_stairs_calculator_handler,
+        create_drywall_calculator_handler,
+        create_earthwork_calculator_handler,
+        create_labor_calculator_handler,
         quick_concrete,
         quick_math
     )
     CALCULATOR_HANDLERS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v3.5 (все 7) загружены")
+    logger.info("✅ Интерактивные калькуляторы v4.0 (все 21) загружены")
 except ImportError:
     CALCULATOR_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ Модуль calculator_handlers.py не найден")
@@ -230,6 +248,15 @@ try:
 except ImportError as e:
     WEB_SEARCH_AVAILABLE = False
     logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
+
+# Модуль погоды (Яндекс Погода API)
+try:
+    from weather import get_weather, is_weather_query
+    WEATHER_AVAILABLE = True
+    logger.info("✅ Модуль погоды загружен (Яндекс Погода API)")
+except ImportError as e:
+    WEATHER_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль weather.py не найден: {e}")
 
 # Модуль генерации изображений
 try:
@@ -392,20 +419,27 @@ except ImportError:
     PLANNER_AVAILABLE = False
     logger.warning("⚠️ Модуль work_planner.py не найден")
 
-# Claude Visualization (замена Gemini)
+# Gemini Image Generation (новый API с реальной генерацией изображений)
 try:
-    from claude_visualization import get_claude_visualizer, initialize_claude_visualizer
-    CLAUDE_VISUALIZATION_AVAILABLE = True
-    logger.info("✅ Claude Visualization модуль загружен")
+    from gemini_image_gen import (
+        initialize_gemini_generator,
+        GeminiImageGenerator,
+        generate_construction_image_gemini,
+        is_image_generation_available
+    )
+    GEMINI_AVAILABLE = True
+    logger.info("✅ Gemini Image Generator модуль загружен (с поддержкой генерации)")
 except ImportError:
-    CLAUDE_VISUALIZATION_AVAILABLE = False
-    logger.warning("⚠️ Модуль claude_visualization.py не найден")
+    GEMINI_AVAILABLE = False
+    logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
 
 # Интерактивные калькуляторы v4.0
 try:
     from interactive_calculators import (
         create_concrete_calculator_handler,
-        create_rebar_calculator_handler
+        create_rebar_calculator_handler,
+        concrete_calc_start,
+        rebar_calc_start
     )
     INTERACTIVE_CALCS_AVAILABLE = True
     logger.info("✅ Интерактивные калькуляторы v4.0 загружены")
@@ -466,15 +500,15 @@ def get_grok_client():
         grok_client = XAIClient(api_key=XAI_API_KEY)
     return grok_client
 
-# Инициализация Claude визуализатора (вместо Gemini)
-claude_visualizer = None
+# Инициализация Gemini генератора
+gemini_generator = None
 
-def get_visualizer():
-    """Получить Claude визуализатор (ленивая инициализация)"""
-    global claude_visualizer
-    if claude_visualizer is None and CLAUDE_VISUALIZATION_AVAILABLE:
-        claude_visualizer = get_claude_visualizer()
-    return claude_visualizer
+def get_gemini_generator():
+    """Получить Gemini генератор (ленивая инициализация)"""
+    global gemini_generator
+    if gemini_generator is None and GEMINI_AVAILABLE:
+        gemini_generator = initialize_gemini_generator()
+    return gemini_generator
 
 
 # === RATE LIMITING СИСТЕМА ===
@@ -485,6 +519,21 @@ user_request_times = defaultdict(list)
 # Настройки rate limiting
 RATE_LIMIT_MAX_REQUESTS = 10  # Максимум запросов
 RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
+
+# 🎯 НАСТРОЙКА STREAMING РЕЖИМА
+# True = ответы появляются постепенно (как в ChatGPT)
+# False = ответы приходят сразу целиком (классический режим)
+STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
+
+# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
+# Основная модель: grok-4-1-fast
+#   - Улучшенная reasoning способность для глубокого анализа
+#   - Используется для технических вопросов, анализа фото и документов
+#   - Более точные и профессиональные ответы
+# Быстрая модель: grok-4-1-fast
+#   - Для классификации запросов и простых вопросов
+#   - Быстрая генерация ответов
+# Fallback: Claude Sonnet 4.5 (при недоступности Grok)
 
 def check_rate_limit(user_id: int) -> bool:
     """
@@ -524,7 +573,7 @@ def get_claude_client():
         claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return claude_client
 
-def call_grok_with_retry(client, model, messages, max_tokens, temperature):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None):
     """
     Вызов xAI Grok API с автоматическим fallback на Claude при сбое
 
@@ -532,6 +581,9 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
     1. Пытается использовать xAI Grok (основной)
     2. Если ошибка - автоматически переключается на Claude (резерв)
     3. Логирует какой API был использован
+
+    Args:
+        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
     """
     # Сначала пытаемся Grok
     try:
@@ -540,7 +592,8 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
             model=model,
             messages=messages,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
+            search_parameters=search_parameters
         )
         logger.info("✅ Ответ получен от xAI Grok")
         return response
@@ -592,6 +645,49 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature):
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None):
+    """
+    Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
+
+    Args:
+        client: XAIClient instance
+        model: Модель для использования
+        messages: Список сообщений
+        max_tokens: Максимум токенов
+        temperature: Температура
+        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+
+    Yields:
+        str - части текста по мере получения от API
+    """
+    try:
+        # Используем streaming метод xAI
+        async for chunk in client.chat_completions_create_stream(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            search_parameters=search_parameters
+        ):
+            yield chunk
+
+    except Exception as grok_error:
+        logger.warning(f"⚠️ xAI Grok streaming недоступен: {str(grok_error)}")
+
+        # Fallback на обычный режим без streaming
+        logger.info("🔄 Переключение на обычный режим без streaming...")
+        response = call_grok_with_retry(
+            client=client,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            search_parameters=search_parameters
+        )
+        # Отдаём весь ответ целиком
+        yield response["choices"][0]["message"]["content"]
+
+
 # === СИСТЕМА КЛАССИФИКАЦИИ НАМЕРЕНИЙ (INTENT CLASSIFICATION) ===
 
 def classify_user_intent(user_message: str) -> dict:
@@ -622,7 +718,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model="grok-2-latest",
+            model="grok-4-1-fast",  # Быстрая модель для классификации
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -638,13 +734,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "grok-2-latest"
+            model = "grok-4-1-fast"  # Быстрая модель для простых запросов
             max_tokens = 1000
         elif intent_type == "technical_question":
-            model = "grok-2-latest"
+            model = "grok-4-1-fast"  # Reasoning модель для технических вопросов
             max_tokens = 5000
         else:  # complex_analysis
-            model = "grok-2-latest"
+            model = "grok-4-1-fast"  # Reasoning модель для сложного анализа
             max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -657,10 +753,10 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем Sonnet для надежности
+        # При ошибке используем Grok Reasoning для надежности
         return {
             "intent": "technical_question",
-            "model": "grok-2-latest",
+            "model": "grok-4-1-fast",
             "max_tokens": 5000
         }
 
@@ -1694,9 +1790,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /clear - Очистить историю
 
 *💡 УМНЫЕ ФУНКЦИИ v4.0 (ОБНОВЛЕНО!):*
-   /calculators - Меню калькуляторов (21 шт)
-   /concrete_calc - Расчет бетона (пошагово!)
-   /rebar_calc - Расчет арматуры (пошагово!)
+   /calculators - Меню калькуляторов (интерактивные!)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
@@ -1786,63 +1880,75 @@ async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /visualize - визуализация дефектов с помощью Claude AI"""
+    """Команда /visualize - визуализация дефектов с помощью Gemini AI"""
 
-    if not CLAUDE_VISUALIZATION_AVAILABLE:
+    if not GEMINI_AVAILABLE:
         await update.message.reply_text(
-            "⚠️ Функция визуализации недоступна. Модуль Claude Visualization не загружен."
+            "⚠️ Функция визуализации недоступна. Модуль Gemini не загружен."
         )
         return
 
-    visualizer = get_visualizer()
-    if not visualizer:
+    generator = initialize_gemini_generator()
+    if not generator:
         await update.message.reply_text(
-            "⚠️ Claude API недоступен. Проверьте настройки ANTHROPIC_API_KEY."
+            "⚠️ Gemini API недоступен. Проверьте настройки GEMINI_API_KEY."
         )
         return
 
-    # Если есть аргументы - обрабатываем как текстовое описание
+    # Если есть аргументы - генерируем визуализацию дефекта
     if context.args:
         defect_description = " ".join(context.args)
 
-        await update.message.reply_text("🎨 Создаю техническое описание для визуализации...")
+        generating_msg = await update.message.reply_text(
+            "🎨 Генерирую визуализацию дефекта...\n"
+            "Это займет 15-30 секунд"
+        )
 
         try:
-            # Генерируем описание визуализации на основе текста
-            description = await visualizer.visualize_defect(
-                defect_description=defect_description,
-                defect_type="общий",
-                style="technical"
+            # Генерируем изображение дефекта
+            result = await generator.visualize_defect(
+                defect_description=defect_description
             )
 
-            if description:
-                response_text = f"""🎨 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ДЛЯ ВИЗУАЛИЗАЦИИ**
+            if result and result.get("image_data"):
+                # Удаляем сообщение о генерации
+                try:
+                    await generating_msg.delete()
+                except:
+                    pass
 
-**Описание дефекта:** {defect_description}
+                # Формируем подпись
+                caption = f"""🎨 **ВИЗУАЛИЗАЦИЯ ДЕФЕКТА**
 
-**Рекомендации для визуализации:**
+**Описание:** {defect_description}
 
-{description}
+{result.get('text', '')}
 
 ---
-💡 *Это описание можно использовать для создания технических схем, диаграмм и разметки изображений.*
-🤖 Powered by Claude Sonnet 4"""
-                await update.message.reply_text(response_text, parse_mode='Markdown')
+🤖 _Сгенерировано с помощью Gemini AI_"""
+
+                # Отправляем изображение
+                result["image_data"].seek(0)
+                await update.message.reply_photo(
+                    photo=result["image_data"],
+                    caption=caption[:1024],  # Ограничение Telegram
+                    parse_mode='Markdown'
+                )
             else:
-                await update.message.reply_text(
-                    "❌ Не удалось создать описание. Попробуйте переформулировать запрос."
+                await generating_msg.edit_text(
+                    "❌ Не удалось создать визуализацию. Попробуйте переформулировать запрос."
                 )
 
         except Exception as e:
-            logger.error(f"Ошибка визуализации по тексту: {e}")
-            await update.message.reply_text(
+            logger.error(f"Ошибка визуализации дефекта: {e}")
+            await generating_msg.edit_text(
                 f"❌ Произошла ошибка: {str(e)}"
             )
 
         return
 
     # Если аргументов нет - показываем справку
-    help_text = """🎨 **ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Claude AI**
+    help_text = """🎨 **ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI**
 
 Эта команда создает детальные технические описания для визуализации строительных дефектов.
 
@@ -1867,22 +1973,21 @@ async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Рекомендации по цветовому выделению зон
 ✅ Размеры и масштаб проблемных участков
 ✅ Структурированные данные для создания схем
-✅ Ссылки на применимые СП/ГОСТ/СНиП
 
 **Примеры:**
 📌 `/visualize трещина в несущей стене`
 📌 Отправьте фото с подписью `/visualize`
 📌 `/visualize отслоение штукатурки 50x30см`
 
-🤖 *Powered by Claude Sonnet 4 - самая мощная модель для технического анализа!* 🎯"""
+*Отправьте фото или описание дефекта для визуализации!* 🎯"""
 
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 
 async def handle_photo_with_visualization(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка фотографий для визуализации через Claude"""
+    """Обработка фотографий для визуализации через Gemini"""
 
-    if not CLAUDE_VISUALIZATION_AVAILABLE:
+    if not GEMINI_AVAILABLE:
         return False
 
     caption = update.message.caption or ""
@@ -1891,10 +1996,10 @@ async def handle_photo_with_visualization(update: Update, context: ContextTypes.
     if "/visualize" not in caption.lower():
         return False
 
-    visualizer = get_visualizer()
-    if not visualizer:
+    generator = get_gemini_generator()
+    if not generator:
         await update.message.reply_text(
-            "⚠️ Claude API недоступен в данный момент."
+            "⚠️ Gemini API недоступен в данный момент."
         )
         return True
 
@@ -1906,17 +2011,21 @@ async def handle_photo_with_visualization(update: Update, context: ContextTypes.
     await update.message.reply_text("🎨 Анализирую изображение для визуализации...")
 
     try:
-        # Конвертируем изображение в base64 для Claude
-        image_base64 = base64.b64encode(photo_bytes).decode('utf-8')
+        # Определяем тип запроса
+        is_comparison = "compare" in caption.lower() or "сравнен" in caption.lower()
 
-        # Обычный анализ для визуализации
-        analysis_request = caption.replace("/visualize", "").strip() or "Проанализируй строительный дефект на фото"
-
-        description = await visualizer.analyze_and_visualize_photo(
-            image_base64=image_base64,
-            image_media_type="image/jpeg",
-            analysis_request=analysis_request
-        )
+        if is_comparison:
+            # Сравнительная визуализация
+            description = await generator.create_comparison_description(
+                before_image=bytes(photo_bytes),
+                defect_info=caption.replace("/visualize", "").replace("compare", "").strip()
+            )
+        else:
+            # Обычный анализ для визуализации
+            description = await generator.analyze_and_visualize_defect(
+                image_bytes=bytes(photo_bytes),
+                analysis_text=caption.replace("/visualize", "").strip()
+            )
 
         if description:
             response_text = f"""🎨 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ДЛЯ ВИЗУАЛИЗАЦИИ**
@@ -1925,7 +2034,7 @@ async def handle_photo_with_visualization(update: Update, context: ContextTypes.
 
 ---
 💡 *Это описание можно использовать для создания технических схем, диаграмм и аннотированных изображений дефектов.*
-🤖 Powered by Claude Sonnet 4"""
+"""
             await update.message.reply_text(response_text, parse_mode='Markdown')
         else:
             await update.message.reply_text(
@@ -2765,54 +2874,46 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = update.message.caption or ""
 
         # Формируем профессиональный промпт для Claude 3.5 Sonnet
-        system_prompt = """Вы — ведущий инженер-эксперт по техническому надзору в строительстве с 20-летним стажем работы на крупных объектах России. Ваша специализация: объективная экспертиза конструкций, техническая диагностика, нормативный контроль.
+        system_prompt = """Вы — СтройНадзорAI v2.3, AI-эксперт по техническому надзору в строительстве РФ.
 
-🎯 ТРЕБОВАНИЯ К АНАЛИЗУ:
+📸 АНАЛИЗ ИЗОБРАЖЕНИЙ - КРИТИЧЕСКИ ВАЖНО:
 
-**ПРИНЦИП ОБЪЕКТИВНОСТИ:**
-- Проведите БЕСПРИСТРАСТНЫЙ анализ фотографии
-- НЕ предполагайте наличие дефектов заранее
-- Если конструкция в удовлетворительном состоянии — так и укажите
-- Дефектами считайте ТОЛЬКО явные отклонения от нормативов
+🎯 ПРИНЦИП ОБЪЕКТИВНОСТИ:
+• Проведите БЕСПРИСТРАСТНЫЙ анализ фотографии
+• НЕ предполагайте наличие дефектов заранее
+• Если конструкция в норме — прямо укажите это
+• Дефектами считайте ТОЛЬКО явные отклонения от нормативов
 
-**ПРОФЕССИОНАЛЬНЫЙ ПОДХОД:**
-- Используйте точную строительную терминологию
-- При наличии дефектов приводите числовые параметры с допусками
-- Ссылайтесь на конкретные пункты нормативов
-- Указывайте класс опасности дефекта по ГОСТ Р 31937-2011
+📋 СТРУКТУРА ОТВЕТА (кратко, до 300 слов):
 
-**СТРУКТУРА ЭКСПЕРТНОГО ЗАКЛЮЧЕНИЯ:**
+**Анализ:**
+• Тип элемента (фундамент/стена/перекрытие/кровля)
+• Материал (бетон/кирпич/металл/дерево)
+• Состояние: ✅ норма / ⚠️ дефект выявлен
 
-📋 **1. ОБЩЕЕ ОПИСАНИЕ**
-   • Идентификация элемента конструкции
-   • Материал, конструктивная система
-   • Общее визуальное состояние
+**Если дефект обнаружен:**
+• Тип дефекта (трещина/коррозия/отслоение/деформация)
+• Критичность: низкая/средняя/высокая
+• Расположение (где именно на элементе)
+• Параметры (ширина, длина, глубина - если видно)
 
-🔍 **2. РЕЗУЛЬТАТЫ ОСМОТРА**
-   • Если дефектов НЕ ВЫЯВЛЕНО — укажите это явно
-   • Если обнаружены дефекты — опишите тип согласно СП 13-102-2003
-   • Геометрические параметры (по возможности)
-   • Категория технического состояния
+**Нормативы** (только при дефектах):
+• СП 63.13330.2018 — для бетона/ж.б (трещины, прочность)
+• СП 13-102-2003 — правила обследования
+• СП 28.13330.2017 — защита от коррозии
+• ГОСТ Р 31937-2011 — классы технического состояния
 
-📚 **3. НОРМАТИВНАЯ ОЦЕНКА** (только при наличии дефектов)
-   • Применимые нормативы с указанием пунктов
-   • Предельные допустимые значения
-   • Степень критичности
+**Рекомендации:**
+• Если норма: краткие советы по эксплуатации
+• Если дефект: метод устранения (инъектирование/усиление/замена)
 
-🔧 **4. РЕКОМЕНДАЦИИ** (при необходимости)
-   • Для объектов БЕЗ дефектов — краткие советы по эксплуатации
-   • Для объектов С дефектами — технология устранения
+💡 ПРАКТИЧЕСКИЙ ПОДХОД:
+• Используйте строительную терминологию
+• При дефектах указывайте числа с допусками
+• Если неясно — запросите дополнительные фото
+• Держите дружелюбный тон, структурируйте (bullets, emojis)
 
-**БАЗА НОРМАТИВОВ РФ:**
-• СП 63.13330.2018 — Бетонные и ж/б конструкции
-• СП 28.13330.2017 — Защита от коррозии
-• СП 13-102-2003 — Правила обследования
-• СП 22.13330.2016 — Основания и сооружения
-• СП 70.13330.2012 — Несущие конструкции
-• СП 17.13330.2017 — Кровли
-• СП 50.13330.2012 — Тепловая защита
-
-ВАЖНО: Будьте объективны. Если дефектов нет — так и напишите. Не ищите проблемы там, где их нет."""
+ВАЖНО: Объективность превыше всего. Если дефектов нет — так и напишите. Не ищите проблемы там, где их нет!"""
 
         user_message = "Проведите объективный технический осмотр изображения. Опишите состояние конструкции и укажите, есть ли дефекты или нарушения строительных норм."
         if caption:
@@ -2821,11 +2922,16 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Вызываем xAI Grok API для анализа изображения с retry logic
         client = get_grok_client()
         loop = asyncio.get_event_loop()
+
+        # Включаем web_search для анализа фото (поиск информации о дефектах)
+        search_params = {
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
+
         response = await loop.run_in_executor(
             None,
             lambda: call_grok_with_retry(
                 client,
-                model="grok-2-latest",
+                model="grok-4-1-fast",  # Reasoning модель для анализа изображений
                 max_tokens=6000,
                 temperature=0.7,
                 messages=[
@@ -2850,7 +2956,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             }
                         ]
                     }
-                ]
+                ],
+                search_parameters=search_params
             )
         )
         analysis = response["choices"][0]["message"]["content"]
@@ -2863,7 +2970,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Формируем ответ
         result = f"🔍 **Анализ фотографии:**\n\n{analysis}\n\n"
-        result += f"⏰ Время анализа: {datetime.now().strftime('%H:%M:%S')}"
+        result += f"⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
 
         # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
         max_length = 4000  # Оставляем запас
@@ -3073,20 +3180,26 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 {pdf_text}"""
 
-                    # Отправляем на анализ Claude
+                    # Отправляем на анализ Grok
                     client = get_grok_client()
                     loop = asyncio.get_event_loop()
+
+                    # Включаем web_search для анализа документов (поиск нормативов)
+                    search_params = {
+                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
+
                     response = await loop.run_in_executor(
                         None,
                         lambda: call_grok_with_retry(
                             client,
-                            model="grok-2-latest",
+                            model="grok-4-1-fast",  # Reasoning модель для анализа документов
                             max_tokens=6000,
                             temperature=0.3,
                             messages=[
                                 {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
                                 {"role": "user", "content": analysis_prompt}
-                            ]
+                            ],
+                            search_parameters=search_params
                         )
                     )
                     expert_opinion = response["choices"][0]["message"]["content"]
@@ -3210,7 +3323,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
-        return
+
 
     # === СТАРАЯ ОБРАБОТКА ШАБЛОНОВ (ЗАМЕНЕНА НА ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ v1.0) ===
     # Теперь используются ConversationHandler из document_handlers.py
@@ -3243,39 +3356,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thinking_message = await update.message.reply_text(thinking_text, parse_mode="Markdown")
 
     try:
-        # Проверяем выбранную роль пользователя (v3.2)
-        if ROLES_AVAILABLE:
-            user_role = get_user_role(context)
-            system_prompt = get_role_system_prompt(user_role)
-        else:
-            # Стандартный промпт если модуль ролей недоступен
-            system_prompt = f"""**РОЛЬ И МИССИЯ:**
-Вы — универсальный AI-помощник по строительству в России с 20-летним опытом. Ваша задача — помогать:
-• **Новичкам**: объяснять простым языком основы (что такое СНиП, как читать чертежи, зачем нужен ППР)
-• **Прорабам и мастерам**: решать практические вопросы на площадке (технология работ, охрана труда, закрытие объёмов)
-• **ГИПам и руководителям**: помогать с документацией, претензионной работой, управлением сроками и нормативами
+        # ВАЖНО: главный режим — единый универсальный промпт с авто-адаптацией.
+        # Роли (/role) остаются как функция интерфейса, но НЕ должны переопределять system_prompt.
+        # Поэтому здесь не подставляем role-based промпт.
+        system_prompt = ""  # будет установлен ниже перед вызовом модели
 
-**КРИТИЧЕСКИ ВАЖНО: Используйте ТОЛЬКО актуальные требования 2025-2026 года!**
+        # --- Legacy блок промпта (оставлен как «текст-справка», не влияет на работу бота) ---
+        """
 
-**ПРИНЦИПЫ РАБОТЫ:**
-
-1. **АДАПТАЦИЯ ПОД УРОВЕНЬ**:
-   • Новичку → простой язык, аналогии, пошаговые инструкции, объяснение терминов
-   • Профессионалу → точные ссылки на нормативы, конкретные цифры и допуски, формулы расчетов
-
-2. **СТРУКТУРА ОТВЕТА** (всегда придерживайтесь):
-   📌 **Короткий ответ** (1-2 предложения — суть)
-   📐 **Подробности** (технология, нормативы, цифры, формулы)
-   💡 **Практический совет** (что делать прямо сейчас на объекте)
-   📚 **Ссылка на документ** (СП, ГОСТ, ГК РФ — пункт и год издания)
-
-3. **БЕЗОПАСНОСТЬ — ПРИОРИТЕТ №1**:
-   ⚠️ Если вопрос касается потенциально опасных работ (высота, электричество, грузоподъёмные механизмы, земляные работы в котлованах), ВСЕГДА начинайте с требований охраны труда!
-
-4. **ДОСТУП К ИСТОРИИ ДИАЛОГА**:
-   У вас есть доступ к истории диалога с пользователем. Используйте контекст предыдущих сообщений для более точных ответов. Если пользователь задает уточняющий вопрос или использует местоимения ("это", "он", "там"), обращайтесь к истории диалога.
-
-**БАЗА АКТУАЛЬНЫХ ТРЕБОВАНИЙ 2025:**
 
 📋 ОСНОВНЫЕ ЗАКОНЫ РФ:
 • 190-ФЗ - Градостроительный кодекс РФ
@@ -3553,10 +3641,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 **ПРИНЦИПЫ ОТВЕТА:**
 ✓ Точность формулировок (избегайте "примерно", "около" без количественной оценки)
+
 ✓ Структурированность (используйте нумерацию, маркеры)
 ✓ Нормативная обоснованность (каждое утверждение = ссылка на документ)
 ✓ Практическая применимость (как использовать на объекте)
 ✓ Учет контекста диалога (если это уточняющий вопрос)"""
+
+        # --- конец legacy блока ---
 
         # Проверяем активный проект и адаптируем промпт
         if PROJECTS_AVAILABLE:
@@ -3643,39 +3734,95 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         selected_model = intent_info["model"]
         selected_max_tokens = intent_info["max_tokens"]
+        intent_type = intent_info.get("intent_type", "technical_question")
 
-        # Для простых запросов используем упрощенный промпт
-        if intent_info["intent"] in ["simple_save", "simple_question"]:
-            system_prompt = """Ты — AI-ассистент по строительству в России.
+        # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
+        search_params = {
+            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}  # Поиск в интернете
+        logger.info("🌐 Grok Tools включены для всех запросов: live_search")
 
-Отвечай кратко и по делу:
-• Если пользователь просит сохранить/зафиксировать — подтверди коротко
-• Если задан простой вопрос — дай краткий понятный ответ
-• Используй структурированный формат только если нужно"""
+        # Универсальный системный промпт для всех типов запросов
+        # Оптимизирован для Grok 2-1212 Reasoning
+        system_prompt = """Вы — «СтройНадзорAI», Telegram‑ассистент по строительству в РФ (нормативы, технадзор, практика площадки, сметы, юридические вопросы, управление проектами).
 
-        # 🌐 ВЕБ-ПОИСК: Проверяем, нужен ли поиск актуальной информации
-        web_search_results = None
-        if WEB_SEARCH_AVAILABLE:
+🇷🇺 ЯЗЫК И ТОН:
+• Всегда отвечайте на русском языке
+• Тон: дружелюбный, уверенный, профессиональный
+• Используйте эмодзи (как в текущем стиле бота)
+• Ответ всегда должен быть структурированным (секции + буллеты)
+
+🌐 ИНТЕРНЕТ В РЕАЛЬНОМ ВРЕМЕНИ (ОБЯЗАТЕЛЬНОЕ ПОВЕДЕНИЕ):
+• У вас есть доступ к инструментам live_search
+• Для каждого запроса старайтесь проверять актуальность через live_search
+• ОБЯЗАТЕЛЬНО используйте live_search, если в вопросе есть:
+  — «актуально/свежие/последние изменения/на 2025/2026/сегодня»
+  — даты, цены, новости, статистика, судебная практика
+  — «найди/проверь/дай ссылку/первоисточник/пункт»
+  — упоминание конкретного документа (СП/ГОСТ/ФЗ/ПП и т.п.)
+• Если инструменты временно недоступны — честно скажите об этом и предложите, где проверить
+
+📚 ПРАВИЛО НОРМАТИВОВ (ТОЛЬКО ПО ЗАПРОСУ ПОЛЬЗОВАТЕЛЯ):
+• НЕ добавляйте ссылки на нормативы, пункты и цитаты «для солидности»
+• Если пользователь ЯВНО просит: «дай норматив/пункт/ссылку/первоисточник/на что ссылаться» — тогда:
+  1) укажите документ и (по возможности) пункт/таблицу
+  2) дайте 1–3 ссылки на первоисточник
+  3) добавьте блок «🌐 Источники» со списком URL
+
+🧠 АНТИ-ГАЛЛЮЦИНАЦИИ:
+• Не выдумывайте факты, цифры, даты, цены, статусы документов
+• Если данных недостаточно — задайте 2–4 уточняющих вопроса (и при желании дайте предварительный ответ с оговоркой)
+
+⚠️ БЕЗОПАСНОСТЬ:
+• Если вопрос про опасные работы (высота, электричество, газ, котлован, кран, пожарка) — начните с блока «⚠️ Безопасность»
+
+🎯 АВТО-АДАПТАЦИЯ (выбирайте формат ответа по смыслу запроса):
+A) Практика площадки / «что делать сейчас» → короткий чек‑лист + контрольные точки
+B) Технический/проектный вопрос → разбор, допуски, расчётная логика (нормативы — только по запросу)
+C) Юридика/сметы/договоры → риски, варианты, что фиксировать письменно
+D) Бытовой/общий вопрос → просто и понятно, без нормативов
+E) Запрос «найди/проверь/актуально/ссылки» → обязательно live_search + блок «🌐 Источники»
+
+🧩 СТАНДАРТНАЯ СТРУКТУРА ОТВЕТА (почти всегда):
+1) 📌 Коротко (1–3 строки по сути)
+2) 🔎 Разбор / Что важно учесть (буллеты)
+3) 🛠️ Что делать (пошагово)
+4) ✅ Контроль результата (как проверить)
+5) ❓ Уточняющие вопросы (если нужно)
+6) 🌐 Источники (только если пользователь просил ссылки/первоисточник или вы использовали live_search)
+
+В конце (если уместно) задайте 1 короткий уточняющий вопрос для продолжения диалога."""
+
+        # 🌤️ ПОГОДА: Проверяем, является ли это запросом о погоде
+        if WEATHER_AVAILABLE and is_weather_query(question):
             try:
-                web_search_results = await asyncio.get_event_loop().run_in_executor(
+                logger.info("🌤️ Обнаружен запрос о погоде")
+                weather_response = await asyncio.get_event_loop().run_in_executor(
                     None,
-                    lambda: perform_web_search(question)
+                    lambda: get_weather(question)
                 )
 
-                # Если найдены результаты, добавляем их в контекст
-                if web_search_results:
-                    logger.info("✅ Веб-поиск выполнен, результаты добавлены в контекст")
-                    # Добавляем результаты поиска в историю разговора
-                    conversation_history.append({
-                        "role": "assistant",
-                        "content": web_search_results
-                    })
-                    conversation_history.append({
-                        "role": "user",
-                        "content": "Используй эти актуальные данные из интернета при ответе на мой вопрос."
-                    })
+                if weather_response:
+                    # Удаляем thinking message
+                    try:
+                        await thinking_message.delete()
+                    except:
+                        pass
+
+                    # Отправляем погоду
+                    await update.message.reply_text(weather_response, parse_mode="Markdown")
+
+                    # Добавляем в историю
+                    await add_message_to_history_async(user_id, 'user', question)
+                    await add_message_to_history_async(user_id, 'assistant', weather_response)
+
+                    logger.info("✅ Погода отправлена пользователю")
+                    return  # Прерываем обработку
             except Exception as e:
-                logger.error(f"Ошибка веб-поиска: {e}")
+                logger.error(f"Ошибка получения погоды: {e}")
+                # Продолжаем обычную обработку если погода не получена
+
+        # 🌐 ВЕБ-ПОИСК: Теперь выполняется через Grok инструменты (live_search)
+        # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
         if IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
@@ -3689,10 +3836,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 # Генерируем изображение
-                result = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: generate_construction_image(question, use_hd=False)
-                )
+                result = await generate_construction_image(question, use_hd=False)
 
                 if result and result.get("image_data"):
                     # Удаляем сообщение о генерации
@@ -3724,26 +3868,221 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Ошибка генерации: {e}")
                 await generating_msg.edit_text(f"❌ Ошибка: {str(e)}")
 
-        # Вызываем Claude API с контекстом истории и retry logic
+        # 🎯 ГЕНЕРАЦИЯ ОТВЕТА (с выбором режима)
         client = get_grok_client()
         loop = asyncio.get_event_loop()
         # Добавляем system prompt в начало истории
         messages_with_system = [{"role": "system", "content": system_prompt}] + conversation_history
 
-        response = await loop.run_in_executor(
-            None,
-            lambda: call_grok_with_retry(
-                client,
-                model=selected_model,
-                max_tokens=selected_max_tokens,
-                temperature=0.7,
-                messages=messages_with_system
+        answer = ""
+
+        # === STREAMING РЕЖИМ (постепенное появление текста) ===
+        if STREAMING_ENABLED:
+            streaming_msg = await update.message.reply_text("⏳ Генерирую ответ...")
+
+            try:
+                # Удаляем thinking message
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
+
+                # Переменные для streaming
+                last_update_time = 0
+                last_update_length = 0
+                update_interval = 0.15  # Обновляем каждые 0.15 секунды - быстро и плавно
+                chars_threshold = 8  # Или каждые 8 новых символов
+                typing_action_interval = 3  # Индикатор "печатает" раз в 3 секунды
+                last_typing_action = 0
+
+                logger.info("🚀 Начинаем двухфазную генерацию...")
+
+                # ФАЗА 1: Быстрое начало (первые 300-500 токенов от быстрой модели)
+                first_phase_answer = ""
+                logger.info("📝 Фаза 1: Быстрая модель для начала ответа...")
+
+                async for chunk in call_grok_with_streaming(
+                    client,
+                    model="grok-4-1-fast",  # Быстрая модель
+                    messages=messages_with_system,
+                    max_tokens=500,  # Только начало
+                    temperature=0.7,
+                    search_parameters=search_params
+                ):
+                    first_phase_answer += chunk
+                    answer += chunk
+
+                    # Обновляем сообщение часто для видимости печатания
+                    import time
+                    current_time = time.time()
+                    chars_diff = len(answer) - last_update_length
+
+                    if current_time - last_update_time >= update_interval or chars_diff >= chars_threshold:
+                        try:
+                            display_text = f"{answer}▊"  # Курсор печатания
+                            await streaming_msg.edit_text(display_text[:4096])
+                            last_update_time = current_time
+                            last_update_length = len(answer)
+
+                            # Показываем индикатор печатания редко (не замедляет)
+                            if current_time - last_typing_action >= typing_action_interval:
+                                await update.message.chat.send_action("typing")
+                                last_typing_action = current_time
+                        except Exception:
+                            pass
+
+                logger.info(f"✅ Фаза 1 завершена: {len(first_phase_answer)} символов")
+
+                # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
+                # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
+                if len(first_phase_answer) >= 400 and selected_model != "grok-4-1-fast":
+                    logger.info("📝 Фаза 2: Основная модель для продолжения...")
+
+                    # Создаём промпт для продолжения
+                    continuation_messages = messages_with_system + [
+                        {"role": "assistant", "content": first_phase_answer},
+                        {"role": "user", "content": "Продолжи ответ, добавь детали, примеры и ссылки на нормативы."}
+                    ]
+
+                    async for chunk in call_grok_with_streaming(
+                        client,
+                        model=selected_model,  # Основная модель
+                        messages=continuation_messages,
+                        max_tokens=selected_max_tokens - 500,
+                        temperature=0.7,
+                        search_parameters=search_params
+                    ):
+                        answer += chunk
+
+                        # Обновляем сообщение часто
+                        import time
+                        current_time = time.time()
+                        chars_diff = len(answer) - last_update_length
+
+                        if current_time - last_update_time >= update_interval or chars_diff >= chars_threshold:
+                            try:
+                                display_text = f"{answer}▊"
+                                await streaming_msg.edit_text(display_text[:4096])
+                                last_update_time = current_time
+                                last_update_length = len(answer)
+
+                                # Показываем индикатор печатания редко (не замедляет)
+                                if current_time - last_typing_action >= typing_action_interval:
+                                    await update.message.chat.send_action("typing")
+                                    last_typing_action = current_time
+                            except Exception:
+                                pass
+
+                    logger.info("✅ Фаза 2 завершена")
+
+                # Финальное обновление без курсора
+                try:
+                    # Если ответ короче 4096 символов - обновляем сообщение
+                    if len(answer) <= 4096:
+                        await streaming_msg.edit_text(answer)
+                    else:
+                        # Если ответ длинный - отправляем полную версию в новом сообщении
+                        await streaming_msg.edit_text(f"{answer[:4000]}...\n\n⚠️ Ответ был слишком длинным. Полная версия ниже:")
+                        # Отправляем полный ответ в отдельном сообщении
+                        chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
+                        for chunk in chunks:
+                            await update.message.reply_text(chunk)
+                except Exception as e:
+                    logger.error(f"Ошибка финального обновления streaming: {e}")
+                    # Fallback: отправляем полный ответ в любом случае
+                    try:
+                        chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
+                        for chunk in chunks:
+                            await update.message.reply_text(chunk)
+                    except:
+                        pass
+
+            except Exception as stream_error:
+                logger.error(f"❌ Ошибка streaming: {stream_error}")
+                # Fallback на обычный режим
+                try:
+                    await streaming_msg.delete()
+                except:
+                    pass
+
+                thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
+
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model=selected_model,
+                        max_tokens=selected_max_tokens,
+                        temperature=0.7,
+                        messages=messages_with_system,
+                        search_parameters=search_params
+                    )
+                )
+                answer = response["choices"][0]["message"]["content"]
+
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
+
+        # === ОБЫЧНЫЙ РЕЖИМ (классический - ответ приходит сразу целиком) ===
+        else:
+            logger.info("📝 Обычный режим: генерация ответа без streaming...")
+
+            response = await loop.run_in_executor(
+                None,
+                lambda: call_grok_with_retry(
+                    client,
+                    model=selected_model,
+                    max_tokens=selected_max_tokens,
+                    temperature=0.7,
+                    messages=messages_with_system,
+                    search_parameters=search_params
+                )
             )
-        )
-        answer = response["choices"][0]["message"]["content"]
+            answer = response["choices"][0]["message"]["content"]
+
+            try:
+                await thinking_message.delete()
+            except:
+                pass
 
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
+
+        # 🎯 ГЕНЕРАЦИЯ УМНЫХ СВЯЗАННЫХ ВОПРОСОВ (v3.1) - в фоне
+        related_questions = []
+        if IMPROVEMENTS_V3_AVAILABLE:
+            try:
+                # Создаём промпт для генерации связанных вопросов
+                related_q_prompt = generate_smart_related_questions_prompt(question, answer)
+
+                # Генерируем вопросы используя тот же API
+                loop = asyncio.get_event_loop()
+                related_response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model="grok-4-1-fast",  # Используем быструю модель
+                        max_tokens=300,
+                        temperature=0.8,
+                        messages=[{"role": "user", "content": related_q_prompt}]
+                    )
+                )
+                related_q_text = related_response["choices"][0]["message"]["content"]
+
+                # Парсим сгенерированные вопросы
+                related_questions = parse_generated_questions(related_q_text)
+
+                # Сохраняем в контексте пользователя для обработки кликов
+                if related_questions:
+                    context.user_data["related_questions"] = related_questions
+                    logger.info(f"✅ Сгенерировано {len(related_questions)} связанных вопросов")
+
+            except Exception as e:
+                logger.error(f"❌ Ошибка генерации связанных вопросов: {e}")
+                related_questions = []
 
         # Сохраняем в активный проект (если есть)
         project_saved = False
@@ -3767,36 +4106,40 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if reg_code in answer:
                 mentioned_regs.append(reg_code)
 
-        # Формируем ответ
-        result = f"💬 **Ответ:**\n\n{answer}\n\n"
+        # Формируем финальный ответ
+        # По умолчанию показываем только ответ (как в примере: всё остальное можно раскрыть/скрыть кнопками)
+        result = answer
 
-        # Добавляем результаты веб-поиска (если были)
-        if web_search_results:
-            result += f"---\n\n{web_search_results}\n\n---\n\n"
+        # Веб-поиск теперь выполняется через инструменты Grok (live_search)
 
-        if mentioned_regs:
-            result += "📚 **Упомянутые нормативы (нажмите, чтобы открыть):**\n"
-            for reg in mentioned_regs:
-                title = REGULATIONS[reg]['title']
-                url = REGULATIONS[reg]['url']
-                result += f"• [{reg}]({url}) - {title}\n"
-            result += "\n"
+        # Сохраняем доп.информацию в context.user_data, чтобы можно было «раскрыть» по кнопке
+        context.user_data["last_answer"] = answer
+        context.user_data["last_question"] = question
+        context.user_data["last_mentioned_regs"] = mentioned_regs
 
-        # Добавляем информацию о сохранении в проект
-        if project_saved:
-            result += f"📁 Сохранено в проект: **{saved_project_name}**\n"
+        # Доп.данные про проект тоже сохраняем отдельно — показывать будем только по запросу
+        context.user_data["last_project_saved"] = bool(project_saved)
+        context.user_data["last_saved_project_name"] = saved_project_name if project_saved else None
 
-        result += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
+        # Создаём подсказки в стиле GigaChat (reply keyboard над полем ввода)
+        reply_markup = None
+        if IMPROVEMENTS_V3_AVAILABLE:
+            reply_markup = create_reply_suggestions_keyboard(related_questions=related_questions)
 
-        # Удаляем сообщение "думаю над вопросом"
-        try:
-            await thinking_message.delete()
-        except Exception as e:
-            logger.warning(f"Could not delete thinking message: {e}")
+        # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
+        user_id = update.effective_user.id
+        if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
+            reply_markup = add_apply_button(reply_markup)
 
-        # Разбиваем длинные сообщения на части (лимит Telegram: 4096 символов)
-        max_length = 4000  # Оставляем запас
+        # Обновляем streaming сообщение финальным ответом с кнопками
+        max_length = 4000  # Лимит Telegram
         if len(result) > max_length:
+            # Если сообщение слишком длинное, удаляем streaming_msg и отправляем по частям
+            try:
+                await streaming_msg.delete()
+            except:
+                pass
+
             parts = []
             current_part = ""
             for line in result.split('\n'):
@@ -3808,13 +4151,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if current_part:
                 parts.append(current_part)
 
-            # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
+            # Отправляем по частям
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                user_id = update.effective_user.id
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-                    part_reply_markup = add_apply_button()
+                if i == len(parts) - 1:
+                    part_reply_markup = reply_markup
 
                 if i == 0:
                     await update.message.reply_text(part, reply_markup=part_reply_markup)
@@ -3824,18 +4165,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=part_reply_markup
                     )
         else:
-            # Создаём интерактивные кнопки под ответом (v3.0)
-            reply_markup = None
-            if IMPROVEMENTS_V3_AVAILABLE:
-                reply_markup = create_answer_buttons()
-
-            # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
-            user_id = update.effective_user.id
-            if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-                reply_markup = add_apply_button(reply_markup)
-
-            # Отправляем БЕЗ parse_mode для избежания ошибок "can't parse entities"
-            await update.message.reply_text(result, reply_markup=reply_markup)
+            # Обновляем streaming сообщение финальным ответом с кнопками
+            try:
+                await streaming_msg.edit_text(result, reply_markup=reply_markup)
+            except Exception as e:
+                # Если не удалось отредактировать, отправляем новое сообщение
+                logger.warning(f"Could not edit streaming message: {e}")
+                try:
+                    await streaming_msg.delete()
+                except:
+                    pass
+                await update.message.reply_text(result, reply_markup=reply_markup)
 
         logger.info(f"Question answered for user {update.effective_user.id} by Claude")
 
@@ -3848,6 +4188,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+        # Удаляем streaming_msg если он существует
+        try:
+            if 'streaming_msg' in locals():
+                await streaming_msg.delete()
+        except:
+            pass
+
         await update.message.reply_text(
             f"❌ Ошибка при обработке вопроса: {str(e)}\n\nПопробуйте переформулировать вопрос."
         )
@@ -3856,6 +4203,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка кнопок"""
     query = update.callback_query
+
+
+# (removed unused inline-menu helper)
 
     # Пропускаем callbacks которые относятся к ConversationHandler калькуляторов
     calculator_prefixes = [
@@ -4138,6 +4488,119 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
+    # legacy callbacks (раньше был отдельный экран связанных вопросов)
+    elif query.data == "show_related_questions":
+        await query.answer("ℹ️ Связанные вопросы теперь сразу под ответом", show_alert=True)
+
+    elif query.data == "hide_related_questions":
+        await query.answer("ℹ️ Связанные вопросы теперь сразу под ответом", show_alert=True)
+
+    elif query.data.startswith("related_q_"):
+        # Клик на связанный вопрос - отправляем его как новый вопрос
+        try:
+            question_index = int(query.data.split("_")[-1])
+            related_questions = context.user_data.get("related_questions", [])
+
+            if question_index < len(related_questions):
+                selected_question = related_questions[question_index]
+
+                # Отправляем вопрос от имени пользователя
+                await query.answer(f"Задаю вопрос: {selected_question[:50]}...")
+
+                # Создаём фейковое сообщение с вопросом для обработки
+                from telegram import Message, Chat, User as TelegramUser
+                fake_message = Message(
+                    message_id=0,
+                    date=datetime.now(),
+                    chat=query.message.chat,
+                    from_user=query.from_user,
+                    text=selected_question
+                )
+                fake_update = Update(update_id=0, message=fake_message)
+
+                # Обрабатываем как обычный текстовый вопрос
+                await handle_text(fake_update, context)
+                logger.info(f"✅ Обработан связанный вопрос #{question_index}")
+            else:
+                await query.answer("⚠️ Вопрос не найден", show_alert=True)
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки связанного вопроса: {e}")
+            await query.answer("⚠️ Ошибка обработки вопроса", show_alert=True)
+
+
+    # ===== New inline "menu in one row" actions =====
+
+    elif query.data == "answer_hide":
+        # Скрыть «функции» (кнопки под сообщением) и оставить только текст ответа.
+        # Это аналог системной кнопки Telegram «скрыть клавиатуру», но для InlineKeyboard.
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.answer("🫥 Скрыто")
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_hide: {e}")
+            await query.answer("⚠️ Не удалось скрыть кнопки", show_alert=True)
+
+    elif query.data == "answer_menu":
+        # Показать/вернуть меню под ответ
+        if not IMPROVEMENTS_V3_AVAILABLE:
+            await query.answer("⚠️ Функция недоступна", show_alert=True)
+            return
+
+        related_questions = context.user_data.get("related_questions", [])
+        keyboard = create_answer_buttons(related_questions=related_questions)
+        try:
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+            await query.answer("☰ Меню")
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_menu: {e}")
+            await query.answer("⚠️ Не удалось показать меню", show_alert=True)
+
+    elif query.data == "answer_more":
+        # Попросить модель дать ещё одну версию ответа
+        original_q = context.user_data.get("last_question")
+        last_answer = context.user_data.get("last_answer")
+        if not original_q:
+            await query.answer("⚠️ Не найден исходный вопрос", show_alert=True)
+            return
+
+        await query.answer("🔁 Генерирую ещё вариант…")
+
+        try:
+            # Отправляем короткий follow-up промпт в общий обработчик (как новый вопрос)
+            followup = (
+                f"Дай альтернативную версию ответа на вопрос: {original_q}\n\n"
+                f"Текущий ответ (для контекста):\n{last_answer}\n\n"
+                "Сделай по-другому: другая структура/формулировки, но без выдуманных фактов."
+            )
+
+            from telegram import Message, Update
+            fake_message = Message(
+                message_id=0,
+                date=datetime.now(),
+                chat=query.message.chat,
+                from_user=query.from_user,
+                text=followup,
+            )
+            fake_update = Update(update_id=0, message=fake_message)
+            await handle_text(fake_update, context)
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_more: {e}")
+            await query.answer("⚠️ Не удалось сгенерировать вариант", show_alert=True)
+
+    elif query.data == "answer_edit":
+        # Подсказка пользователю как уточнить/переоформить запрос
+        await query.answer("✏️", show_alert=False)
+        try:
+            await query.message.reply_text(
+                "✏️ Напишите уточнение одним сообщением — я переработаю ответ.\n\n"
+                "Примеры:\n"
+                "• «Сделай короче и по пунктам»\n"
+                "• «Дай 2 варианта решения»\n"
+                "• «Укажи риски и как проверить качество»"
+            )
+        except Exception as e:
+            logger.error(f"❌ Ошибка answer_edit: {e}")
+
     elif query.data == "show_regulations":
         # Кнопка "Нормативы" - показать категории
         if IMPROVEMENTS_V3_AVAILABLE:
@@ -4183,8 +4646,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
 
-    # Старые обработчики калькуляторов удалены - теперь используются интерактивные версии из calculator_handlers.py
-    # calc_reinforcement, calc_formwork, calc_electrical, calc_water
+    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0 ===
+
+    elif query.data == "calc_concrete":
+        # Запуск интерактивного калькулятора бетона
+        if INTERACTIVE_CALCS_AVAILABLE:
+            await concrete_calc_start(update, context)
+        else:
+            await query.edit_message_text(
+                "⚠️ Интерактивный калькулятор бетона недоступен.\n"
+                "Попробуйте использовать команду /concrete_calc"
+            )
+
+    elif query.data == "calc_reinforcement":
+        # Запуск интерактивного калькулятора арматуры
+        if INTERACTIVE_CALCS_AVAILABLE:
+            await rebar_calc_start(update, context)
+        else:
+            await query.edit_message_text(
+                "⚠️ Интерактивный калькулятор арматуры недоступен.\n"
+                "Попробуйте использовать команду /rebar_calc"
+            )
 
     elif query.data == "calc_brick":
         await query.edit_message_text(
@@ -4876,25 +5358,28 @@ async def calculators_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    calc_text = """🧮 **СТРОИТЕЛЬНЫЕ КАЛЬКУЛЯТОРЫ v3.0**
+    calc_text = """🧮 **ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0**
 
-Доступные калькуляторы:
+Все калькуляторы с пошаговым вводом данных!
 
-**Строительные:**
-🏗️ Бетон | 🔧 Арматура | 📦 Опалубка
-⚡ Электроснабжение | 💧 Водоснабжение
-⚓ Фундамент | 🚜 Земляные работы
+**Основные конструкции:**
+🏗️ Бетон (интерактивный) - объём, марка, материалы
+🔧 Арматура (интерактивный) - количество, вес
+📦 Опалубка - площадь, оборачиваемость
+⚓ Фундамент - комплексный расчет
 
-**Материалы:**
-🧱 Кирпич/блоки | 🔲 Плитка | 🎨 Краска
-🧱 Штукатурка | 🖼️ Обои | 🪵 Ламинат
-🧊 Утеплитель | 📐 Гипсокартон
+**Материалы отделки:**
+🧱 Кирпич/блоки - с учетом проёмов
+🔲 Плитка - плитка + клей + затирка
+🧱 Штукатурка - расход смеси
+🎨 Краска - расход по слоям
+🧊 Утеплитель - толщина + площадь
+🏠 Кровля - площадь скатов
 
-**Конструкции:**
-🏠 Кровля | 🪜 Лестница | 📐 Площадь стен
-
-**Прочее:**
-👷 Трудозатраты | 🧮 Математический
+**Коммуникации:**
+⚡ Электроснабжение - мощность
+💧 Водоснабжение - расход воды
+❄️ Зимний прогрев - прогрев бетона
 
 Выберите калькулятор из меню ниже:"""
 
@@ -4929,34 +5414,28 @@ async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /generate - Генерация технических схем с помощью Claude"""
-    if not CLAUDE_VISUALIZATION_AVAILABLE:
+    """Команда /generate - Генерация изображений через Gemini AI"""
+    if not GEMINI_AVAILABLE:
         await update.message.reply_text(
-            "⚠️ Функция генерации схем недоступна.\n\n"
-            "Проверьте наличие ANTHROPIC_API_KEY в переменных окружения."
-        )
-        return
-
-    visualizer = get_visualizer()
-    if not visualizer:
-        await update.message.reply_text(
-            "⚠️ Claude API недоступен. Проверьте настройки ANTHROPIC_API_KEY."
+            "⚠️ Функция генерации изображений недоступна.\n\n"
+            "Проверьте наличие GEMINI_API_KEY в переменных окружения."
         )
         return
 
     # Проверяем аргументы команды
     if not context.args:
         await update.message.reply_text(
-            "📐 **ГЕНЕРАЦИЯ ТЕХНИЧЕСКИХ СХЕМ**\n\n"
+            "🎨 **ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ - Gemini AI**\n\n"
             "Использование:\n"
-            "`/generate описание схемы`\n\n"
+            "`/generate описание изображения`\n\n"
             "**Примеры:**\n"
-            "• `/generate узел опирания балки на колонну`\n"
-            "• `/generate армирование фундаментной плиты`\n"
-            "• `/generate схема анкеровки арматуры`\n"
-            "• `/generate деталь кровельного узла`\n"
-            "• `/generate гидроизоляция фундамента`\n\n"
-            "🤖 *Powered by Claude Sonnet 4*",
+            "• `/generate схема фундамента с армированием`\n"
+            "• `/generate узел соединения балки и колонны`\n"
+            "• `/generate арматурный каркас перекрытия`\n"
+            "• `/generate электрическая схема квартиры`\n"
+            "• `/generate схема водопровода в доме`\n\n"
+            "Также можно просто написать:\n"
+            "\"нарисуй трещину в стене\" - бот автоматически сгенерирует",
             parse_mode="Markdown"
         )
         return
@@ -4966,55 +5445,56 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Отправляем сообщение о процессе
     generating_message = await update.message.reply_text(
-        "📐 Создаю детальное описание технической схемы...\n\n"
-        "🤖 Claude Sonnet 4 анализирует запрос..."
+        "🎨 Генерирую изображение...\n"
+        "Это займет 15-30 секунд\n\n"
+        "💡 Используется Gemini AI"
     )
 
     try:
-        # Генерируем описание технической схемы
-        description = await visualizer.generate_technical_scheme(
-            scheme_description=user_request,
-            scheme_type="general"
-        )
+        # Генерируем изображение через Gemini
+        result = await generate_construction_image_gemini(user_request)
 
-        if description:
-            # Удаляем сообщение о процессе
+        if result and result.get("image_data"):
+            # Удаляем сообщение о генерации
             try:
                 await generating_message.delete()
             except:
                 pass
 
-            # Форматируем и отправляем результат
-            response_text = f"""📐 **ДЕТАЛЬНОЕ ОПИСАНИЕ ТЕХНИЧЕСКОЙ СХЕМЫ**
+            # Формируем подпись
+            caption = f"""🎨 **СГЕНЕРИРОВАННОЕ ИЗОБРАЖЕНИЕ**
 
 **Запрос:** {user_request}
 
-{description}
+{result.get('text', '')[:500] if result.get('text') else ''}
 
 ---
-💡 **Как использовать:**
-Это описание содержит все необходимые технические детали для создания схемы вручную или с помощью CAD-систем (AutoCAD, КОМПАС и др.).
+🤖 _Модель: {result.get('model', 'Gemini AI')}_"""
 
-🤖 *Powered by Claude Sonnet 4*"""
+            # Отправляем изображение
+            result["image_data"].seek(0)
+            await update.message.reply_photo(
+                photo=result["image_data"],
+                caption=caption[:1024],  # Ограничение Telegram
+                parse_mode="Markdown"
+            )
 
-            await update.message.reply_text(response_text, parse_mode="Markdown")
-
-            logger.info(f"✅ Описание схемы отправлено пользователю {update.effective_user.id}")
+            logger.info(f"✅ Изображение отправлено пользователю {update.effective_user.id}")
         else:
             await generating_message.edit_text(
-                "❌ Не удалось создать описание схемы.\n\n"
-                "Попробуйте:\n"
-                "• Переформулировать запрос\n"
-                "• Уточнить тип конструкции\n"
-                "• Добавить больше деталей\n\n"
-                "Повторите попытку или напишите более детальное описание."
+                "❌ Не удалось создать изображение.\n\n"
+                "Возможные причины:\n"
+                "• Проблемы с Gemini API\n"
+                "• Запрос не подходит для генерации\n"
+                "• Временная недоступность сервиса\n\n"
+                "Попробуйте изменить описание или повторите попытку позже."
             )
 
     except Exception as e:
-        logger.error(f"Ошибка создания схемы: {e}")
+        logger.error(f"Ошибка генерации изображения: {e}")
         await generating_message.edit_text(
-            f"❌ Ошибка создания схемы:\n`{str(e)}`\n\n"
-            "Проверьте наличие ANTHROPIC_API_KEY в переменных окружения.",
+            f"❌ Ошибка генерации:\n`{str(e)}`\n\n"
+            "Проверьте наличие GEMINI_API_KEY в переменных окружения.",
             parse_mode="Markdown"
         )
 
@@ -5026,11 +5506,9 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
-        BotCommand("generate", "📐 Генерация технических схем"),
-        BotCommand("visualize", "🎨 Визуализация дефектов"),
-        BotCommand("calculators", "🧮 Калькуляторы (21 шт)"),
-        BotCommand("concrete_calc", "🧱 Расчет бетона"),
-        BotCommand("rebar_calc", "🔩 Расчет арматуры"),
+        # BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),  # Отключено
+        # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
+        BotCommand("calculators", "🧮 Калькуляторы (интерактивные)"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("regulations_menu", "📖 Категории нормативов"),
         BotCommand("faq", "❓ Частые вопросы"),
@@ -5105,10 +5583,40 @@ def main():
     application.add_handler(CommandHandler("region", region_command))
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v4.0 ===
+    # Интерактивные калькуляторы вызываются через меню /calculators и команды
+    if CALCULATOR_HANDLERS_AVAILABLE:
+        # Основные 7 калькуляторов
+        application.add_handler(create_concrete_calculator_handler())
+        application.add_handler(create_rebar_calculator_handler())
+        application.add_handler(create_formwork_calculator_handler())
+        application.add_handler(create_electrical_calculator_handler())
+        application.add_handler(create_water_calculator_handler())
+        application.add_handler(create_winter_calculator_handler())
+        application.add_handler(create_math_calculator_handler())
+
+        # Новые 14 калькуляторов
+        application.add_handler(create_brick_calculator_handler())
+        application.add_handler(create_tile_calculator_handler())
+        application.add_handler(create_paint_calculator_handler())
+        application.add_handler(create_wall_area_calculator_handler())
+        application.add_handler(create_roof_calculator_handler())
+        application.add_handler(create_plaster_calculator_handler())
+        application.add_handler(create_wallpaper_calculator_handler())
+        application.add_handler(create_laminate_calculator_handler())
+        application.add_handler(create_insulation_calculator_handler())
+        application.add_handler(create_foundation_calculator_handler())
+        application.add_handler(create_stairs_calculator_handler())
+        application.add_handler(create_drywall_calculator_handler())
+        application.add_handler(create_earthwork_calculator_handler())
+        application.add_handler(create_labor_calculator_handler())
+
+        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21)")
+
+    # Старая система калькуляторов (для обратной совместимости)
     if INTERACTIVE_CALCS_AVAILABLE:
         application.add_handler(create_concrete_calculator_handler())
         application.add_handler(create_rebar_calculator_handler())
-        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (/concrete_calc, /rebar_calc)")
+        logger.info("✅ Старая система калькуляторов также активна")
 
     # === КАТЕГОРИЗАЦИЯ НОРМАТИВОВ v1.0 ===
     if REGULATIONS_CATEGORIES_AVAILABLE:
@@ -5163,15 +5671,15 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_regulations_callback, pattern="^cat_"))
         logger.info("✅ Команда /regulations_menu зарегистрирована (категории нормативов)")
 
-    # === ГЕНЕРАЦИЯ ТЕХНИЧЕСКИХ СХЕМ - Claude AI ===
-    if CLAUDE_VISUALIZATION_AVAILABLE:
+    # === ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ - Gemini AI ===
+    if GEMINI_AVAILABLE:
         application.add_handler(CommandHandler("generate", generate_command))
-        logger.info("✅ Команда /generate зарегистрирована (Claude Sonnet 4)")
+        logger.info("✅ Команда /generate зарегистрирована (Gemini AI)")
 
-    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Claude AI ===
-    if CLAUDE_VISUALIZATION_AVAILABLE:
+    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI ===
+    if GEMINI_AVAILABLE:
         application.add_handler(CommandHandler("visualize", visualize_command))
-        logger.info("✅ Команда /visualize зарегистрирована (Claude Sonnet 4)")
+        logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
 
     # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
