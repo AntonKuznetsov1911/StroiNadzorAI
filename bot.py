@@ -419,11 +419,16 @@ except ImportError:
     PLANNER_AVAILABLE = False
     logger.warning("⚠️ Модуль work_planner.py не найден")
 
-# Gemini Image Generation
+# Gemini Image Generation (новый API с реальной генерацией изображений)
 try:
-    from gemini_image_gen import initialize_gemini_generator, GeminiImageGenerator
+    from gemini_image_gen import (
+        initialize_gemini_generator,
+        GeminiImageGenerator,
+        generate_construction_image_gemini,
+        is_image_generation_available
+    )
     GEMINI_AVAILABLE = True
-    logger.info("✅ Gemini Image Generator модуль загружен")
+    logger.info("✅ Gemini Image Generator модуль загружен (с поддержкой генерации)")
 except ImportError:
     GEMINI_AVAILABLE = False
     logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
@@ -1883,48 +1888,60 @@ async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    generator = get_gemini_generator()
+    generator = initialize_gemini_generator()
     if not generator:
         await update.message.reply_text(
             "⚠️ Gemini API недоступен. Проверьте настройки GEMINI_API_KEY."
         )
         return
 
-    # Если есть аргументы - обрабатываем как текстовое описание
+    # Если есть аргументы - генерируем визуализацию дефекта
     if context.args:
         defect_description = " ".join(context.args)
 
-        await update.message.reply_text("🎨 Создаю техническое описание для визуализации...")
+        generating_msg = await update.message.reply_text(
+            "🎨 Генерирую визуализацию дефекта...\n"
+            "Это займет 15-30 секунд"
+        )
 
         try:
-            # Генерируем описание визуализации на основе текста
-            description = await generator.generate_defect_visualization(
-                defect_description=defect_description,
-                defect_type="общий",
-                style="technical"
+            # Генерируем изображение дефекта
+            result = await generator.visualize_defect(
+                defect_description=defect_description
             )
 
-            if description:
-                response_text = f"""🎨 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ДЛЯ ВИЗУАЛИЗАЦИИ**
+            if result and result.get("image_data"):
+                # Удаляем сообщение о генерации
+                try:
+                    await generating_msg.delete()
+                except:
+                    pass
 
-**Описание дефекта:** {defect_description}
+                # Формируем подпись
+                caption = f"""🎨 **ВИЗУАЛИЗАЦИЯ ДЕФЕКТА**
 
-**Рекомендации для визуализации:**
+**Описание:** {defect_description}
 
-{description}
+{result.get('text', '')}
 
 ---
-💡 *Это описание можно использовать для создания технических схем, диаграмм и разметки изображений.*
-"""
-                await update.message.reply_text(response_text, parse_mode='Markdown')
+🤖 _Сгенерировано с помощью Gemini AI_"""
+
+                # Отправляем изображение
+                result["image_data"].seek(0)
+                await update.message.reply_photo(
+                    photo=result["image_data"],
+                    caption=caption[:1024],  # Ограничение Telegram
+                    parse_mode='Markdown'
+                )
             else:
-                await update.message.reply_text(
-                    "❌ Не удалось создать описание. Попробуйте переформулировать запрос."
+                await generating_msg.edit_text(
+                    "❌ Не удалось создать визуализацию. Попробуйте переформулировать запрос."
                 )
 
         except Exception as e:
-            logger.error(f"Ошибка визуализации по тексту: {e}")
-            await update.message.reply_text(
+            logger.error(f"Ошибка визуализации дефекта: {e}")
+            await generating_msg.edit_text(
                 f"❌ Произошла ошибка: {str(e)}"
             )
 
@@ -5397,8 +5414,8 @@ async def region_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /generate - Генерация изображений"""
-    if not IMAGE_GENERATION_AVAILABLE:
+    """Команда /generate - Генерация изображений через Gemini AI"""
+    if not GEMINI_AVAILABLE:
         await update.message.reply_text(
             "⚠️ Функция генерации изображений недоступна.\n\n"
             "Проверьте наличие GEMINI_API_KEY в переменных окружения."
@@ -5408,14 +5425,15 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем аргументы команды
     if not context.args:
         await update.message.reply_text(
-            "🎨 **ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ**\n\n"
+            "🎨 **ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ - Gemini AI**\n\n"
             "Использование:\n"
             "`/generate описание изображения`\n\n"
             "**Примеры:**\n"
-            "• `/generate трещина в бетонном фундаменте`\n"
+            "• `/generate схема фундамента с армированием`\n"
             "• `/generate узел соединения балки и колонны`\n"
             "• `/generate арматурный каркас перекрытия`\n"
-            "• `/generate дефект кирпичной кладки`\n\n"
+            "• `/generate электрическая схема квартиры`\n"
+            "• `/generate схема водопровода в доме`\n\n"
             "Также можно просто написать:\n"
             "\"нарисуй трещину в стене\" - бот автоматически сгенерирует",
             parse_mode="Markdown"
@@ -5427,14 +5445,14 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Отправляем сообщение о процессе
     generating_message = await update.message.reply_text(
-        "🎨 Создаю техническую схему...\n"
-        "Это займет 10-30 секунд\n\n"
-        "💡 Используется Stable Diffusion"
+        "🎨 Генерирую изображение...\n"
+        "Это займет 15-30 секунд\n\n"
+        "💡 Используется Gemini AI"
     )
 
     try:
-        # Генерируем изображение
-        result = await generate_construction_image(user_request, use_hd=False)
+        # Генерируем изображение через Gemini
+        result = await generate_construction_image_gemini(user_request)
 
         if result and result.get("image_data"):
             # Удаляем сообщение о генерации
@@ -5443,32 +5461,39 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-            # Форматируем результат
-            caption = format_generation_result(result, user_request)
+            # Формируем подпись
+            caption = f"""🎨 **СГЕНЕРИРОВАННОЕ ИЗОБРАЖЕНИЕ**
+
+**Запрос:** {user_request}
+
+{result.get('text', '')[:500] if result.get('text') else ''}
+
+---
+🤖 _Модель: {result.get('model', 'Gemini AI')}_"""
 
             # Отправляем изображение
             result["image_data"].seek(0)
             await update.message.reply_photo(
                 photo=result["image_data"],
-                caption=caption,
+                caption=caption[:1024],  # Ограничение Telegram
                 parse_mode="Markdown"
             )
 
             logger.info(f"✅ Изображение отправлено пользователю {update.effective_user.id}")
         else:
             await generating_message.edit_text(
-                "❌ Не удалось создать схему.\n\n"
+                "❌ Не удалось создать изображение.\n\n"
                 "Возможные причины:\n"
                 "• Проблемы с Gemini API\n"
-                "• Недостаточно средств на балансе\n"
-                "• Описание слишком сложное\n\n"
+                "• Запрос не подходит для генерации\n"
+                "• Временная недоступность сервиса\n\n"
                 "Попробуйте изменить описание или повторите попытку позже."
             )
 
     except Exception as e:
-        logger.error(f"Ошибка создания схемы: {e}")
+        logger.error(f"Ошибка генерации изображения: {e}")
         await generating_message.edit_text(
-            f"❌ Ошибка создания схемы:\n`{str(e)}`\n\n"
+            f"❌ Ошибка генерации:\n`{str(e)}`\n\n"
             "Проверьте наличие GEMINI_API_KEY в переменных окружения.",
             parse_mode="Markdown"
         )
@@ -5646,17 +5671,15 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_regulations_callback, pattern="^cat_"))
         logger.info("✅ Команда /regulations_menu зарегистрирована (категории нормативов)")
 
-    # === ГЕНЕРАЦИЯ СХЕМ v1.0 ===
-    # Генерация изображений отключена (Gemini API не используется)
-    # if IMAGE_GENERATION_AVAILABLE:
-    #     application.add_handler(CommandHandler("generate", generate_command))
-    #     logger.info("✅ Команда /generate зарегистрирована (Gemini AI)")
+    # === ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ - Gemini AI ===
+    if GEMINI_AVAILABLE:
+        application.add_handler(CommandHandler("generate", generate_command))
+        logger.info("✅ Команда /generate зарегистрирована (Gemini AI)")
 
-    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI (ОТКЛЮЧЕНО) ===
-    # Визуализация отключена (Gemini API не используется)
-    # if GEMINI_AVAILABLE:
-    #     application.add_handler(CommandHandler("visualize", visualize_command))
-    #     logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
+    # === ВИЗУАЛИЗАЦИЯ ДЕФЕКТОВ - Gemini AI ===
+    if GEMINI_AVAILABLE:
+        application.add_handler(CommandHandler("visualize", visualize_command))
+        logger.info("✅ Команда /visualize зарегистрирована (Gemini AI)")
 
     # === НОВЫЕ КОМАНДЫ v3.9 ===
     if TEMPLATES_AVAILABLE:
