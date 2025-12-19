@@ -90,20 +90,31 @@ async def generate_with_openai(
         return None
 
     try:
-        # Улучшаем промпт для строительной тематики
-        enhanced_prompt = f"""Professional construction technical illustration:
+        # Проверяем, является ли промпт уже детальным техническим
+        # (от xAI Grok - содержит "dimension lines", "annotated", "scale")
+        is_technical_prompt = any(keyword in prompt.lower() for keyword in
+                                  ["dimension lines", "annotated", "scale", "measurements labeled", "technical"])
+
+        if is_technical_prompt:
+            # Используем промпт как есть (от xAI Grok)
+            final_prompt = prompt[:4000]  # DALL-E 3 limit
+            logger.info("📐 Используем детальный технический промпт от xAI Grok")
+        else:
+            # Старый механизм для простых запросов
+            final_prompt = f"""Professional construction technical illustration:
 {prompt}
 
 Style: Clean technical drawing, blueprint style, professional engineering documentation.
 Include measurement annotations and labels in Russian where appropriate.
-High quality, detailed, suitable for technical documentation."""
+High quality, detailed, suitable for technical documentation."""[:4000]
+            logger.info("📝 Используем стандартный промпт с улучшением")
 
         loop = asyncio.get_event_loop()
 
         def _generate():
             response = openai_client.images.generate(
                 model="dall-e-3",
-                prompt=enhanced_prompt[:4000],  # DALL-E 3 limit
+                prompt=final_prompt,
                 size=size,
                 quality=quality,
                 style=style,
