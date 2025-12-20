@@ -554,6 +554,15 @@ except ImportError:
 # Импорт xAI клиента
 from xai_client import XAIClient, call_xai_with_retry
 
+# Импорт Gemini Live API (голосовой ассистент)
+try:
+    from gemini_live_bot_integration import start_voice_chat_command
+    VOICE_ASSISTANT_AVAILABLE = True
+    logger.info("✅ Gemini Live API (голосовой ассистент) загружен")
+except ImportError as e:
+    VOICE_ASSISTANT_AVAILABLE = False
+    logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -1754,6 +1763,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Я помню контекст предыдущих диалогов
    • Могу уточнять и развивать тему
 
+🎤 *Голосовой ассистент (НОВИНКА!)*
+   • Общайтесь голосом прямо на объекте
+   • Ответы < 500ms (почти мгновенно!)
+   • Руки свободны - работайте в каске и перчатках
+   • Нажмите кнопку "🎤 Голосовой ассистент" ниже
+
 🛠️ *Практика площадки (НОВИНКА v2.3!)*
    • Охрана труда и техника безопасности
    • Технология строительства (бетон, арматура)
@@ -1807,6 +1822,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
     keyboard = [
+        [InlineKeyboardButton("🎤 Голосовой ассистент", callback_data="voice_chat_start")],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1841,6 +1857,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Бот помнит контекст разговора
    • Можно задавать уточняющие вопросы
    • Используйте /history для просмотра истории
+
+*🎤 ГОЛОСОВОЙ АССИСТЕНТ (НОВОЕ!):*
+   • /voice_chat - Начать голосовой разговор
+   • Отправляйте голосовые сообщения - получайте голосовые ответы
+   • Низкая задержка < 500ms (почти мгновенно!)
+   • Можно отправлять фото прямо во время разговора
+   • Идеально для работы на объекте в каске и перчатках
+   • /voice_help - Подробная справка по голосовому ассистенту
 
 *📚 КОМАНДЫ - НОРМАТИВЫ:*
    /regulations - 27 актуальных СП, ГОСТ, СНиП
@@ -4625,7 +4649,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-    if query.data == "regulations":
+    if query.data == "voice_chat_start":
+        # Запуск голосового ассистента через кнопку меню
+        if VOICE_ASSISTANT_AVAILABLE:
+            # Создаём адаптированный update для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=query.message
+            )
+            await start_voice_chat_command(adapted_update, context)
+        else:
+            await query.edit_message_text(
+                "❌ **Голосовой ассистент недоступен**\n\n"
+                "Требуется:\n"
+                "• Установить `websockets>=12.0`\n"
+                "• Настроить GOOGLE_API_KEY\n\n"
+                "Подробности: `GEMINI_LIVE_INTEGRATION.md`",
+                parse_mode="Markdown"
+            )
+    elif query.data == "regulations":
         # Создаём адаптированный update для вызова команды
         adapted_update = Update(
             update_id=update.update_id,
