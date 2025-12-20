@@ -174,8 +174,8 @@ async def analyze_construction_image(
         if prompt:
             system_prompt += f"\n\nДОПОЛНИТЕЛЬНО: {prompt}"
 
-        # Создаём модель
-        model = gemini_client.GenerativeModel('gemini-2.0-flash-exp')
+        # Создаём модель (gemini-1.5-flash - стабильная версия с хорошими лимитами)
+        model = gemini_client.GenerativeModel('gemini-1.5-flash')
 
         # Генерируем ответ
         response = model.generate_content([system_prompt, image])
@@ -185,7 +185,7 @@ async def analyze_construction_image(
 
             return {
                 "analysis": response.text,
-                "model": "gemini-2.5-flash",
+                "model": "gemini-1.5-flash",
                 "analysis_type": analysis_type,
                 "success": True
             }
@@ -236,8 +236,8 @@ async def generate_construction_image(
 
         logger.info(f"🎨 Генерация через Imagen 3: {prompt[:50]}...")
 
-        # Создаём модель для генерации
-        model = gemini_client.GenerativeModel('gemini-2.0-flash-exp')
+        # Создаём модель для генерации (gemini-1.5-flash)
+        model = gemini_client.GenerativeModel('gemini-1.5-flash')
 
         # ПРИМЕЧАНИЕ: Imagen 3 интегрирован в Gemini API
         # Для генерации используем текстовый запрос с указанием на создание изображения
