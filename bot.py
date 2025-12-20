@@ -14,7 +14,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -1737,6 +1737,21 @@ REGULATIONS = {
 }
 
 
+# === ПОСТОЯННАЯ КЛАВИАТУРА ===
+
+def get_main_keyboard():
+    """Создать постоянную клавиатуру с кнопками"""
+    keyboard = [
+        [KeyboardButton("🎤 Голосовой ассистент")],
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        input_field_placeholder="Напишите вопрос или нажмите кнопку..."
+    )
+
+
 # === КОМАНДЫ ===
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1819,10 +1834,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             welcome_message += f"📁 *Активный проект:* {current_project}\n"
             welcome_message += "_(все диалоги сохраняются в проект)_\n\n"
 
-    welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
+    welcome_message += "Попробуйте отправить фото объекта, задать вопрос или нажать кнопку голосового ассистента! 👇"
 
-    keyboard = [
-        [InlineKeyboardButton("🎤 Голосовой ассистент", callback_data="voice_chat_start")],
+    # Inline меню под сообщением
+    inline_keyboard = [
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1834,9 +1849,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples"),
          InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
-    await update.message.reply_text(welcome_message, parse_mode='Markdown', reply_markup=reply_markup)
+    # Отправляем приветствие с inline меню
+    await update.message.reply_text(
+        welcome_message,
+        parse_mode='Markdown',
+        reply_markup=inline_markup
+    )
+
+    # Устанавливаем постоянную клавиатуру
+    await update.message.reply_text(
+        "🎤 *Голосовой ассистент доступен на клавиатуре ниже*",
+        parse_mode='Markdown',
+        reply_markup=get_main_keyboard()
+    )
+
+
+async def handle_voice_assistant_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопки 'Голосовой ассистент' на постоянной клавиатуре"""
+    if VOICE_ASSISTANT_AVAILABLE:
+        # Запускаем голосовую сессию
+        await start_voice_chat_command(update, context)
+    else:
+        await update.message.reply_text(
+            "❌ **Голосовой ассистент недоступен**\n\n"
+            "Требуется:\n"
+            "• Установить `websockets>=12.0`\n"
+            "• Настроить GOOGLE_API_KEY\n\n"
+            "Установка:\n"
+            "```bash\n"
+            "pip install websockets>=12.0\n"
+            "```\n\n"
+            "Подробности: см. `GEMINI_LIVE_INTEGRATION.md`",
+            parse_mode="Markdown"
+        )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -6232,6 +6279,16 @@ def main():
         application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
         logger.info("✅ Обработчик документов зарегистрирован")
 
+    # === КНОПКА ГОЛОСОВОГО АССИСТЕНТА ===
+    # ВАЖНО: Должна быть ПЕРЕД общим обработчиком текста!
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.Regex("^🎤 Голосовой ассистент$"),
+            handle_voice_assistant_button
+        )
+    )
+    logger.info("✅ Обработчик кнопки голосового ассистента зарегистрирован")
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     # === АВТОПРИМЕНЕНИЕ ИЗМЕНЕНИЙ v1.0 ===
@@ -6243,6 +6300,21 @@ def main():
     if SUGGESTIONS_AVAILABLE:
         application.add_handler(create_suggestions_handler())
         logger.info("✅ Обработчик предложений зарегистрирован")
+
+    # === GEMINI LIVE API - ГОЛОСОВОЙ АССИСТЕНТ ===
+    if VOICE_ASSISTANT_AVAILABLE:
+        try:
+            from gemini_live_bot_integration import (
+                register_voice_assistant_handlers,
+                init_voice_assistant
+            )
+            # Инициализация голосового ассистента
+            init_voice_assistant()
+            # Регистрация обработчиков (ConversationHandler для голосовых сессий)
+            register_voice_assistant_handlers(application)
+            logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
+        except Exception as e:
+            logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
