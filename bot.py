@@ -285,6 +285,24 @@ except ImportError as e:
     IMAGE_GENERATION_AVAILABLE = False
     logger.warning(f"⚠️ Модуль image_generator.py не найден: {e}")
 
+# Gemini Vision для анализа изображений v4.0
+try:
+    from gemini_vision import (
+        initialize_gemini_vision,
+        is_gemini_available,
+        analyze_construction_image
+    )
+    gemini_vision_analyzer = initialize_gemini_vision()
+    GEMINI_VISION_AVAILABLE = is_gemini_available()
+    if GEMINI_VISION_AVAILABLE:
+        logger.info("✅ Gemini 2.5 Flash Vision загружен (анализ фото)")
+    else:
+        logger.warning("⚠️ Gemini Vision недоступен (нужен GEMINI_API_KEY)")
+except ImportError as e:
+    GEMINI_VISION_AVAILABLE = False
+    gemini_vision_analyzer = None
+    logger.warning(f"⚠️ Модуль gemini_vision.py не найден: {e}")
+
 # Режим разработчика v3.0 - автовыбор локальной/облачной версии
 is_developer = None
 try:
@@ -2887,7 +2905,80 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Получаем подпись (если есть)
         caption = update.message.caption or ""
 
-        # Формируем профессиональный промпт для Claude 3.5 Sonnet
+        # ============================================
+        # ВЫБОР AI ДВИЖКА ДЛЯ АНАЛИЗА ФОТО
+        # ============================================
+        # Приоритет: 1) Gemini 2.5 Flash (быстрее, дешевле)
+        #            2) xAI Grok (fallback)
+
+        # Пробуем Gemini Vision сначала
+        if GEMINI_VISION_AVAILABLE and gemini_vision_analyzer:
+            try:
+                logger.info("📸 Используем Gemini 2.5 Flash для анализа фото")
+
+                # Анализируем через Gemini
+                analysis_result = await gemini_vision_analyzer.analyze_defect_photo(
+                    image_data=bytes(photo_bytes),
+                    user_prompt=caption if caption else None
+                )
+
+                if analysis_result:
+                    # Удаляем сообщение "анализирую фотографию"
+                    try:
+                        await thinking_message.delete()
+                    except Exception as e:
+                        logger.warning(f"Could not delete thinking message: {e}")
+
+                    # Формируем ответ
+                    result = f"🔍 **Анализ фотографии (Gemini 2.5 Flash):**\n\n{analysis_result}\n\n"
+                    result += f"⏰ {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+
+                    # Разбиваем длинные сообщения на части
+                    max_length = 4000
+                    if len(result) > max_length:
+                        parts = []
+                        current_part = ""
+                        for line in result.split('\n'):
+                            if len(current_part) + len(line) + 1 > max_length:
+                                parts.append(current_part)
+                                current_part = line + '\n'
+                            else:
+                                current_part += line + '\n'
+                        if current_part:
+                            parts.append(current_part)
+
+                        for part in parts:
+                            await update.message.reply_text(
+                                part,
+                                parse_mode='Markdown'
+                            )
+                    else:
+                        await update.message.reply_text(
+                            result,
+                            parse_mode='Markdown'
+                        )
+
+                    # Сохраняем в историю
+                    if HISTORY_MANAGER_AVAILABLE:
+                        await history_manager.add_to_history(
+                            user_id=user_id,
+                            message_type="photo",
+                            content=caption if caption else "Фото без подписи",
+                            response=analysis_result,
+                            metadata={"ai_model": "gemini-2.5-flash"}
+                        )
+
+                    logger.info(f"✅ Фото проанализировано через Gemini для пользователя {user_id}")
+                    return  # Выходим, анализ выполнен
+
+            except Exception as e:
+                logger.warning(f"⚠️ Gemini Vision не удалось: {e}. Переключаемся на Grok")
+                # Продолжаем к Grok fallback
+
+        # Если Gemini недоступен или не сработал - используем Grok
+        logger.info("📸 Используем xAI Grok для анализа фото (fallback)")
+
+        # Формируем профессиональный промпт для Grok
         system_prompt = """Вы — СтройНадзорAI v2.3, AI-эксперт по техническому надзору в строительстве РФ.
 
 📱 ФОРМАТИРОВАНИЕ ДЛЯ ТЕЛЕФОНА:
