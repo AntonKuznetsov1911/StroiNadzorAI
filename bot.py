@@ -98,6 +98,51 @@ except ImportError:
     ADVANCED_KNOWLEDGE_AVAILABLE = False
     logger.warning("⚠️ Файл practical_knowledge_advanced_2025.py не найден")
 
+# ============================================================================
+# ОПТИМИЗАЦИЯ: Умный выбор моделей AI
+# ============================================================================
+try:
+    from model_selector import ModelSelector, should_use_web_search, extract_regulation_codes
+    MODEL_SELECTOR_AVAILABLE = True
+    logger.info("✅ ModelSelector загружен - умный выбор AI моделей активен")
+except ImportError:
+    MODEL_SELECTOR_AVAILABLE = False
+    logger.warning("⚠️ model_selector.py не найден - используется только Grok")
+
+try:
+    from optimized_prompts import (
+        CLAUDE_SYSTEM_PROMPT_TECHNICAL,
+        CLAUDE_DALLE_PROMPT_CREATOR,
+        GROK_SYSTEM_PROMPT_GENERAL,
+        GEMINI_VISION_PROMPT_DEFECTS
+    )
+    OPTIMIZED_PROMPTS_AVAILABLE = True
+    logger.info("✅ Оптимизированные промпты загружены")
+except ImportError:
+    OPTIMIZED_PROMPTS_AVAILABLE = False
+    logger.warning("⚠️ optimized_prompts.py не найден - используются стандартные промпты")
+
+try:
+    from optimized_handlers import (
+        handle_with_claude_technical,
+        handle_with_gemini_vision,
+        handle_with_claude_dalle,
+        handle_with_grok
+    )
+    OPTIMIZED_HANDLERS_AVAILABLE = True
+    logger.info("✅ Оптимизированные обработчики загружены (Claude, Gemini, DALL-E, Grok)")
+except ImportError:
+    OPTIMIZED_HANDLERS_AVAILABLE = False
+    logger.warning("⚠️ optimized_handlers.py не найден - используются стандартные обработчики")
+
+try:
+    from smart_model_wrapper import smart_model_selection_text, smart_model_selection_photo
+    SMART_WRAPPER_AVAILABLE = True
+    logger.info("✅ Smart wrapper загружен - умный выбор моделей активен!")
+except ImportError:
+    SMART_WRAPPER_AVAILABLE = False
+    logger.warning("⚠️ smart_model_wrapper.py не найден")
+
 # Импорт справочника строителя
 try:
     from builder_reference import (
@@ -2883,6 +2928,28 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Получаем фото (самое большое разрешение)
         photo = update.message.photo[-1]
+        caption_text = update.message.caption or "Проанализируй это фото"
+
+        # ============================================================================
+        # ОПТИМИЗАЦИЯ: Умный выбор модели для фото (Gemini для дефектов)
+        # ============================================================================
+        if SMART_WRAPPER_AVAILABLE:
+            smart_result = await smart_model_selection_photo(
+                question=caption_text,
+                photo_file_id=photo.file_id,
+                update=update,
+                context=context
+            )
+
+            # Если умный выбор обработал фото - выходим
+            if smart_result and smart_result.get("success"):
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
+                return  # Ответ уже отправлен
+
+        # Если умный выбор не сработал - продолжаем с Grok/Gemini по стандартной логике
 
         # Проверяем размер фото
         if photo.file_size and photo.file_size > 20 * 1024 * 1024:  # 20 МБ
@@ -3477,6 +3544,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thinking_message = await update.message.reply_text(thinking_text, parse_mode="Markdown")
 
     try:
+        # ============================================================================
+        # ОПТИМИЗАЦИЯ: Умный выбор модели (Claude/Gemini/Grok)
+        # ============================================================================
+        if SMART_WRAPPER_AVAILABLE:
+            smart_result = await smart_model_selection_text(
+                question=question,
+                user_id=user_id,
+                thinking_message=thinking_message,
+                update=update,
+                context=context
+            )
+
+            # Если умный выбор обработал запрос - выходим
+            if smart_result and smart_result.get("success"):
+                return  # Ответ уже отправлен
+
+        # Если умный выбор не сработал или недоступен - продолжаем с Grok
+
         # ВАЖНО: главный режим — единый универсальный промпт с авто-адаптацией.
         # Роли (/role) остаются как функция интерфейса, но НЕ должны переопределять system_prompt.
         # Поэтому здесь не подставляем role-based промпт.
