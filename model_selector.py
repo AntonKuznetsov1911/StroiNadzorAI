@@ -106,14 +106,14 @@ class ModelSelector:
                     "estimated_cost": 0.0
                 }
 
-        # 2. Генерация чертежей → Claude (лучше знает ГОСТ) + DALL-E
+        # 2. Описание чертежей → Gemini (создаёт детальное техническое описание)
         if any(kw in question_lower for kw in self.drawing_keywords):
             return {
-                "model": "claude_dalle",
-                "reason": "Генерация технического чертежа (Claude создаёт промпт по ГОСТ)",
+                "model": "gemini_image",
+                "reason": "Создание детального технического описания чертежа по ГОСТ",
                 "needs_web_search": False,
                 "priority": "medium",
-                "estimated_cost": 5.0  # Claude промпт (1 цент) + DALL-E (4 цента)
+                "estimated_cost": 0.002  # Gemini очень дёшево
             }
 
         # 3. Проверка на простые вопросы (даже если содержат технические слова)

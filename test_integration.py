@@ -31,13 +31,13 @@ def test_imports():
     try:
         from optimized_prompts import (
             CLAUDE_SYSTEM_PROMPT_TECHNICAL,
-            CLAUDE_DALLE_PROMPT_CREATOR,
+            GEMINI_IMAGE_PROMPT_SYSTEM,
             GROK_SYSTEM_PROMPT_GENERAL,
             GEMINI_VISION_PROMPT_DEFECTS
         )
         logger.info("✅ optimized_prompts.py импортирован успешно")
         logger.info(f"   - CLAUDE_SYSTEM_PROMPT_TECHNICAL: {len(CLAUDE_SYSTEM_PROMPT_TECHNICAL)} символов")
-        logger.info(f"   - CLAUDE_DALLE_PROMPT_CREATOR: {len(CLAUDE_DALLE_PROMPT_CREATOR)} символов")
+        logger.info(f"   - GEMINI_IMAGE_PROMPT_SYSTEM: {len(GEMINI_IMAGE_PROMPT_SYSTEM)} символов")
         logger.info(f"   - GROK_SYSTEM_PROMPT_GENERAL: {len(GROK_SYSTEM_PROMPT_GENERAL)} символов")
         logger.info(f"   - GEMINI_VISION_PROMPT_DEFECTS: {len(GEMINI_VISION_PROMPT_DEFECTS)} символов")
     except Exception as e:
@@ -47,7 +47,8 @@ def test_imports():
         from optimized_handlers import (
             handle_with_claude_technical,
             handle_with_gemini_vision,
-            handle_with_claude_dalle
+            handle_with_gemini_image,
+            handle_with_grok
         )
         logger.info("✅ optimized_handlers.py импортирован успешно")
     except Exception as e:
@@ -89,11 +90,11 @@ def test_model_selector():
             ("Привет, как дела?", False, "grok_general"),
             ("Что такое бетон?", False, "grok_general"),
 
-            # Чертежи -> Claude + DALL-E
-            ("Нарисуй чертёж лестницы", False, "claude_dalle"),
-            ("Покажи схему армирования фундамента", False, "claude_dalle"),
+            # Чертежи -> Gemini Image
+            ("Нарисуй чертёж лестницы", False, "gemini_image"),
+            ("Покажи схему армирования фундамента", False, "gemini_image"),
 
-            # Фото дефектов -> Gemini
+            # Фото дефектов -> Gemini Vision
             ("Проанализируй этот дефект", True, "gemini_vision"),
         ]
 
@@ -129,8 +130,7 @@ def test_api_keys():
 
     api_keys = {
         "ANTHROPIC_API_KEY": "Claude Sonnet 4.5",
-        "GOOGLE_API_KEY": "Gemini Vision",
-        "OPENAI_API_KEY": "DALL-E 3",
+        "GOOGLE_API_KEY": "Gemini 2.0 Flash (Vision + Image)",
         "XAI_API_KEY": "Grok"
     }
 

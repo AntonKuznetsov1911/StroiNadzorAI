@@ -126,11 +126,11 @@ try:
     from optimized_handlers import (
         handle_with_claude_technical,
         handle_with_gemini_vision,
-        handle_with_claude_dalle,
+        handle_with_gemini_image,
         handle_with_grok
     )
     OPTIMIZED_HANDLERS_AVAILABLE = True
-    logger.info("✅ Оптимизированные обработчики загружены (Claude, Gemini, DALL-E, Grok)")
+    logger.info("✅ Оптимизированные обработчики загружены (Claude, Gemini Vision, Gemini Image, Grok)")
 except ImportError:
     OPTIMIZED_HANDLERS_AVAILABLE = False
     logger.warning("⚠️ optimized_handlers.py не найден - используются стандартные обработчики")

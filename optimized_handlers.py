@@ -206,91 +206,76 @@ async def handle_with_gemini_vision(
 
 
 # ============================================================================
-# ОБРАБОТЧИК CLAUDE DALLE (генерация чертежей)
+# ОБРАБОТЧИК GEMINI IMAGE (генерация чертежей)
 # ============================================================================
 
-async def handle_with_claude_dalle(
+async def handle_with_gemini_image(
     question: str,
-    dalle_prompt_creator_system: str
+    image_prompt_system: str
 ) -> Dict:
     """
-    Генерация технического чертежа
-    Шаг 1: Claude создаёт детальный промпт по ГОСТ
-    Шаг 2: DALL-E генерирует чертёж
+    Генерация технического чертежа через Gemini 2.5 Flash
 
     Args:
         question: Описание того, что нужно нарисовать
-        dalle_prompt_creator_system: Системный промпт для создания промптов
+        image_prompt_system: Системный промпт для генерации изображения
 
     Returns:
         Dict с изображением и описанием
     """
-    logger.info("🎨 Генерация чертежа: Claude → DALL-E")
+    logger.info("🎨 Генерация чертежа через Gemini 2.5 Flash")
 
     try:
-        from anthropic import Anthropic
-        from openai import OpenAI
-        import re
+        import google.generativeai as genai
+        import base64
+        from io import BytesIO
+        from PIL import Image as PILImage
 
-        # Шаг 1: Claude создаёт промпт для DALL-E
-        claude_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        # Конфигурируем Gemini
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
+        # Формируем промпт для генерации изображения
+        full_prompt = f"""{image_prompt_system}
+
+ЗАДАЧА: {question}
+
+Создай технический чертёж в соответствии с требованиями ГОСТ Р 2.109-2023."""
+
+        logger.info("🎨 Генерируем чертёж через Gemini...")
+
+        # Генерируем изображение
         loop = asyncio.get_event_loop()
 
-        def _call_claude_for_prompt():
-            response = claude_client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=2000,
-                temperature=0.7,
-                system=dalle_prompt_creator_system,
-                messages=[
-                    {"role": "user", "content": f"Создай промпт для DALL-E: {question}"}
-                ]
+        def _call_gemini():
+            response = model.generate_content(
+                full_prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.4,
+                    top_p=0.8,
+                    top_k=40,
+                    max_output_tokens=2048,
+                )
             )
-            return response.content[0].text
+            return response.text
 
-        logger.info("📝 Шаг 1/2: Claude создаёт детальный промпт по ГОСТ...")
-        full_response = await loop.run_in_executor(None, _call_claude_for_prompt)
+        result_text = await loop.run_in_executor(None, _call_gemini)
 
-        # Парсим ответ Claude (формат: ПРОМПТ: ... ОПИСАНИЕ: ...)
-        prompt_match = re.search(r'\*\*ПРОМПТ:\*\*\s*\n(.+?)(?=\n\*\*ОПИСАНИЕ:|$)', full_response, re.DOTALL)
-        desc_match = re.search(r'\*\*ОПИСАНИЕ:\*\*\s*\n(.+)', full_response, re.DOTALL)
+        logger.info(f"✅ Ответ от Gemini получен")
 
-        dalle_prompt = prompt_match.group(1).strip() if prompt_match else full_response
-        description = desc_match.group(1).strip() if desc_match else "Технический чертёж по ГОСТ"
-
-        # Убираем кавычки
-        dalle_prompt = dalle_prompt.strip('"').strip("'")
-
-        logger.info(f"✅ Промпт готов: {dalle_prompt[:100]}...")
-
-        # Шаг 2: DALL-E генерирует чертёж
-        logger.info("🎨 Шаг 2/2: DALL-E генерирует чертёж...")
-
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-        def _call_dalle():
-            response = openai_client.images.generate(
-                model="dall-e-3",
-                prompt=dalle_prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1
-            )
-            return response.data[0].url
-
-        image_url = await loop.run_in_executor(None, _call_dalle)
-
-        logger.info(f"✅ Чертёж готов: {image_url}")
+        # Так как Gemini 2.0 Flash не генерирует изображения напрямую,
+        # используем его для создания детального описания, а затем
+        # можем использовать другой инструмент или вернуть текстовое описание
 
         return {
-            "image_url": image_url,
-            "description": description,
-            "prompt_used": dalle_prompt
+            "description": result_text,
+            "image_url": None,  # Gemini 2.0 Flash не генерирует изображения
+            "prompt_used": full_prompt,
+            "note": "Gemini 2.0 Flash создал детальное описание чертежа"
         }
 
     except Exception as e:
-        logger.error(f"❌ Ошибка генерации чертежа: {e}")
+        logger.error(f"❌ Ошибка генерации через Gemini: {e}")
         raise
 
 

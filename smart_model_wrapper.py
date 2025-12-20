@@ -26,8 +26,8 @@ async def smart_model_selection_text(
     """
     try:
         from model_selector import ModelSelector
-        from optimized_handlers import handle_with_claude_technical, handle_with_claude_dalle, handle_with_grok
-        from optimized_prompts import CLAUDE_SYSTEM_PROMPT_TECHNICAL, CLAUDE_DALLE_PROMPT_CREATOR, GROK_SYSTEM_PROMPT_GENERAL
+        from optimized_handlers import handle_with_claude_technical, handle_with_gemini_image, handle_with_grok
+        from optimized_prompts import CLAUDE_SYSTEM_PROMPT_TECHNICAL, GEMINI_IMAGE_PROMPT_SYSTEM, GROK_SYSTEM_PROMPT_GENERAL
         from history_manager import get_user_history, add_message_to_history_async
 
         selector = ModelSelector()
@@ -71,17 +71,17 @@ async def smart_model_selection_text(
                 logger.error(f"❌ Ошибка Claude: {e}")
                 return None  # Fallback на Grok
 
-        # CLAUDE + DALL-E - чертежи
-        elif decision["model"] == "claude_dalle":
+        # GEMINI - описание чертежей
+        elif decision["model"] == "gemini_image":
             try:
                 await thinking_message.edit_text(
-                    "📐 Генерирую чертёж...\n\n"
-                    "🔵 Claude создаёт промпт по ГОСТ"
+                    "📐 Создаю техническое описание...\n\n"
+                    "🟣 Gemini анализирует требования"
                 )
 
-                result = await handle_with_claude_dalle(
+                result = await handle_with_gemini_image(
                     question=question,
-                    dalle_prompt_creator_system=CLAUDE_DALLE_PROMPT_CREATOR
+                    image_prompt_system=GEMINI_IMAGE_PROMPT_SYSTEM
                 )
 
                 try:
@@ -89,18 +89,19 @@ async def smart_model_selection_text(
                 except:
                     pass
 
-                await update.message.reply_photo(
-                    photo=result["image_url"],
-                    caption=f"{result['description']}\n\n_✨ Claude + DALL-E 3_"
+                # Отправляем детальное описание чертежа
+                await update.message.reply_text(
+                    f"📐 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ЧЕРТЕЖА**\n\n{result['description']}\n\n_✨ Gemini 2.0 Flash_",
+                    parse_mode="Markdown"
                 )
 
-                await add_message_to_history_async(user_id, 'assistant', f"[Чертёж: {question}]")
+                await add_message_to_history_async(user_id, 'assistant', f"[Описание чертежа: {question}]")
 
-                logger.info("✅ Чертёж отправлен (Claude+DALL-E)")
-                return {"success": True, "model": "claude_dalle"}
+                logger.info("✅ Описание чертежа отправлено (Gemini)")
+                return {"success": True, "model": "gemini_image"}
 
             except Exception as e:
-                logger.error(f"❌ Ошибка чертежа: {e}")
+                logger.error(f"❌ Ошибка описания чертежа: {e}")
                 return None
 
         # GROK - простые вопросы и web search
