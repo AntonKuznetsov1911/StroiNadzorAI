@@ -26,13 +26,24 @@ logger = logging.getLogger(__name__)
 
 async def concrete_calc_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало расчета бетона"""
-    await update.message.reply_text(
-        "🧮 **Калькулятор бетона**\n\n"
-        "Рассчитаем объем бетона и материалы.\n\n"
-        "**Шаг 1 из 4:** Введите длину конструкции (м):\n"
-        "Например: `10` или `12.5`",
-        parse_mode='Markdown'
-    )
+    # Поддержка как команды, так и callback_query
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.message.reply_text(
+            "🧮 **Калькулятор бетона**\n\n"
+            "Рассчитаем объем бетона и материалы.\n\n"
+            "**Шаг 1 из 4:** Введите длину конструкции (м):\n"
+            "Например: `10` или `12.5`",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "🧮 **Калькулятор бетона**\n\n"
+            "Рассчитаем объем бетона и материалы.\n\n"
+            "**Шаг 1 из 4:** Введите длину конструкции (м):\n"
+            "Например: `10` или `12.5`",
+            parse_mode='Markdown'
+        )
     return LENGTH
 
 async def concrete_length(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -242,13 +253,24 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def rebar_calc_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало расчета арматуры"""
-    await update.message.reply_text(
-        "🔩 **Калькулятор арматуры**\n\n"
-        "Рассчитаем количество арматуры для плиты/фундамента.\n\n"
-        "**Шаг 1 из 5:** Введите диаметр арматуры (мм):\n"
-        "Например: `12` или `14`",
-        parse_mode='Markdown'
-    )
+    # Поддержка как команды, так и callback_query
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.message.reply_text(
+            "🔩 **Калькулятор арматуры**\n\n"
+            "Рассчитаем количество арматуры для плиты/фундамента.\n\n"
+            "**Шаг 1 из 5:** Введите диаметр арматуры (мм):\n"
+            "Например: `12` или `14`",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "🔩 **Калькулятор арматуры**\n\n"
+            "Рассчитаем количество арматуры для плиты/фундамента.\n\n"
+            "**Шаг 1 из 5:** Введите диаметр арматуры (мм):\n"
+            "Например: `12` или `14`",
+            parse_mode='Markdown'
+        )
     return DIAMETER
 
 async def rebar_diameter(update: Update, context: ContextTypes.DEFAULT_TYPE):
