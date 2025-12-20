@@ -106,14 +106,14 @@ class ModelSelector:
                     "estimated_cost": 0.0
                 }
 
-        # 2. Описание чертежей → Gemini (создаёт детальное техническое описание)
+        # 2. Генерация чертежей → Gemini 2.5 Flash Image (создаёт изображение)
         if any(kw in question_lower for kw in self.drawing_keywords):
             return {
                 "model": "gemini_image",
-                "reason": "Создание детального технического описания чертежа по ГОСТ",
+                "reason": "Генерация технического чертежа через Gemini 2.5 Flash Image",
                 "needs_web_search": False,
                 "priority": "medium",
-                "estimated_cost": 0.002  # Gemini очень дёшево
+                "estimated_cost": 0.039  # Gemini 2.5 Flash Image ($0.039 за изображение)
             }
 
         # 3. Проверка на простые вопросы (даже если содержат технические слова)

@@ -214,7 +214,7 @@ async def handle_with_gemini_image(
     image_prompt_system: str
 ) -> Dict:
     """
-    Генерация технического чертежа через Gemini 2.5 Flash
+    Генерация технического чертежа через Gemini 2.5 Flash Image
 
     Args:
         question: Описание того, что нужно нарисовать
@@ -223,7 +223,7 @@ async def handle_with_gemini_image(
     Returns:
         Dict с изображением и описанием
     """
-    logger.info("🎨 Генерация чертежа через Gemini 2.5 Flash")
+    logger.info("🎨 Генерация изображения через Gemini 2.5 Flash Image")
 
     try:
         import google.generativeai as genai
@@ -233,46 +233,81 @@ async def handle_with_gemini_image(
 
         # Конфигурируем Gemini
         genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+        # Используем модель с поддержкой генерации изображений
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
         # Формируем промпт для генерации изображения
-        full_prompt = f"""{image_prompt_system}
+        full_prompt = f"""Create a professional technical drawing for construction:
 
-ЗАДАЧА: {question}
+{question}
 
-Создай технический чертёж в соответствии с требованиями ГОСТ Р 2.109-2023."""
+Requirements:
+- Technical blueprint style with precise measurements
+- GOST standards compliance (Russian construction standards)
+- Clear dimension lines with arrows
+- Material specifications and labels in Russian
+- High detail, engineering quality
+- Scale notation (1:20, 1:50, etc.)"""
 
-        logger.info("🎨 Генерируем чертёж через Gemini...")
+        logger.info("🎨 Генерируем изображение через Gemini...")
 
         # Генерируем изображение
         loop = asyncio.get_event_loop()
 
         def _call_gemini():
+            # Указываем что хотим получить изображение
             response = model.generate_content(
                 full_prompt,
                 generation_config=genai.GenerationConfig(
-                    temperature=0.4,
-                    top_p=0.8,
+                    temperature=0.7,
+                    top_p=0.95,
                     top_k=40,
-                    max_output_tokens=2048,
+                    max_output_tokens=8192,
+                    response_modalities=["IMAGE"]  # Запрашиваем изображение
                 )
             )
-            return response.text
+            return response
 
-        result_text = await loop.run_in_executor(None, _call_gemini)
+        response = await loop.run_in_executor(None, _call_gemini)
 
         logger.info(f"✅ Ответ от Gemini получен")
 
-        # Так как Gemini 2.0 Flash не генерирует изображения напрямую,
-        # используем его для создания детального описания, а затем
-        # можем использовать другой инструмент или вернуть текстовое описание
+        # Извлекаем изображение из ответа
+        image_data = None
+        description = ""
 
-        return {
-            "description": result_text,
-            "image_url": None,  # Gemini 2.0 Flash не генерирует изображения
-            "prompt_used": full_prompt,
-            "note": "Gemini 2.0 Flash создал детальное описание чертежа"
-        }
+        # Gemini возвращает изображение в parts
+        for part in response.parts:
+            if hasattr(part, 'inline_data') and part.inline_data:
+                # Получаем изображение
+                mime_type = part.inline_data.mime_type
+                image_bytes = part.inline_data.data
+
+                # Конвертируем в BytesIO для отправки в Telegram
+                image_data = BytesIO(image_bytes)
+                image_data.name = "drawing.png"
+
+                logger.info(f"✅ Изображение получено ({len(image_bytes)} байт)")
+            elif hasattr(part, 'text'):
+                description = part.text
+
+        if image_data:
+            return {
+                "image_data": image_data,
+                "description": description,
+                "prompt_used": full_prompt,
+                "model": "gemini-2.5-flash-image",
+                "note": "Изображение создано через Gemini 2.5 Flash Image"
+            }
+        else:
+            # Если изображение не получено, возвращаем текст
+            return {
+                "description": response.text if hasattr(response, 'text') else "Не удалось сгенерировать изображение",
+                "image_data": None,
+                "prompt_used": full_prompt,
+                "note": "Gemini вернул текстовое описание вместо изображения"
+            }
 
     except Exception as e:
         logger.error(f"❌ Ошибка генерации через Gemini: {e}")

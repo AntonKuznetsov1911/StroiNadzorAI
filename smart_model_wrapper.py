@@ -71,12 +71,12 @@ async def smart_model_selection_text(
                 logger.error(f"❌ Ошибка Claude: {e}")
                 return None  # Fallback на Grok
 
-        # GEMINI - описание чертежей
+        # GEMINI - генерация чертежей
         elif decision["model"] == "gemini_image":
             try:
                 await thinking_message.edit_text(
-                    "📐 Создаю техническое описание...\n\n"
-                    "🟣 Gemini анализирует требования"
+                    "🎨 Генерирую технический чертёж...\n\n"
+                    "🟣 Gemini 2.5 Flash Image создаёт изображение"
                 )
 
                 result = await handle_with_gemini_image(
@@ -89,19 +89,37 @@ async def smart_model_selection_text(
                 except:
                     pass
 
-                # Отправляем детальное описание чертежа
-                await update.message.reply_text(
-                    f"📐 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ ЧЕРТЕЖА**\n\n{result['description']}\n\n_✨ Gemini 2.0 Flash_",
-                    parse_mode="Markdown"
-                )
+                # Если получили изображение - отправляем его
+                if result.get('image_data'):
+                    result['image_data'].seek(0)  # Перемещаем указатель в начало
 
-                await add_message_to_history_async(user_id, 'assistant', f"[Описание чертежа: {question}]")
+                    caption = f"🎨 **Технический чертёж**\n\n"
+                    if result.get('description'):
+                        caption += f"{result['description']}\n\n"
+                    caption += "_✨ Gemini 2.5 Flash Image_"
 
-                logger.info("✅ Описание чертежа отправлено (Gemini)")
+                    await update.message.reply_photo(
+                        photo=result['image_data'],
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+
+                    await add_message_to_history_async(user_id, 'assistant', f"[Чертёж сгенерирован: {question}]")
+                    logger.info("✅ Изображение отправлено (Gemini)")
+                else:
+                    # Если изображение не получено - отправляем текстовое описание
+                    await update.message.reply_text(
+                        f"📐 **ТЕХНИЧЕСКОЕ ОПИСАНИЕ**\n\n{result.get('description', 'Не удалось создать изображение')}\n\n_✨ Gemini 2.5 Flash_",
+                        parse_mode="Markdown"
+                    )
+
+                    await add_message_to_history_async(user_id, 'assistant', f"[Описание чертежа: {question}]")
+                    logger.info("✅ Описание отправлено (Gemini)")
+
                 return {"success": True, "model": "gemini_image"}
 
             except Exception as e:
-                logger.error(f"❌ Ошибка описания чертежа: {e}")
+                logger.error(f"❌ Ошибка генерации чертежа: {e}")
                 return None
 
         # GROK - простые вопросы и web search
