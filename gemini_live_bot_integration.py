@@ -13,6 +13,14 @@ import asyncio
 
 from gemini_live_api import TelegramVoiceAssistant, is_gemini_live_available
 
+# Импортируем распознавание голоса
+try:
+    from voice_handler import transcribe_voice, download_voice_file
+    VOICE_RECOGNITION_AVAILABLE = True
+except ImportError:
+    VOICE_RECOGNITION_AVAILABLE = False
+    logger.warning("⚠️ voice_handler недоступен, распознавание голоса отключено")
+
 logger = logging.getLogger(__name__)
 
 # Глобальный ассистент
@@ -141,11 +149,31 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         # Скачиваем аудио
         audio_bytes = await voice_file.download_as_bytearray()
 
-        # Отправляем в Gemini Live API
+        # Распознаём речь для транскрипции (опционально)
+        recognized_text = None
+        if VOICE_RECOGNITION_AVAILABLE:
+            try:
+                # Скачиваем файл для распознавания
+                file_path = await download_voice_file(
+                    context.bot,
+                    voice.file_id,
+                    user_id
+                )
+
+                # Распознаём
+                result = await transcribe_voice(file_path)
+                if result.get("success"):
+                    recognized_text = result.get("text")
+                    logger.info(f"🎤 Распознано: {recognized_text[:100]}...")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось распознать голос: {e}")
+
+        # Отправляем в Gemini Live API с текстом для транскрипции
         success = await voice_assistant.process_voice(
             user_id=user_id,
             audio_bytes=bytes(audio_bytes),
-            mime_type=voice.mime_type
+            mime_type=voice.mime_type,
+            recognized_text=recognized_text
         )
 
         if success:
@@ -254,14 +282,16 @@ async def stop_voice_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if voice_assistant:
-        # Получаем статистику перед остановкой
+        # Получаем статистику и транскрипцию перед остановкой
         stats = voice_assistant.get_session_stats(user_id)
+        transcript = voice_assistant.get_session_transcript(user_id)
 
         # Останавливаем сессию
         success = await voice_assistant.stop_conversation(user_id)
 
-        if success and stats:
-            await update.effective_message.reply_text(
+        if success:
+            # Отправляем статистику
+            stats_msg = (
                 f"🛑 **Голосовой разговор завершён**\n\n"
                 f"📊 **Статистика сессии:**\n"
                 f"• Отправлено сообщений: {stats.get('messages_sent', 0)}\n"
@@ -269,9 +299,26 @@ async def stop_voice_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"• Аудио фрагментов отправлено: {stats.get('audio_chunks_sent', 0)}\n"
                 f"• Аудио фрагментов получено: {stats.get('audio_chunks_received', 0)}\n"
                 f"• Ошибок: {stats.get('errors', 0)}\n\n"
-                f"_✨ Спасибо за использование Gemini Live API_",
-                parse_mode="Markdown"
-            )
+                f"_✨ Спасибо за использование Gemini Live API_"
+            ) if stats else "🛑 Голосовой разговор завершён."
+
+            await update.effective_message.reply_text(stats_msg, parse_mode="Markdown")
+
+            # Отправляем транскрипцию если есть
+            if transcript:
+                # Разбиваем на части если слишком длинная (Telegram лимит 4096 символов)
+                if len(transcript) > 4000:
+                    parts = [transcript[i:i+4000] for i in range(0, len(transcript), 4000)]
+                    for i, part in enumerate(parts):
+                        await update.effective_message.reply_text(
+                            f"📝 **Транскрипция (часть {i+1}/{len(parts)})**\n\n{part}",
+                            parse_mode="Markdown"
+                        )
+                else:
+                    await update.effective_message.reply_text(
+                        transcript,
+                        parse_mode="Markdown"
+                    )
         else:
             await update.effective_message.reply_text(
                 "🛑 Голосовой разговор завершён.\n"

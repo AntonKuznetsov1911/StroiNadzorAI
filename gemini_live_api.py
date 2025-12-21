@@ -90,6 +90,11 @@ class GeminiLiveSession:
             "latency_ms": []
         }
 
+        # Транскрипция разговора (для сохранения в чат)
+        self.conversation_transcript = []
+        self.current_user_text = ""
+        self.current_bot_text = ""
+
         logger.info(f"🎤 Gemini Live Session инициализирована (модель: {model}, голос: {voice})")
 
     def _get_default_system_instruction(self) -> str:
@@ -181,13 +186,14 @@ class GeminiLiveSession:
                 await self.on_error(str(e))
             return False
 
-    async def send_audio(self, audio_bytes: bytes, mime_type: str = "audio/pcm") -> bool:
+    async def send_audio(self, audio_bytes: bytes, mime_type: str = "audio/pcm", user_message: str = None) -> bool:
         """
         Отправка аудио в реальном времени
 
         Args:
             audio_bytes: Аудио данные (PCM 16kHz mono рекомендуется)
             mime_type: MIME тип аудио
+            user_message: Распознанный текст (для транскрипции)
 
         Returns:
             True если отправлено успешно
@@ -215,6 +221,10 @@ class GeminiLiveSession:
 
             self.stats["messages_sent"] += 1
             self.stats["audio_chunks_sent"] += 1
+
+            # Добавляем в транскрипцию
+            if user_message:
+                self.current_user_text = user_message
 
             logger.debug(f"🎤 Отправлено аудио: {len(audio_bytes)} байт")
             return True
@@ -256,6 +266,10 @@ class GeminiLiveSession:
             await self.ws.send(json.dumps(message))
 
             self.stats["messages_sent"] += 1
+
+            # Сохраняем в транскрипцию
+            self.current_user_text = text
+
             logger.debug(f"💬 Отправлен текст: {text[:50]}...")
             return True
 
@@ -374,6 +388,10 @@ class GeminiLiveSession:
                         if "text" in part:
                             text = part["text"]
                             logger.info(f"💬 Получен текст: {text[:100]}...")
+
+                            # Собираем текст бота для транскрипции
+                            self.current_bot_text += text
+
                             if self.on_text_received:
                                 await self.on_text_received(text)
 
@@ -391,6 +409,19 @@ class GeminiLiveSession:
                 # Обновление latency
                 if "turnComplete" in server_content:
                     logger.debug("✅ Turn complete")
+
+                    # Сохраняем полную пару вопрос-ответ в транскрипцию
+                    if self.current_user_text or self.current_bot_text:
+                        self.conversation_transcript.append({
+                            "user": self.current_user_text,
+                            "bot": self.current_bot_text.strip(),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        logger.info(f"📝 Добавлено в транскрипт: User: '{self.current_user_text[:50]}...' -> Bot: '{self.current_bot_text[:50]}...'")
+
+                        # Очищаем для следующего обмена
+                        self.current_user_text = ""
+                        self.current_bot_text = ""
 
             # Обработка ошибок
             if "error" in data:
@@ -414,6 +445,7 @@ class GeminiLiveSession:
             self.is_connected = False
             logger.info(f"🛑 Live сессия остановлена (ID: {self.session_id})")
             logger.info(f"📊 Статистика: {self.stats}")
+            logger.info(f"📝 Транскрипция: {len(self.conversation_transcript)} обменов")
 
         except Exception as e:
             logger.error(f"❌ Ошибка остановки сессии: {e}")
@@ -425,6 +457,33 @@ class GeminiLiveSession:
             "is_connected": self.is_connected,
             "session_id": self.session_id
         }
+
+    def get_transcript(self) -> List[Dict[str, str]]:
+        """Получить полную транскрипцию разговора"""
+        return self.conversation_transcript
+
+    def format_transcript(self) -> str:
+        """Форматировать транскрипцию для отправки в чат"""
+        if not self.conversation_transcript:
+            return "📝 Транскрипция пуста"
+
+        lines = ["📝 **ТРАНСКРИПЦИЯ ГОЛОСОВОГО РАЗГОВОРА**\n"]
+
+        for i, turn in enumerate(self.conversation_transcript, 1):
+            user_text = turn.get("user", "").strip()
+            bot_text = turn.get("bot", "").strip()
+
+            if user_text:
+                lines.append(f"**👤 Вы #{i}:**")
+                lines.append(f"{user_text}\n")
+
+            if bot_text:
+                lines.append(f"**🤖 Бот #{i}:**")
+                lines.append(f"{bot_text}\n")
+
+        lines.append(f"\n_✨ Всего обменов: {len(self.conversation_transcript)}_")
+
+        return "\n".join(lines)
 
 
 # ============================================================================
@@ -483,7 +542,8 @@ class TelegramVoiceAssistant:
         self,
         user_id: int,
         audio_bytes: bytes,
-        mime_type: str = "audio/ogg"
+        mime_type: str = "audio/ogg",
+        recognized_text: Optional[str] = None
     ) -> bool:
         """
         Обработка голосового сообщения пользователя
@@ -492,6 +552,7 @@ class TelegramVoiceAssistant:
             user_id: ID пользователя
             audio_bytes: Аудио данные
             mime_type: MIME тип аудио
+            recognized_text: Распознанный текст (для транскрипции)
 
         Returns:
             True если обработано успешно
@@ -502,7 +563,7 @@ class TelegramVoiceAssistant:
             logger.warning(f"⚠️ Нет активной сессии для пользователя {user_id}")
             return False
 
-        return await session.send_audio(audio_bytes, mime_type)
+        return await session.send_audio(audio_bytes, mime_type, recognized_text)
 
     async def process_image(
         self,
@@ -560,6 +621,11 @@ class TelegramVoiceAssistant:
         """Получить статистику сессии пользователя"""
         session = self.active_sessions.get(user_id)
         return session.get_stats() if session else None
+
+    def get_session_transcript(self, user_id: int) -> Optional[str]:
+        """Получить форматированную транскрипцию разговора"""
+        session = self.active_sessions.get(user_id)
+        return session.format_transcript() if session else None
 
     async def cleanup_inactive_sessions(self, max_idle_minutes: int = 5):
         """Очистка неактивных сессий"""
