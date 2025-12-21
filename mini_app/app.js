@@ -11,7 +11,7 @@ const CONFIG = {
     // WebSocket URL (замените на ваш сервер)
     WS_URL: window.location.hostname === 'localhost'
         ? 'ws://localhost:8080/stream/'
-        : 'wss://your-server.railway.app/stream/',
+        : 'wss://websocket-proxy-production.up.railway.app/stream/',
 
     // Аудио параметры
     AUDIO: {
