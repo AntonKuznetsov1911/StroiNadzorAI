@@ -21,6 +21,10 @@ from typing import Optional, Callable, Dict, Any, List
 from io import BytesIO
 import websockets
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Загрузка переменных окружения из .env
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
