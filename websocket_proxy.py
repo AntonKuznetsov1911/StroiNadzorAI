@@ -331,13 +331,16 @@ class GeminiLiveProxy:
 # WebSocket Сервер
 # ============================================================================
 
-async def websocket_handler(websocket, path):
+async def websocket_handler(websocket):
     """
     Обработчик подключений от Telegram Mini App
 
     Path:
       /stream/{user_id} - стриминг сессия для пользователя
     """
+
+    # Получаем path из нового API websockets >= 13.0
+    path = websocket.request.path
 
     # Извлекаем user_id из пути
     parts = path.split('/')
