@@ -25,7 +25,10 @@ from typing import Dict, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,  # Детальное логирование для диагностики
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # URL Gemini Multimodal Live API
@@ -129,15 +132,23 @@ class GeminiLiveProxy:
                 }
             }
 
+            logger.info("📤 Отправка setup конфигурации...")
             await self.gemini_ws.send(json.dumps(setup_msg))
+
+            # Ждём подтверждение setup
+            logger.info("⏳ Ожидание setupComplete от Gemini...")
+
             self.is_connected = True
             self.session_id = f"stream_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             logger.info(f"✅ Gemini Live API подключен (Session: {self.session_id})")
             return True
 
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"❌ Gemini закрыл соединение при setup! Code: {e.code}, Reason: {e.reason}")
+            return False
         except Exception as e:
-            logger.error(f"❌ Ошибка подключения к Gemini: {e}")
+            logger.error(f"❌ Ошибка подключения к Gemini: {e}", exc_info=True)
             return False
 
     async def bridge_client_to_gemini(self):
@@ -191,6 +202,9 @@ class GeminiLiveProxy:
         """
         try:
             async for message in self.gemini_ws:
+                # Логируем RAW сообщение для отладки
+                logger.debug(f"📩 Gemini RAW: {message[:500]}...")
+
                 data = json.loads(message)
 
                 # Setup confirmation
@@ -265,10 +279,10 @@ class GeminiLiveProxy:
                         "message": error_msg
                     }))
 
-        except websockets.exceptions.ConnectionClosed:
-            logger.info("🔌 Gemini disconnected")
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"🔌 Gemini disconnected! Code: {e.code}, Reason: {e.reason}")
         except Exception as e:
-            logger.error(f"❌ Error in gemini→client bridge: {e}")
+            logger.error(f"❌ Error in gemini→client bridge: {e}", exc_info=True)
 
     async def handle_function_call(self, func_call):
         """Обработка вызовов функций"""
