@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Голосовой ассистент - СтройНадзор</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Заголовок -->
+        <header>
+            <h1>🎤 Голосовой Ассистент</h1>
+            <p class="subtitle">ПТО на стройплощадке</p>
+        </header>
+
+        <!-- Статус подключения -->
+        <div id="connection-status" class="status-bar">
+            <span class="status-indicator" id="status-indicator"></span>
+            <span id="status-text">Подключение...</span>
+        </div>
+
+        <!-- Визуализация голоса -->
+        <div class="voice-visualization">
+            <canvas id="waveform" width="300" height="100"></canvas>
+            <div id="voice-activity" class="voice-activity">
+                <span class="pulse"></span>
+            </div>
+        </div>
+
+        <!-- Транскрипция в реальном времени -->
+        <div class="transcript-container">
+            <div id="user-transcript" class="transcript user-transcript">
+                <strong>Вы:</strong> <span id="user-text">Нажмите кнопку и говорите...</span>
+            </div>
+            <div id="bot-transcript" class="transcript bot-transcript">
+                <strong>Бот:</strong> <span id="bot-text">Ожидаю ваш вопрос...</span>
+            </div>
+        </div>
+
+        <!-- Кнопка управления -->
+        <div class="controls">
+            <button id="start-btn" class="btn-primary">
+                <span class="btn-icon">🎤</span>
+                <span class="btn-text">Начать разговор</span>
+            </button>
+            <button id="stop-btn" class="btn-danger" style="display: none;">
+                <span class="btn-icon">⏹️</span>
+                <span class="btn-text">Завершить</span>
+            </button>
+        </div>
+
+        <!-- Индикаторы -->
+        <div class="indicators">
+            <div class="indicator">
+                <span class="indicator-label">Задержка:</span>
+                <span id="latency-display" class="indicator-value">-- ms</span>
+            </div>
+            <div class="indicator">
+                <span class="indicator-label">Качество:</span>
+                <span id="quality-display" class="indicator-value">--</span>
+            </div>
+        </div>
+
+        <!-- История вызовов функций -->
+        <div id="function-calls" class="function-calls" style="display: none;">
+            <h3>🔧 Выполненные расчёты:</h3>
+            <ul id="function-list"></ul>
+        </div>
+
+        <!-- Советы -->
+        <div class="tips">
+            <h4>💡 Примеры команд:</h4>
+            <ul>
+                <li>"Сколько бетона на плиту 6 на 8 метров толщиной 20 см?"</li>
+                <li>"Рассчитай арматуру для плиты 10 на 10 с шагом 20 см"</li>
+                <li>"Найди защитный слой для фундамента"</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

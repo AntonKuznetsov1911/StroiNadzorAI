@@ -1741,8 +1741,11 @@ REGULATIONS = {
 
 def get_main_keyboard():
     """Создать постоянную клавиатуру с кнопками"""
+    mini_app_url = os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")
+
     keyboard = [
         [KeyboardButton("🎤 Голосовой ассистент")],
+        [KeyboardButton("⚡ Real-time чат", web_app=WebAppInfo(url=mini_app_url))],
     ]
     return ReplyKeyboardMarkup(
         keyboard,
@@ -1839,6 +1842,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Inline меню под сообщением
     inline_keyboard = [
         [InlineKeyboardButton("🎤 Голосовой ассистент", callback_data="voice_chat_start")],
+        [InlineKeyboardButton("⚡ Real-time чат (Mini App)", web_app=WebAppInfo(url=os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")))],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
