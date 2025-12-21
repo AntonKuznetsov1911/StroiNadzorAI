@@ -1838,6 +1838,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Inline меню под сообщением
     inline_keyboard = [
+        [InlineKeyboardButton("🎤 Голосовой ассистент", callback_data="voice_chat_start")],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
