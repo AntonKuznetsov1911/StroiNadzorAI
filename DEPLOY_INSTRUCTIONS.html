@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Инструкция по деплою - StroiNadzorAI Real-time Voice</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #fff;
+            padding: 40px 20px;
+            line-height: 1.8;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            color: #00ff88;
+            font-size: 36px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        h2 {
+            color: #00a8ff;
+            font-size: 24px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid rgba(0, 168, 255, 0.3);
+            padding-bottom: 10px;
+        }
+        .step {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid #00ff88;
+        }
+        .step h3 {
+            color: #00ff88;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        code {
+            background: rgba(0, 255, 136, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #00ff88;
+            font-size: 14px;
+        }
+        .code-block {
+            background: #000;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            overflow-x: auto;
+        }
+        .code-block code {
+            background: transparent;
+            padding: 0;
+            color: #00ff88;
+        }
+        .warning {
+            background: rgba(255, 165, 0, 0.1);
+            border: 2px solid rgba(255, 165, 0, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        .warning h4 {
+            color: #ffa500;
+            margin-bottom: 10px;
+        }
+        a {
+            color: #00a8ff;
+            text-decoration: none;
+            border-bottom: 1px dashed #00a8ff;
+        }
+        a:hover {
+            color: #00ff88;
+            border-bottom-color: #00ff88;
+        }
+        .success {
+            background: rgba(0, 255, 136, 0.1);
+            border: 2px solid rgba(0, 255, 136, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+            color: #0a0a0a;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-decoration: none;
+            margin: 10px 5px;
+            border: none;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 255, 136, 0.3);
+        }
+        ul {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Быстрый деплой Real-time Voice Assistant</h1>
+
+        <div class="warning">
+            <h4>⚠️ Важно!</h4>
+            <p>Railway build уже запущен после последнего git push. Бот обновляется автоматически!</p>
+            <p>Теперь нужно задеплоить только Mini App (фронтенд) и WebSocket прокси.</p>
+        </div>
+
+        <h2>📋 План действий (10 минут)</h2>
+
+        <div class="step">
+            <h3>Шаг 1: Деплой Mini App на Vercel (3 минуты)</h3>
+            <p>Откройте терминал и выполните:</p>
+            <div class="code-block">
+                <code>cd C:\Users\PC\StroiNadzorAI\mini_app</code><br>
+                <code>vercel</code>
+            </div>
+            <p>Ответьте на вопросы:</p>
+            <ul>
+                <li>Set up and deploy? → <strong>Y</strong></li>
+                <li>Which scope? → <strong>Выберите ваш аккаунт</strong></li>
+                <li>Link to existing project? → <strong>N</strong></li>
+                <li>Project name? → <strong>stroinadzor-voice</strong></li>
+                <li>In which directory? → <strong>./</strong> (нажмите Enter)</li>
+            </ul>
+            <p>После деплоя Vercel выдаст URL типа:</p>
+            <div class="code-block">
+                <code>https://stroinadzor-voice-xxxx.vercel.app</code>
+            </div>
+            <p><strong>Скопируйте этот URL!</strong> Он понадобится в Шаге 4.</p>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 2: Создайте WebSocket прокси сервис в Railway (5 минут)</h3>
+            <p>1. Откройте Railway проект:</p>
+            <a href="https://railway.com/project/44e38344-d25e-4d9a-9b1d-a20cd5111473" target="_blank" class="button">
+                Открыть Railway Dashboard
+            </a>
+
+            <p style="margin-top: 20px;">2. Нажмите <strong>+ New Service</strong> → <strong>GitHub Repo</strong></p>
+            <p>3. Выберите репозиторий: <code>StroiNadzorAI</code></p>
+            <p>4. В настройках сервиса (Settings):</p>
+            <ul>
+                <li><strong>Service Name:</strong> <code>websocket-proxy</code></li>
+                <li><strong>Start Command:</strong> <code>python websocket_proxy.py</code></li>
+                <li><strong>Root Directory:</strong> оставьте пустым</li>
+            </ul>
+
+            <p>5. Добавьте Environment Variables:</p>
+            <div class="code-block">
+                <code>GOOGLE_API_KEY = AIzaSyA9pGnH8lpGQrWbRUbZgE5KLLoOdRmqk5M</code><br>
+                <code>PORT = 8080</code>
+            </div>
+
+            <p>6. После деплоя откройте Settings → Networking → Public Networking</p>
+            <p>7. Railway выдаст URL типа:</p>
+            <div class="code-block">
+                <code>https://websocket-proxy-production-xxxx.up.railway.app</code>
+            </div>
+            <p><strong>Скопируйте этот URL!</strong></p>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 3: Обновите WebSocket URL в Mini App (2 минуты)</h3>
+            <p>1. Откройте файл: <code>C:\Users\PC\StroiNadzorAI\mini_app\app.js</code></p>
+            <p>2. Найдите строку 14 и замените URL:</p>
+            <div class="code-block">
+                <code>WS_URL: window.location.hostname === 'localhost'</code><br>
+                <code>&nbsp;&nbsp;&nbsp;&nbsp;? 'ws://localhost:8080/stream/'</code><br>
+                <code>&nbsp;&nbsp;&nbsp;&nbsp;: 'wss://ваш-websocket-url.up.railway.app/stream/',</code>
+            </div>
+
+            <p>3. Сохраните файл и задеплойте обновление:</p>
+            <div class="code-block">
+                <code>cd C:\Users\PC\StroiNadzorAI\mini_app</code><br>
+                <code>vercel --prod</code>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 4: Обновите MINI_APP_URL в Railway (1 минута)</h3>
+            <p>1. Откройте Railway проект → сервис <strong>stroinadzor-bot</strong></p>
+            <p>2. Перейдите в Variables</p>
+            <p>3. Добавьте переменную:</p>
+            <div class="code-block">
+                <code>MINI_APP_URL = https://ваш-mini-app-url.vercel.app/</code>
+            </div>
+            <p>4. Railway автоматически перезапустит бота</p>
+        </div>
+
+        <div class="step">
+            <h3>Шаг 5: Регистрация Mini App в BotFather (2 минуты)</h3>
+            <p>1. Откройте <a href="https://t.me/BotFather" target="_blank">@BotFather</a> в Telegram</p>
+            <p>2. Отправьте команду: <code>/newapp</code></p>
+            <p>3. Выберите вашего бота: <code>@StroiNadzorAI_bot</code></p>
+            <p>4. Заполните данные:</p>
+            <ul>
+                <li><strong>Title:</strong> Voice Assistant</li>
+                <li><strong>Description:</strong> Real-time голосовой ассистент для стройплощадки</li>
+                <li><strong>Photo:</strong> (опционально)</li>
+                <li><strong>Web App URL:</strong> https://ваш-mini-app-url.vercel.app/</li>
+                <li><strong>Short name:</strong> voice</li>
+            </ul>
+        </div>
+
+        <div class="success">
+            <h2 style="color: #00ff88; margin-top: 0;">🎉 Готово!</h2>
+            <p style="font-size: 18px; margin: 20px 0;">Теперь откройте бота в Telegram и нажмите кнопку:</p>
+            <div style="background: #000; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                <p style="font-size: 24px; margin: 0;">⚡ <strong>Real-time чат</strong></p>
+            </div>
+            <p>Mini App откроется прямо в Telegram!</p>
+            <p>Нажмите "Начать разговор" и говорите 🎤</p>
+        </div>
+
+        <h2>📞 Если что-то не работает</h2>
+
+        <div class="step">
+            <h3>Mini App не открывается</h3>
+            <ul>
+                <li>Проверьте что URL правильный в .env: <code>MINI_APP_URL</code></li>
+                <li>Откройте URL Mini App в браузере напрямую - должна загрузиться страница</li>
+                <li>Перезапустите бота в Railway</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>WebSocket ошибка</h3>
+            <ul>
+                <li>Проверьте что <code>websocket_proxy.py</code> запущен в Railway</li>
+                <li>Откройте Railway Logs для websocket-proxy сервиса</li>
+                <li>Должны увидеть: <code>Starting WebSocket Proxy Server on 0.0.0.0:8080</code></li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>Микрофон не работает</h3>
+            <ul>
+                <li>Убедитесь что Mini App работает на HTTPS (не HTTP)</li>
+                <li>Проверьте разрешения в Telegram: Settings → Privacy → Microphone</li>
+                <li>Перезапустите Telegram</li>
+            </ul>
+        </div>
+
+        <h2>🔗 Полезные ссылки</h2>
+        <ul>
+            <li><a href="https://railway.com/project/44e38344-d25e-4d9a-9b1d-a20cd5111473" target="_blank">Railway Dashboard</a></li>
+            <li><a href="https://vercel.com/dashboard" target="_blank">Vercel Dashboard</a></li>
+            <li><a href="https://t.me/BotFather" target="_blank">@BotFather</a></li>
+            <li><a href="file:///C:/Users/PC/StroiNadzorAI/DEPLOYMENT_GUIDE.md">Полная документация (DEPLOYMENT_GUIDE.md)</a></li>
+            <li><a href="file:///C:/Users/PC/StroiNadzorAI/QUICKSTART_REALTIME.md">Быстрый старт (QUICKSTART_REALTIME.md)</a></li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 50px; padding-top: 30px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <p style="color: #888;">🤖 Создано с Claude Code (Sonnet 4.5)</p>
+            <p style="color: #888;">Декабрь 2025</p>
+        </div>
+    </div>
+</body>
+</html>
