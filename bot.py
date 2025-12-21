@@ -4695,27 +4695,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Не обрабатываем здесь - пусть обработает ConversationHandler
         return
 
-    await query.answer()
-
+    # Специальная обработка для голосового ассистента
     if query.data == "voice_chat_start":
-        # Запуск голосового ассистента через кнопку меню
+        await query.answer("🎤 Запускаю голосовой ассистент...")
+
         if VOICE_ASSISTANT_AVAILABLE:
-            # Создаём адаптированный update для вызова команды
+            # Отправляем новое сообщение в чат для запуска голосового режима
+            sent_message = await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="🎤 Инициализация голосового ассистента..."
+            )
+
+            # Создаём Update с новым сообщением для вызова команды
             adapted_update = Update(
                 update_id=update.update_id,
-                message=query.message
+                message=sent_message
             )
+
+            # Запускаем голосовой ассистент
             await start_voice_chat_command(adapted_update, context)
         else:
-            await query.edit_message_text(
-                "❌ **Голосовой ассистент недоступен**\n\n"
-                "Требуется:\n"
-                "• Установить `websockets>=12.0`\n"
-                "• Настроить GOOGLE_API_KEY\n\n"
-                "Подробности: `GEMINI_LIVE_INTEGRATION.md`",
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="❌ **Голосовой ассистент недоступен**\n\n"
+                    "Требуется:\n"
+                    "• Установить `websockets>=12.0`\n"
+                    "• Настроить GOOGLE_API_KEY\n\n"
+                    "Подробности: `GEMINI_LIVE_INTEGRATION.md`",
                 parse_mode="Markdown"
             )
-    elif query.data == "regulations":
+        return
+
+    await query.answer()
+
+    if query.data == "regulations":
         # Создаём адаптированный update для вызова команды
         adapted_update = Update(
             update_id=update.update_id,
