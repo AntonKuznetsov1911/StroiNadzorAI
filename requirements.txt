@@ -26,7 +26,7 @@ openai>=1.0.0
 
 # Google Gemini - Gemini 2.5 Flash с официальным Live API
 # Поддержка: genai.Client(), Live API, Function Calling, Thinking Mode
-google-generativeai>=0.9.0
+google-generativeai>=0.8.6
 
 # WebSockets - для Gemini Live API (голосовой ассистент в реальном времени)
 # Используется внутри google-generativeai для Live API
