@@ -1744,7 +1744,6 @@ def get_main_keyboard():
     mini_app_url = os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")
 
     keyboard = [
-        [KeyboardButton("🎤 Голосовой ассистент")],
         [KeyboardButton("⚡ Real-time чат", web_app=WebAppInfo(url=mini_app_url))],
     ]
     return ReplyKeyboardMarkup(
@@ -1780,12 +1779,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Задайте вопрос по СП, ГОСТ, СНиП
    • Я помню контекст предыдущих диалогов
    • Могу уточнять и развивать тему
-
-🎤 *Голосовой ассистент (НОВИНКА!)*
-   • Общайтесь голосом прямо на объекте
-   • Ответы < 500ms (почти мгновенно!)
-   • Руки свободны - работайте в каске и перчатках
-   • Нажмите кнопку "🎤 Голосовой ассистент" ниже
 
 🛠️ *Практика площадки (НОВИНКА v2.3!)*
    • Охрана труда и техника безопасности
@@ -1837,11 +1830,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             welcome_message += f"📁 *Активный проект:* {current_project}\n"
             welcome_message += "_(все диалоги сохраняются в проект)_\n\n"
 
-    welcome_message += "Попробуйте отправить фото объекта, задать вопрос или нажать кнопку голосового ассистента! 👇"
+    welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
     # Inline меню под сообщением
     inline_keyboard = [
-        [InlineKeyboardButton("🎤 Голосовой ассистент", callback_data="voice_chat_start")],
         [InlineKeyboardButton("⚡ Real-time чат (Mini App)", web_app=WebAppInfo(url=os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")))],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
@@ -1856,7 +1848,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
-    # Отправляем приветствие с inline меню
+    # Отправляем приветствие с inline меню и постоянной клавиатурой
     await update.message.reply_text(
         welcome_message,
         parse_mode='Markdown',
@@ -1865,30 +1857,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Устанавливаем постоянную клавиатуру
     await update.message.reply_text(
-        "🎤 *Голосовой ассистент доступен на клавиатуре ниже*",
+        "Используйте кнопки ниже для быстрого доступа к функциям бота.",
         parse_mode='Markdown',
         reply_markup=get_main_keyboard()
     )
-
-
-async def handle_voice_assistant_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик кнопки 'Голосовой ассистент' на постоянной клавиатуре"""
-    if VOICE_ASSISTANT_AVAILABLE:
-        # Запускаем голосовую сессию
-        await start_voice_chat_command(update, context)
-    else:
-        await update.message.reply_text(
-            "❌ **Голосовой ассистент недоступен**\n\n"
-            "Требуется:\n"
-            "• Установить `websockets>=12.0`\n"
-            "• Настроить GOOGLE_API_KEY\n\n"
-            "Установка:\n"
-            "```bash\n"
-            "pip install websockets>=12.0\n"
-            "```\n\n"
-            "Подробности: см. `GEMINI_LIVE_INTEGRATION.md`",
-            parse_mode="Markdown"
-        )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1909,14 +1881,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Бот помнит контекст разговора
    • Можно задавать уточняющие вопросы
    • Используйте /history для просмотра истории
-
-*🎤 ГОЛОСОВОЙ АССИСТЕНТ (НОВОЕ!):*
-   • /voice_chat - Начать голосовой разговор
-   • Отправляйте голосовые сообщения - получайте голосовые ответы
-   • Низкая задержка < 500ms (почти мгновенно!)
-   • Можно отправлять фото прямо во время разговора
-   • Идеально для работы на объекте в каске и перчатках
-   • /voice_help - Подробная справка по голосовому ассистенту
 
 *📚 КОМАНДЫ - НОРМАТИВЫ:*
    /regulations - 27 актуальных СП, ГОСТ, СНиП
@@ -6296,16 +6260,6 @@ def main():
     if PROJECTS_AVAILABLE:
         application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
         logger.info("✅ Обработчик документов зарегистрирован")
-
-    # === КНОПКА ГОЛОСОВОГО АССИСТЕНТА ===
-    # ВАЖНО: Должна быть ПЕРЕД общим обработчиком текста!
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT & filters.Regex("^🎤 Голосовой ассистент$"),
-            handle_voice_assistant_button
-        )
-    )
-    logger.info("✅ Обработчик кнопки голосового ассистента зарегистрирован")
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>СтройНадзорAI - Голосовой Ассистент</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .status {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .status-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .mic-button {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: 4px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            cursor: pointer;
+            margin: 0 auto 30px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .mic-button:hover {
+            transform: scale(1.05);
+        }
+
+        .mic-button:active {
+            transform: scale(0.95);
+        }
+
+        .mic-button.listening {
+            background: #EF4444;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+            }
+        }
+
+        .transcript-box {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            min-height: 120px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.2);
+            text-align: left;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            background: rgba(59, 130, 246, 0.3);
+            margin-left: 20px;
+        }
+
+        .message.bot {
+            background: rgba(16, 185, 129, 0.3);
+            margin-right: 20px;
+        }
+
+        .message-role {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.3);
+            border: 1px solid #EF4444;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hint {
+            font-size: 13px;
+            opacity: 0.8;
+            margin-top: 20px;
+        }
+
+        .volume-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 20px;
+            height: 40px;
+            align-items: flex-end;
+        }
+
+        .volume-bar {
+            width: 6px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 3px;
+            transition: height 0.1s ease;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Голосовой Ассистент</h1>
+        <p class="subtitle">СтройНадзорAI • Real-time консультант</p>
+
+        <div class="status">
+            <div class="status-icon" id="statusIcon">🔌</div>
+            <div class="status-text" id="statusText">Подключение...</div>
+        </div>
+
+        <div class="mic-button" id="micButton" onclick="toggleListening()">
+            🎤
+        </div>
+
+        <div class="volume-indicator" id="volumeIndicator" style="display: none;">
+            <div class="volume-bar"></div>
+            <div class="volume-bar"></div>
+            <div class="volume-bar"></div>
+            <div class="volume-bar"></div>
+            <div class="volume-bar"></div>
+        </div>
+
+        <div class="transcript-box" id="transcriptBox">
+            <div class="message bot">
+                <div class="message-role">🤖 Ассистент</div>
+                <div>Здравствуйте! Я готов отвечать на ваши вопросы о строительных нормативах. Нажмите на микрофон и задайте вопрос голосом.</div>
+            </div>
+        </div>
+
+        <p class="hint">💡 Например: "Какая допустимая ширина трещин в железобетоне?"</p>
+    </div>
+
+    <script>
+        // WebSocket URL - адрес вашего прокси на Railway
+        const WS_URL = 'wss://websocket-proxy-production.up.railway.app/stream/user123';
+
+        let ws = null;
+        let audioContext = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isListening = false;
+        let isConnected = false;
+        let audioPlaybackQueue = [];
+        let isPlaying = false;
+
+        // Элементы UI
+        const micButton = document.getElementById('micButton');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusText = document.getElementById('statusText');
+        const transcriptBox = document.getElementById('transcriptBox');
+        const volumeIndicator = document.getElementById('volumeIndicator');
+
+        // Подключение к WebSocket при загрузке страницы
+        window.addEventListener('load', async () => {
+            try {
+                await connectWebSocket();
+            } catch (error) {
+                showError('Ошибка подключения: ' + error.message);
+            }
+        });
+
+        async function connectWebSocket() {
+            return new Promise((resolve, reject) => {
+                updateStatus('🔌', 'Подключение к серверу...');
+
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    console.log('✅ WebSocket подключен');
+                    isConnected = true;
+                    updateStatus('✅', 'Подключено! Нажмите микрофон');
+                    resolve();
+                };
+
+                ws.onmessage = async (event) => {
+                    if (event.data instanceof Blob) {
+                        // Получили аудио от бота
+                        await playAudio(event.data);
+                    } else {
+                        // JSON сообщение
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                    showError('Ошибка соединения с сервером');
+                    reject(error);
+                };
+
+                ws.onclose = () => {
+                    console.log('🔌 WebSocket закрыт');
+                    isConnected = false;
+                    updateStatus('🔴', 'Отключено');
+                    // Автоматическое переподключение через 5 сек
+                    setTimeout(() => {
+                        if (!isConnected) {
+                            connectWebSocket();
+                        }
+                    }, 5000);
+                };
+            });
+        }
+
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'ready':
+                    console.log('✅ Сервер готов');
+                    updateStatus('🎤', 'Готов! Нажмите микрофон');
+                    break;
+
+                case 'transcript':
+                    addMessage(data.text, data.role);
+                    break;
+
+                case 'turn_complete':
+                    console.log('✅ Ответ завершен');
+                    if (isListening) {
+                        updateStatus('🎤', 'Слушаю...');
+                    }
+                    break;
+
+                case 'error':
+                    showError(data.message);
+                    break;
+            }
+        }
+
+        async function toggleListening() {
+            if (!isConnected) {
+                showError('Не подключено к серверу. Подождите...');
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            } else {
+                await startListening();
+            }
+        }
+
+        async function startListening() {
+            try {
+                // Запрашиваем доступ к микрофону
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 16000,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+
+                // Создаём AudioContext
+                audioContext = new AudioContext({ sampleRate: 16000 });
+                const source = audioContext.createMediaStreamSource(stream);
+
+                // ScriptProcessor для отправки аудио в WebSocket
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                processor.onaudioprocess = (e) => {
+                    if (!isListening || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    const inputData = e.inputBuffer.getChannelData(0);
+
+                    // Конвертируем Float32 в Int16 PCM
+                    const pcmData = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                    }
+
+                    // Отправляем binary данные
+                    ws.send(pcmData.buffer);
+
+                    // Визуализация громкости
+                    updateVolumeIndicator(inputData);
+                };
+
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+
+                isListening = true;
+                micButton.classList.add('listening');
+                updateStatus('🎤', 'Слушаю... Говорите!');
+                volumeIndicator.style.display = 'flex';
+
+                // Сохраняем ссылки для остановки
+                window.currentStream = stream;
+                window.currentProcessor = processor;
+
+            } catch (error) {
+                console.error('❌ Ошибка доступа к микрофону:', error);
+                showError('Не удалось получить доступ к микрофону');
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            micButton.classList.remove('listening');
+            updateStatus('✅', 'Готов! Нажмите снова');
+            volumeIndicator.style.display = 'none';
+
+            // Останавливаем stream
+            if (window.currentStream) {
+                window.currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Закрываем AudioContext
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            // Отправляем сигнал остановки (опционально)
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'stop' }));
+            }
+        }
+
+        async function playAudio(audioBlob) {
+            audioPlaybackQueue.push(audioBlob);
+            if (!isPlaying) {
+                playNextAudio();
+            }
+        }
+
+        async function playNextAudio() {
+            if (audioPlaybackQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+
+            isPlaying = true;
+            const audioBlob = audioPlaybackQueue.shift();
+
+            try {
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+
+                updateStatus('🔊', 'Отвечаю...');
+
+                audio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    playNextAudio(); // Играем следующий chunk
+                };
+
+                await audio.play();
+
+            } catch (error) {
+                console.error('❌ Ошибка воспроизведения:', error);
+                playNextAudio();
+            }
+        }
+
+        function updateVolumeIndicator(audioData) {
+            // Вычисляем средний уровень громкости
+            let sum = 0;
+            for (let i = 0; i < audioData.length; i++) {
+                sum += Math.abs(audioData[i]);
+            }
+            const average = sum / audioData.length;
+
+            // Обновляем индикатор
+            const bars = volumeIndicator.querySelectorAll('.volume-bar');
+            const activeCount = Math.floor(average * bars.length * 10);
+
+            bars.forEach((bar, i) => {
+                const height = i < activeCount ? `${(i + 1) * 8}px` : '4px';
+                bar.style.height = height;
+            });
+        }
+
+        function addMessage(text, role) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+
+            const roleSpan = document.createElement('div');
+            roleSpan.className = 'message-role';
+            roleSpan.textContent = role === 'user' ? '👤 Вы' : '🤖 Ассистент';
+
+            const textDiv = document.createElement('div');
+            textDiv.textContent = text;
+
+            messageDiv.appendChild(roleSpan);
+            messageDiv.appendChild(textDiv);
+            transcriptBox.appendChild(messageDiv);
+
+            // Скроллим вниз
+            transcriptBox.scrollTop = transcriptBox.scrollHeight;
+        }
+
+        function updateStatus(icon, text) {
+            statusIcon.textContent = icon;
+            statusText.textContent = text;
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = '❌ ' + message;
+            transcriptBox.appendChild(errorDiv);
+            transcriptBox.scrollTop = transcriptBox.scrollHeight;
+
+            updateStatus('❌', 'Ошибка');
+        }
+
+        // Закрытие при выходе со страницы
+        window.addEventListener('beforeunload', () => {
+            if (isListening) {
+                stopListening();
+            }
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
