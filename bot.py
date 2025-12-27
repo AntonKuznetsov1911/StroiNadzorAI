@@ -14,7 +14,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, BotCommand, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -97,6 +97,51 @@ try:
 except ImportError:
     ADVANCED_KNOWLEDGE_AVAILABLE = False
     logger.warning("⚠️ Файл practical_knowledge_advanced_2025.py не найден")
+
+# ============================================================================
+# ОПТИМИЗАЦИЯ: Умный выбор моделей AI
+# ============================================================================
+try:
+    from model_selector import ModelSelector, should_use_web_search, extract_regulation_codes
+    MODEL_SELECTOR_AVAILABLE = True
+    logger.info("✅ ModelSelector загружен - умный выбор AI моделей активен")
+except ImportError:
+    MODEL_SELECTOR_AVAILABLE = False
+    logger.warning("⚠️ model_selector.py не найден - используется только Grok")
+
+try:
+    from optimized_prompts import (
+        CLAUDE_SYSTEM_PROMPT_TECHNICAL,
+        CLAUDE_DALLE_PROMPT_CREATOR,
+        GROK_SYSTEM_PROMPT_GENERAL,
+        GEMINI_VISION_PROMPT_DEFECTS
+    )
+    OPTIMIZED_PROMPTS_AVAILABLE = True
+    logger.info("✅ Оптимизированные промпты загружены")
+except ImportError:
+    OPTIMIZED_PROMPTS_AVAILABLE = False
+    logger.warning("⚠️ optimized_prompts.py не найден - используются стандартные промпты")
+
+try:
+    from optimized_handlers import (
+        handle_with_claude_technical,
+        handle_with_gemini_vision,
+        handle_with_gemini_image,
+        handle_with_grok
+    )
+    OPTIMIZED_HANDLERS_AVAILABLE = True
+    logger.info("✅ Оптимизированные обработчики загружены (Claude, Gemini Vision, Gemini Image, Grok)")
+except ImportError:
+    OPTIMIZED_HANDLERS_AVAILABLE = False
+    logger.warning("⚠️ optimized_handlers.py не найден - используются стандартные обработчики")
+
+try:
+    from smart_model_wrapper import smart_model_selection_text, smart_model_selection_photo
+    SMART_WRAPPER_AVAILABLE = True
+    logger.info("✅ Smart wrapper загружен - умный выбор моделей активен!")
+except ImportError:
+    SMART_WRAPPER_AVAILABLE = False
+    logger.warning("⚠️ smart_model_wrapper.py не найден")
 
 # Импорт справочника строителя
 try:
@@ -530,6 +575,15 @@ except ImportError:
 
 # Импорт xAI клиента
 from xai_client import XAIClient, call_xai_with_retry
+
+# Импорт Gemini Live API (голосовой ассистент)
+try:
+    from gemini_live_bot_integration import start_voice_chat_command
+    VOICE_ASSISTANT_AVAILABLE = True
+    logger.info("✅ Gemini Live API (голосовой ассистент) загружен")
+except ImportError as e:
+    VOICE_ASSISTANT_AVAILABLE = False
+    logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
 
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -1705,6 +1759,23 @@ REGULATIONS = {
 }
 
 
+# === ПОСТОЯННАЯ КЛАВИАТУРА ===
+
+def get_main_keyboard():
+    """Создать постоянную клавиатуру с кнопками"""
+    mini_app_url = os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")
+
+    keyboard = [
+        [KeyboardButton("⚡ Real-time чат", web_app=WebAppInfo(url=mini_app_url))],
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        input_field_placeholder="Напишите вопрос или нажмите кнопку..."
+    )
+
+
 # === КОМАНДЫ ===
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1783,7 +1854,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_message += "Попробуйте отправить фото объекта или задать вопрос! 👇"
 
-    keyboard = [
+    # Inline меню под сообщением
+    inline_keyboard = [
+        [InlineKeyboardButton("⚡ Real-time чат (Mini App)", web_app=WebAppInfo(url=os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")))],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1795,9 +1868,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples"),
          InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
-    await update.message.reply_text(welcome_message, parse_mode='Markdown', reply_markup=reply_markup)
+    # Отправляем приветствие с inline меню и постоянной клавиатурой
+    await update.message.reply_text(
+        welcome_message,
+        parse_mode='Markdown',
+        reply_markup=inline_markup
+    )
+
+    # Устанавливаем постоянную клавиатуру
+    await update.message.reply_text(
+        "Используйте кнопки ниже для быстрого доступа к функциям бота.",
+        parse_mode='Markdown',
+        reply_markup=get_main_keyboard()
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2905,6 +2990,28 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Получаем фото (самое большое разрешение)
         photo = update.message.photo[-1]
+        caption_text = update.message.caption or "Проанализируй это фото"
+
+        # ============================================================================
+        # ОПТИМИЗАЦИЯ: Умный выбор модели для фото (Gemini для дефектов)
+        # ============================================================================
+        if SMART_WRAPPER_AVAILABLE:
+            smart_result = await smart_model_selection_photo(
+                question=caption_text,
+                photo_file_id=photo.file_id,
+                update=update,
+                context=context
+            )
+
+            # Если умный выбор обработал фото - выходим
+            if smart_result and smart_result.get("success"):
+                try:
+                    await thinking_message.delete()
+                except:
+                    pass
+                return  # Ответ уже отправлен
+
+        # Если умный выбор не сработал - продолжаем с Grok/Gemini по стандартной логике
 
         # Проверяем размер фото
         if photo.file_size and photo.file_size > 20 * 1024 * 1024:  # 20 МБ
@@ -3499,6 +3606,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thinking_message = await update.message.reply_text(thinking_text, parse_mode="Markdown")
 
     try:
+        # ============================================================================
+        # ОПТИМИЗАЦИЯ: Умный выбор модели (Claude/Gemini/Grok)
+        # ============================================================================
+        if SMART_WRAPPER_AVAILABLE:
+            smart_result = await smart_model_selection_text(
+                question=question,
+                user_id=user_id,
+                thinking_message=thinking_message,
+                update=update,
+                context=context
+            )
+
+            # Если умный выбор обработал запрос - выходим
+            if smart_result and smart_result.get("success"):
+                return  # Ответ уже отправлен
+
+        # Если умный выбор не сработал или недоступен - продолжаем с Grok
+
         # ВАЖНО: главный режим — единый универсальный промпт с авто-адаптацией.
         # Роли (/role) остаются как функция интерфейса, но НЕ должны переопределять system_prompt.
         # Поэтому здесь не подставляем role-based промпт.
@@ -3964,7 +4089,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
-        if GEMINI_AVAILABLE and should_generate_image(question):
+        # ОТКЛЮЧЕНО: Теперь обрабатывается через smart_model_wrapper → gemini_image
+        if False and GEMINI_AVAILABLE and should_generate_image(question):
             logger.info("🎨 Обнаружен запрос на генерацию изображения")
 
             # Отправляем сообщение о генерации
@@ -4434,6 +4560,37 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     if any(query.data.startswith(prefix) for prefix in calculator_prefixes):
         # Не обрабатываем здесь - пусть обработает ConversationHandler
+        return
+
+    # Специальная обработка для голосового ассистента
+    if query.data == "voice_chat_start":
+        await query.answer("🎤 Запускаю голосовой ассистент...")
+
+        if VOICE_ASSISTANT_AVAILABLE:
+            # Отправляем новое сообщение в чат для запуска голосового режима
+            sent_message = await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="🎤 Инициализация голосового ассистента..."
+            )
+
+            # Создаём Update с новым сообщением для вызова команды
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=sent_message
+            )
+
+            # Запускаем голосовой ассистент
+            await start_voice_chat_command(adapted_update, context)
+        else:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="❌ **Голосовой ассистент недоступен**\n\n"
+                    "Требуется:\n"
+                    "• Установить `websockets>=12.0`\n"
+                    "• Настроить GOOGLE_API_KEY\n\n"
+                    "Подробности: `GEMINI_LIVE_INTEGRATION.md`",
+                parse_mode="Markdown"
+            )
         return
 
     await query.answer()
@@ -6014,6 +6171,21 @@ def main():
     if SUGGESTIONS_AVAILABLE:
         application.add_handler(create_suggestions_handler())
         logger.info("✅ Обработчик предложений зарегистрирован")
+
+    # === GEMINI LIVE API - ГОЛОСОВОЙ АССИСТЕНТ ===
+    if VOICE_ASSISTANT_AVAILABLE:
+        try:
+            from gemini_live_bot_integration import (
+                register_voice_assistant_handlers,
+                init_voice_assistant
+            )
+            # Инициализация голосового ассистента
+            init_voice_assistant()
+            # Регистрация обработчиков (ConversationHandler для голосовых сессий)
+            register_voice_assistant_handlers(application)
+            logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
+        except Exception as e:
+            logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
