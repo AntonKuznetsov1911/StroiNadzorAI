@@ -581,6 +581,23 @@ except ImportError as e:
     VOICE_ASSISTANT_AVAILABLE = False
     logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
 
+# LLM Council - Совет AI моделей для сложных вопросов (Karpathy's approach)
+try:
+    from llm_council import (
+        LLMCouncil,
+        get_llm_council,
+        is_council_available,
+        is_complex_question
+    )
+    LLM_COUNCIL_AVAILABLE = is_council_available()
+    if LLM_COUNCIL_AVAILABLE:
+        logger.info("✅ LLM Council загружен (Grok + Claude + Gemini)")
+    else:
+        logger.warning("⚠️ LLM Council недоступен (нужно минимум 2 AI модели)")
+except ImportError as e:
+    LLM_COUNCIL_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль llm_council.py не найден: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
