@@ -3722,6 +3722,73 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Добавляем вопрос пользователя в историю
     await add_message_to_history_async(user_id, 'user', question)
 
+    # ============================================================================
+    # LLM COUNCIL: Автоматическое определение сложных вопросов
+    # ============================================================================
+    if LLM_COUNCIL_AVAILABLE:
+        is_complex, complexity_reason = is_complex_question(question)
+        
+        if is_complex:
+            logger.info(f"🏛️ LLM Council: Сложный вопрос обнаружен - {complexity_reason}")
+            
+            # Отправляем сообщение о работе Совета
+            council_thinking = await update.message.reply_text(
+                "🏛️ **Сложный вопрос — собираю Совет AI...**\n\n"
+                f"📊 Причина: _{complexity_reason}_\n\n"
+                "⏳ Этап 1/3: Получаю мнения экспертов\n"
+                "• Grok — технический анализ\n"
+                "• Claude — детальная экспертиза\n"
+                "• Gemini — практические рекомендации\n\n"
+                "_Это займёт 30-60 секунд для максимального качества..._",
+                parse_mode="Markdown"
+            )
+            
+            try:
+                council = get_llm_council()
+                if council:
+                    # Получаем контекст диалога
+                    conversation_history = get_conversation_context(user_id)
+                    context_text = ""
+                    if conversation_history:
+                        recent = conversation_history[-3:]
+                        context_text = "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent])
+                    
+                    # Запускаем консультацию (skip_review=True для ускорения)
+                    result = await council.consult(question, context=context_text, skip_review=True)
+                    
+                    if result["success"]:
+                        final_answer = result["final_answer"]
+                        duration = result["duration_seconds"]
+                        models = result["models_used"]
+                        
+                        footer = f"\n\n---\n🏛️ _Совет AI: {', '.join(models)} | {duration:.1f} сек_"
+                        
+                        max_len = 4000 - len(footer)
+                        if len(final_answer) > max_len:
+                            final_answer = final_answer[:max_len] + "..."
+                        
+                        await council_thinking.edit_text(
+                            final_answer + footer,
+                            parse_mode="Markdown"
+                        )
+                        
+                        await add_message_to_history_async(user_id, 'assistant', final_answer)
+                        logger.info(f"✅ LLM Council auto: ответ за {duration:.1f} сек для user {user_id}")
+                        return  # Ответ от Совета отправлен
+                    else:
+                        # Совет не смог ответить - продолжаем обычную обработку
+                        await council_thinking.delete()
+                        logger.warning("LLM Council: не удалось получить ответ, fallback to single model")
+                else:
+                    await council_thinking.delete()
+            except Exception as e:
+                logger.error(f"LLM Council auto error: {e}")
+                try:
+                    await council_thinking.delete()
+                except:
+                    pass
+                # Продолжаем обычную обработку
+
     # Отправляем сообщение о процессе и сохраняем его для последующего удаления
     thinking_text = "🤔 Думаю над вашим вопросом... \n\nВы можете не ждать, я пришлю уведомление 😉"
 
