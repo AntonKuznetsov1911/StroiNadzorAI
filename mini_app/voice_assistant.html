@@ -314,8 +314,8 @@
         let nextPlayTime = 0;
         
         // WebSocket URL (замените на реальный при деплое)
-        // Для локального теста: ws://localhost:8765
-        // Для продакшена: wss://your-domain.com/ws
+        // Для локального теста: ws://localhost:8001/api/ws
+        // Для продакшена: wss://your-domain.com/api/ws
         const WS_URL = getWebSocketURL();
         
         function getWebSocketURL() {
@@ -323,13 +323,13 @@
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.host;
             
-            // Если запущено локально или на ngrok
+            // Если запущено локально
             if (host.includes('localhost') || host.includes('127.0.0.1')) {
-                return 'ws://localhost:8765';
+                return 'ws://localhost:8001/api/ws';
             }
             
-            // Для Vercel или других хостингов
-            return `${protocol}//${host}/ws`;
+            // Для продакшена - используем тот же хост с /api/ws
+            return `${protocol}//${host}/api/ws`;
         }
         
         // Создаём визуализатор
