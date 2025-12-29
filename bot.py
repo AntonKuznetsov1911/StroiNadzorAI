@@ -6107,6 +6107,11 @@ def main():
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
 
+    # LLM Council - Совет AI моделей (Karpathy's approach)
+    if LLM_COUNCIL_AVAILABLE:
+        application.add_handler(CommandHandler("council", council_command))
+        logger.info("✅ Команда /council зарегистрирована")
+
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v4.0 ===
     # Интерактивные калькуляторы вызываются через меню /calculators и команды
     if CALCULATOR_HANDLERS_AVAILABLE:
