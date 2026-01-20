@@ -100,7 +100,7 @@ railway up
 В Railway Dashboard → Settings → Environment Variables:
 
 ```bash
-GOOGLE_API_KEY=AIzaSyA9pGnH8lpGQrWbRUbZgE5KLLoOdRmqk5M
+GOOGLE_API_KEY=your_google_api_key
 PORT=8080
 ```
 
@@ -394,7 +394,7 @@ curl https://stroinadzorai-websocket-production.up.railway.app/
 
 ```bash
 # Railway Dashboard → Settings → Environment Variables
-GOOGLE_API_KEY=AIzaSyA9pGnH8lpGQrWbRUbZgE5KLLoOdRmqk5M
+GOOGLE_API_KEY=your_google_api_key
 ```
 
 ### Высокая задержка (> 500ms)

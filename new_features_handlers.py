@@ -91,9 +91,7 @@ async def projects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not projects:
         await update.message.reply_text(
-            "У вас нет проектов.
-
-Создать: /new_project Название"
+            "У вас нет проектов.\n\nСоздать: /new_project Название"
         )
         return
     

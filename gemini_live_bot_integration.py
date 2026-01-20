@@ -13,6 +13,8 @@ import asyncio
 
 from gemini_live_api import TelegramVoiceAssistant, is_gemini_live_available
 
+logger = logging.getLogger(__name__)
+
 # Импортируем распознавание голоса
 try:
     from voice_handler import transcribe_voice, download_voice_file
@@ -20,8 +22,6 @@ try:
 except ImportError:
     VOICE_RECOGNITION_AVAILABLE = False
     logger.warning("⚠️ voice_handler недоступен, распознавание голоса отключено")
-
-logger = logging.getLogger(__name__)
 
 # Глобальный ассистент
 voice_assistant: Optional[TelegramVoiceAssistant] = None

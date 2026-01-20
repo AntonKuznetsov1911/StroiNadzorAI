@@ -29,8 +29,8 @@ CACHE_STATS = {
     'total_saved_tokens': 0
 }
 
-# Redis клиент
-redis_client: Optional[aioredis.Redis] = None
+# Redis клиент (тип указывается условно)
+redis_client = None  # type: Optional[Any]
 
 
 # ========================================

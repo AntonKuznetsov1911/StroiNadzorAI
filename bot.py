@@ -5178,26 +5178,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0 ===
-
-    elif query.data == "calc_concrete":
-        # Запуск интерактивного калькулятора бетона
-        if INTERACTIVE_CALCS_AVAILABLE:
-            await concrete_calc_start(update, context)
-        else:
-            await query.edit_message_text(
-                "⚠️ Интерактивный калькулятор бетона недоступен.\n"
-                "Попробуйте использовать команду /concrete_calc"
-            )
-
-    elif query.data == "calc_reinforcement":
-        # Запуск интерактивного калькулятора арматуры
-        if INTERACTIVE_CALCS_AVAILABLE:
-            await rebar_calc_start(update, context)
-        else:
-            await query.edit_message_text(
-                "⚠️ Интерактивный калькулятор арматуры недоступен.\n"
-                "Попробуйте использовать команду /rebar_calc"
-            )
+    # ВАЖНО: calc_concrete и calc_reinforcement обрабатываются ConversationHandler
+    # из calculator_handlers.py - НЕ дублировать здесь!
 
     elif query.data == "calc_brick":
         await query.edit_message_text(
@@ -6146,13 +6128,14 @@ def main():
         application.add_handler(create_earthwork_calculator_handler())
         application.add_handler(create_labor_calculator_handler())
 
-        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21)")
+        # Быстрые команды для расчёта одной строкой
+        application.add_handler(CommandHandler("calc_concrete", quick_concrete))
+        application.add_handler(CommandHandler("calc_math", quick_math))
 
-    # Старая система калькуляторов (для обратной совместимости)
-    if INTERACTIVE_CALCS_AVAILABLE:
-        application.add_handler(create_concrete_calculator_handler())
-        application.add_handler(create_rebar_calculator_handler())
-        logger.info("✅ Старая система калькуляторов также активна")
+        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21 + быстрые команды)")
+
+    # УДАЛЕНО: дублирование калькуляторов создавало конфликт ConversationHandler
+    # Старая система interactive_calculators.py больше не используется
 
     # === КАТЕГОРИЗАЦИЯ НОРМАТИВОВ v1.0 ===
     if REGULATIONS_CATEGORIES_AVAILABLE:
@@ -6278,20 +6261,8 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_planner_callback, pattern="^plan_"))
         logger.info("✅ Work planner v3.8 зарегистрирован")
 
-    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.5 ===
-    if CALCULATOR_HANDLERS_AVAILABLE:
-        # ConversationHandler для всех 7 калькуляторов
-        application.add_handler(create_concrete_calculator_handler())
-        application.add_handler(create_rebar_calculator_handler())
-        application.add_handler(create_formwork_calculator_handler())
-        application.add_handler(create_electrical_calculator_handler())
-        application.add_handler(create_water_calculator_handler())
-        application.add_handler(create_winter_calculator_handler())
-        application.add_handler(create_math_calculator_handler())
-        # Быстрые команды для расчёта одной строкой
-        application.add_handler(CommandHandler("calc_concrete", quick_concrete))
-        application.add_handler(CommandHandler("calc_math", quick_math))
-        logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.5)")
+    # УДАЛЕНО: дублирующаяся регистрация калькуляторов v3.5
+    # Все 21 калькулятор уже зарегистрированы выше в блоке v4.0
 
     # === ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ ДОКУМЕНТОВ v1.0 ===
     if DOCUMENT_HANDLERS_AVAILABLE:
