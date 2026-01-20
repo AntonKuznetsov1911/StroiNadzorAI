@@ -537,3 +537,116 @@ async def handle_history_callback(update: Update, context: ContextTypes.DEFAULT_
             "❌ Очистка отменена.\n\n"
             "История сохранена."
         )
+
+
+# ========================================
+# АСИНХРОННЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ИСТОРИЕЙ
+# ========================================
+
+async def get_user_history(user_id: int, limit: int = 10) -> list:
+    """
+    Асинхронно получить историю пользователя в формате для AI моделей
+
+    Args:
+        user_id: ID пользователя
+        limit: Количество последних сообщений
+
+    Returns:
+        Список сообщений в формате [{"role": "user/assistant", "content": "..."}]
+    """
+    history = load_user_history(user_id)
+    recent = history[-limit:] if history else []
+
+    # Преобразуем в формат для AI моделей
+    messages = []
+    for msg in recent:
+        if msg.get('user'):
+            messages.append({"role": "user", "content": msg['user']})
+        if msg.get('assistant'):
+            messages.append({"role": "assistant", "content": msg['assistant']})
+
+    return messages
+
+
+async def add_message_to_history_async(user_id: int, role: str, content: str) -> bool:
+    """
+    Асинхронно добавить сообщение в историю пользователя
+
+    Args:
+        user_id: ID пользователя
+        role: Роль ('user' или 'assistant')
+        content: Текст сообщения
+
+    Returns:
+        True если сохранено успешно
+    """
+    try:
+        history_file = get_user_history_file(user_id)
+        history = load_user_history(user_id)
+
+        timestamp = datetime.now().strftime('%d.%m.%Y %H:%M')
+
+        # Если добавляем ответ assistant - добавляем к последнему сообщению
+        if role == 'assistant' and history:
+            # Если последнее сообщение только от user - добавляем assistant
+            if 'assistant' not in history[-1]:
+                history[-1]['assistant'] = content
+            else:
+                # Иначе создаём новую запись
+                history.append({
+                    'user': '',
+                    'assistant': content,
+                    'timestamp': timestamp
+                })
+        elif role == 'user':
+            # Создаём новую запись с вопросом
+            history.append({
+                'user': content,
+                'timestamp': timestamp
+            })
+
+        # Сохраняем
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка сохранения в историю: {e}")
+        return False
+
+
+def save_conversation(user_id: int, user_message: str, assistant_message: str) -> bool:
+    """
+    Сохранить пару вопрос-ответ в историю
+
+    Args:
+        user_id: ID пользователя
+        user_message: Вопрос пользователя
+        assistant_message: Ответ бота
+
+    Returns:
+        True если сохранено успешно
+    """
+    try:
+        history_file = get_user_history_file(user_id)
+        history = load_user_history(user_id)
+
+        timestamp = datetime.now().strftime('%d.%m.%Y %H:%M')
+
+        history.append({
+            'user': user_message,
+            'assistant': assistant_message,
+            'timestamp': timestamp
+        })
+
+        # Ограничиваем историю последними 1000 сообщениями
+        if len(history) > 1000:
+            history = history[-1000:]
+
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка сохранения беседы: {e}")
+        return False
