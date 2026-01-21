@@ -1,0 +1,11 @@
+# Nixpacks configuration for Railway
+# Добавляет ffmpeg для конвертации аудио (OpenAI Realtime API)
+
+[phases.setup]
+nixPkgs = ["ffmpeg"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python bot.py"
