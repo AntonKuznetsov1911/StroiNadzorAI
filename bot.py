@@ -528,19 +528,10 @@ except ImportError as e:
     model_selector = None
     logger.warning(f"⚠️ Модули optimized_prompts/model_selector не найдены: {e}")
 
-# Интерактивные калькуляторы v4.0
-try:
-    from interactive_calculators import (
-        create_concrete_calculator_handler,
-        create_rebar_calculator_handler,
-        concrete_calc_start,
-        rebar_calc_start
-    )
-    INTERACTIVE_CALCS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v4.0 загружены")
-except ImportError:
-    INTERACTIVE_CALCS_AVAILABLE = False
-    logger.warning("⚠️ Модуль interactive_calculators.py не найден")
+# Интерактивные калькуляторы v4.0 - УДАЛЁН дублирующий импорт
+# Все калькуляторы импортируются из calculator_handlers.py (строка 257)
+# interactive_calculators.py - устаревший модуль, не используется
+INTERACTIVE_CALCS_AVAILABLE = True  # Калькуляторы доступны через calculator_handlers
 
 # Категоризация нормативов v1.0
 try:
