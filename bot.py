@@ -572,6 +572,15 @@ except ImportError as e:
     VOICE_ASSISTANT_AVAILABLE = False
     logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
 
+# Импорт OpenAI Realtime API (альтернативный голосовой ассистент)
+try:
+    from openai_realtime_bot_integration import start_realtime_chat_command
+    OPENAI_REALTIME_AVAILABLE = True
+    logger.info("✅ OpenAI Realtime API (голосовой ассистент) загружен")
+except ImportError as e:
+    OPENAI_REALTIME_AVAILABLE = False
+    logger.warning(f"⚠️ OpenAI Realtime API недоступен: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -6099,6 +6108,21 @@ def main():
             logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
         except Exception as e:
             logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
+
+    # === OPENAI REALTIME API - АЛЬТЕРНАТИВНЫЙ ГОЛОСОВОЙ АССИСТЕНТ ===
+    if OPENAI_REALTIME_AVAILABLE:
+        try:
+            from openai_realtime_bot_integration import (
+                register_realtime_assistant_handlers,
+                init_realtime_assistant
+            )
+            # Инициализация OpenAI Realtime ассистента
+            init_realtime_assistant()
+            # Регистрация обработчиков
+            register_realtime_assistant_handlers(application)
+            logger.info("✅ OpenAI Realtime API (голосовой ассистент) активирован")
+        except Exception as e:
+            logger.error(f"❌ Ошибка активации OpenAI Realtime: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
