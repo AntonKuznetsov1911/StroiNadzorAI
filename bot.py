@@ -1864,9 +1864,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=inline_markup
     )
 
-    # Устанавливаем постоянную клавиатуру
+    # Устанавливаем постоянную клавиатуру (без дополнительного сообщения)
     await update.message.reply_text(
-        "Чем могу помочь?",
+        "⬇️",
         parse_mode='Markdown',
         reply_markup=get_main_keyboard()
     )
