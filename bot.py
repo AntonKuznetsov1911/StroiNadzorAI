@@ -4746,31 +4746,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # Специальная обработка для OpenAI Realtime (кнопка Real-time чат)
-    if query.data == "realtime_chat_start":
-        await query.answer("🎤 Запускаю Real-time чат...")
-
-        if OPENAI_REALTIME_AVAILABLE:
-            sent_message = await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="🎤 Инициализация OpenAI Realtime..."
-            )
-            adapted_update = Update(
-                update_id=update.update_id,
-                message=sent_message
-            )
-            await start_realtime_chat_command(adapted_update, context)
-        else:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="❌ **Real-time чат недоступен**\n\n"
-                    "Требуется:\n"
-                    "• OPENAI_API_KEY в переменных окружения\n"
-                    "• ffmpeg для конвертации аудио\n\n"
-                    "Команда: /realtime_chat",
-                parse_mode="Markdown"
-            )
-        return
+    # Обработка realtime_chat_start теперь в ConversationHandler (openai_realtime_bot_integration.py)
 
     await query.answer()
 
