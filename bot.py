@@ -581,6 +581,23 @@ except ImportError as e:
     OPENAI_REALTIME_AVAILABLE = False
     logger.warning(f"⚠️ OpenAI Realtime API недоступен: {e}")
 
+# LLM Council - Совет AI моделей для сложных вопросов (Karpathy's approach)
+try:
+    from llm_council import (
+        LLMCouncil,
+        get_llm_council,
+        is_council_available,
+        is_complex_question
+    )
+    LLM_COUNCIL_AVAILABLE = is_council_available()
+    if LLM_COUNCIL_AVAILABLE:
+        logger.info("✅ LLM Council загружен (Grok + Claude + Gemini)")
+    else:
+        logger.warning("⚠️ LLM Council недоступен (нужно минимум 2 AI модели)")
+except ImportError as e:
+    LLM_COUNCIL_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль llm_council.py не найден: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -1883,7 +1900,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
-    help_text = """📖 *ПОДРОБНАЯ СПРАВКА - СтройНадзорAI v2.3*
+    help_text = """📖 *ПОДРОБНАЯ СПРАВКА - СтройНадзорAI v2.4*
 
 *1️⃣ Анализ фотографий:*
    • Отправьте фото объекта
@@ -1899,6 +1916,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Бот помнит контекст разговора
    • Можно задавать уточняющие вопросы
    • Используйте /history для просмотра истории
+
+*🏛️ LLM COUNCIL - СОВЕТ AI (НОВОЕ v2.4!):*
+   /council вопрос - Опрос нескольких AI моделей
+   • Grok, Claude и Gemini отвечают независимо
+   • Синтез консенсусного ответа высокого качества
+   • Автоматически активируется для сложных вопросов
 
 *📚 КОМАНДЫ - НОРМАТИВЫ:*
    /regulations - 27 актуальных СП, ГОСТ, СНиП
@@ -1924,13 +1947,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /export - Экспорт истории (TXT/Markdown)
    /clear - Очистить историю
 
-*💡 УМНЫЕ ФУНКЦИИ v4.0 (ОБНОВЛЕНО!):*
+*💡 УМНЫЕ ФУНКЦИИ v5.0:*
    /calculators - Меню калькуляторов
+   /realtime_chat - Голосовой ассистент (OpenAI)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
 
-*❓ БЫСТРЫЕ ОТВЕТЫ v3.7 (НОВОЕ!):*
+*❓ БЫСТРЫЕ ОТВЕТЫ v3.7:*
    /faq - База часто задаваемых вопросов (20+ ответов)
    /faq_search запрос - Поиск готовых ответов
 
@@ -1959,6 +1983,121 @@ async def regulations_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     text += "\n💡 Задайте вопрос по любому нормативу!"
 
     await update.message.reply_text(text, parse_mode='Markdown', disable_web_page_preview=True)
+
+
+async def council_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Команда /council - принудительное использование LLM Council
+    
+    Позволяет задать вопрос Совету AI моделей (Grok + Claude + Gemini),
+    которые дадут свои ответы, оценят друг друга, и сформируют
+    консенсусный ответ высокого качества.
+    """
+    if not LLM_COUNCIL_AVAILABLE:
+        await update.message.reply_text(
+            "❌ **LLM Council недоступен**\n\n"
+            "Для работы Совета AI нужно минимум 2 модели:\n"
+            "• Grok (XAI_API_KEY)\n"
+            "• Claude (ANTHROPIC_API_KEY)\n"
+            "• Gemini (GEMINI_API_KEY)\n\n"
+            "Проверьте настройки API ключей.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Получаем вопрос после команды /council
+    args = context.args
+    if not args:
+        # Показываем справку
+        await update.message.reply_text(
+            "🏛️ **LLM Council — Совет AI моделей**\n\n"
+            "Отправляет ваш вопрос нескольким AI моделям, которые:\n"
+            "1️⃣ Дают независимые ответы (Grok, Claude, Gemini)\n"
+            "2️⃣ Оценивают ответы друг друга\n"
+            "3️⃣ Формируют консенсусный ответ\n\n"
+            "**Использование:**\n"
+            "`/council Ваш сложный технический вопрос`\n\n"
+            "**Пример:**\n"
+            "`/council Как правильно армировать плиту перекрытия по СП 63.13330?`\n\n"
+            "⏱️ Время ответа: 30-60 сек (опрос 3 моделей)\n"
+            "🎯 Качество: максимальное (консенсус экспертов)",
+            parse_mode="Markdown"
+        )
+        return
+    
+    question = " ".join(args)
+    user_id = update.effective_user.id
+    
+    # Добавляем вопрос в историю
+    await add_message_to_history_async(user_id, 'user', f"[COUNCIL] {question}")
+    
+    # Отправляем сообщение о начале работы Совета
+    council_msg = await update.message.reply_text(
+        "🏛️ **Совет AI собирается...**\n\n"
+        "⏳ Этап 1/3: Получаю мнения экспертов\n"
+        "• Grok — технический анализ\n"
+        "• Claude — детальная экспертиза\n"
+        "• Gemini — практические рекомендации\n\n"
+        "_Это займёт 30-60 секунд..._",
+        parse_mode="Markdown"
+    )
+    
+    try:
+        council = get_llm_council()
+        if not council:
+            await council_msg.edit_text(
+                "❌ Не удалось инициализировать Совет AI",
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Получаем контекст диалога
+        conversation_history = get_conversation_context(user_id)
+        context_text = ""
+        if conversation_history:
+            # Берём последние 3 сообщения как контекст
+            recent = conversation_history[-3:]
+            context_text = "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent])
+        
+        # Запускаем полную консультацию
+        result = await council.consult(question, context=context_text, skip_review=False)
+        
+        if result["success"]:
+            # Обновляем сообщение с результатом
+            final_answer = result["final_answer"]
+            duration = result["duration_seconds"]
+            models = result["models_used"]
+            
+            # Добавляем метаинформацию
+            footer = f"\n\n---\n⏱️ _Время: {duration:.1f} сек | Модели: {', '.join(models)}_"
+            
+            # Ограничиваем длину сообщения для Telegram (4096 символов)
+            max_len = 4000 - len(footer)
+            if len(final_answer) > max_len:
+                final_answer = final_answer[:max_len] + "..."
+            
+            await council_msg.edit_text(
+                final_answer + footer,
+                parse_mode="Markdown"
+            )
+            
+            # Сохраняем ответ в историю
+            await add_message_to_history_async(user_id, 'assistant', final_answer)
+            
+            logger.info(f"✅ LLM Council: ответ за {duration:.1f} сек для user {user_id}")
+        else:
+            await council_msg.edit_text(
+                f"❌ **Ошибка Совета AI**\n\n{result.get('final_answer', 'Неизвестная ошибка')}",
+                parse_mode="Markdown"
+            )
+    
+    except Exception as e:
+        logger.error(f"Council command error: {e}")
+        await council_msg.edit_text(
+            f"❌ **Ошибка при работе Совета AI**\n\n`{str(e)}`",
+            parse_mode="Markdown"
+        )
+
 
 async def examples_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /examples"""
@@ -3589,6 +3728,73 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Добавляем вопрос пользователя в историю
     await add_message_to_history_async(user_id, 'user', question)
+
+    # ============================================================================
+    # LLM COUNCIL: Автоматическое определение сложных вопросов
+    # ============================================================================
+    if LLM_COUNCIL_AVAILABLE:
+        is_complex, complexity_reason = is_complex_question(question)
+        
+        if is_complex:
+            logger.info(f"🏛️ LLM Council: Сложный вопрос обнаружен - {complexity_reason}")
+            
+            # Отправляем сообщение о работе Совета
+            council_thinking = await update.message.reply_text(
+                "🏛️ **Сложный вопрос — собираю Совет AI...**\n\n"
+                f"📊 Причина: _{complexity_reason}_\n\n"
+                "⏳ Этап 1/3: Получаю мнения экспертов\n"
+                "• Grok — технический анализ\n"
+                "• Claude — детальная экспертиза\n"
+                "• Gemini — практические рекомендации\n\n"
+                "_Это займёт 30-60 секунд для максимального качества..._",
+                parse_mode="Markdown"
+            )
+            
+            try:
+                council = get_llm_council()
+                if council:
+                    # Получаем контекст диалога
+                    conversation_history = get_conversation_context(user_id)
+                    context_text = ""
+                    if conversation_history:
+                        recent = conversation_history[-3:]
+                        context_text = "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent])
+                    
+                    # Запускаем консультацию (skip_review=True для ускорения)
+                    result = await council.consult(question, context=context_text, skip_review=True)
+                    
+                    if result["success"]:
+                        final_answer = result["final_answer"]
+                        duration = result["duration_seconds"]
+                        models = result["models_used"]
+                        
+                        footer = f"\n\n---\n🏛️ _Совет AI: {', '.join(models)} | {duration:.1f} сек_"
+                        
+                        max_len = 4000 - len(footer)
+                        if len(final_answer) > max_len:
+                            final_answer = final_answer[:max_len] + "..."
+                        
+                        await council_thinking.edit_text(
+                            final_answer + footer,
+                            parse_mode="Markdown"
+                        )
+                        
+                        await add_message_to_history_async(user_id, 'assistant', final_answer)
+                        logger.info(f"✅ LLM Council auto: ответ за {duration:.1f} сек для user {user_id}")
+                        return  # Ответ от Совета отправлен
+                    else:
+                        # Совет не смог ответить - продолжаем обычную обработку
+                        await council_thinking.delete()
+                        logger.warning("LLM Council: не удалось получить ответ, fallback to single model")
+                else:
+                    await council_thinking.delete()
+            except Exception as e:
+                logger.error(f"LLM Council auto error: {e}")
+                try:
+                    await council_thinking.delete()
+                except:
+                    pass
+                # Продолжаем обычную обработку
 
     # Отправляем сообщение о процессе и сохраняем его для последующего удаления
     thinking_text = "🤔 Думаю над вашим вопросом... \n\nВы можете не ждать, я пришлю уведомление 😉"
@@ -5889,6 +6095,11 @@ def main():
     # Новые команды v3.0
     application.add_handler(CommandHandler("calculators", calculators_command))
     application.add_handler(CommandHandler("region", region_command))
+
+    # LLM Council - Совет AI моделей (Karpathy's approach)
+    if LLM_COUNCIL_AVAILABLE:
+        application.add_handler(CommandHandler("council", council_command))
+        logger.info("✅ Команда /council зарегистрирована")
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v4.0 ===
     # Интерактивные калькуляторы вызываются через меню /calculators и команды
