@@ -528,19 +528,10 @@ except ImportError as e:
     model_selector = None
     logger.warning(f"⚠️ Модули optimized_prompts/model_selector не найдены: {e}")
 
-# Интерактивные калькуляторы v4.0
-try:
-    from interactive_calculators import (
-        create_concrete_calculator_handler,
-        create_rebar_calculator_handler,
-        concrete_calc_start,
-        rebar_calc_start
-    )
-    INTERACTIVE_CALCS_AVAILABLE = True
-    logger.info("✅ Интерактивные калькуляторы v4.0 загружены")
-except ImportError:
-    INTERACTIVE_CALCS_AVAILABLE = False
-    logger.warning("⚠️ Модуль interactive_calculators.py не найден")
+# Интерактивные калькуляторы v4.0 - УДАЛЁН дублирующий импорт
+# Все калькуляторы импортируются из calculator_handlers.py (строка 257)
+# interactive_calculators.py - устаревший модуль, не используется
+INTERACTIVE_CALCS_AVAILABLE = True  # Калькуляторы доступны через calculator_handlers
 
 # Категоризация нормативов v1.0
 try:
@@ -580,6 +571,15 @@ try:
 except ImportError as e:
     VOICE_ASSISTANT_AVAILABLE = False
     logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
+
+# Импорт OpenAI Realtime API (альтернативный голосовой ассистент)
+try:
+    from openai_realtime_bot_integration import start_realtime_chat_command
+    OPENAI_REALTIME_AVAILABLE = True
+    logger.info("✅ OpenAI Realtime API (голосовой ассистент) загружен")
+except ImportError as e:
+    OPENAI_REALTIME_AVAILABLE = False
+    logger.warning(f"⚠️ OpenAI Realtime API недоступен: {e}")
 
 # LLM Council - Совет AI моделей для сложных вопросов (Karpathy's approach)
 try:
@@ -1892,7 +1892,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Устанавливаем постоянную клавиатуру
     await update.message.reply_text(
-        "Используйте кнопки ниже для быстрого доступа к функциям бота.",
+        "👇",
         parse_mode='Markdown',
         reply_markup=get_main_keyboard()
     )
@@ -1947,8 +1947,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
    /export - Экспорт истории (TXT/Markdown)
    /clear - Очистить историю
 
-*💡 УМНЫЕ ФУНКЦИИ v4.0:*
-   /calculators - Меню калькуляторов (интерактивные!)
+*💡 УМНЫЕ ФУНКЦИИ v5.0:*
+   /calculators - Меню калькуляторов
+   /realtime_chat - Голосовой ассистент (OpenAI)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
@@ -5178,31 +5179,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0 ===
-
-    elif query.data == "calc_concrete":
-        # Запуск интерактивного калькулятора бетона
-        if INTERACTIVE_CALCS_AVAILABLE:
-            await concrete_calc_start(update, context)
-        else:
-            await query.edit_message_text(
-                "⚠️ Интерактивный калькулятор бетона недоступен.\n"
-                "Попробуйте использовать команду /concrete_calc"
-            )
-
-    elif query.data == "calc_reinforcement":
-        # Запуск интерактивного калькулятора арматуры
-        if INTERACTIVE_CALCS_AVAILABLE:
-            await rebar_calc_start(update, context)
-        else:
-            await query.edit_message_text(
-                "⚠️ Интерактивный калькулятор арматуры недоступен.\n"
-                "Попробуйте использовать команду /rebar_calc"
-            )
+    # ВАЖНО: calc_concrete и calc_reinforcement обрабатываются ConversationHandler
+    # из calculator_handlers.py - НЕ дублировать здесь!
 
     elif query.data == "calc_brick":
         await query.edit_message_text(
             "🧱 **КАЛЬКУЛЯТОР КИРПИЧА/БЛОКОВ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_brick длина высота толщина тип проёмы`\n\n"
             "**Пример:**\n"
             "`/calc_brick 10 3 0.25 single 5`\n\n"
@@ -5217,7 +5200,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_tile":
         await query.edit_message_text(
             "🔲 **КАЛЬКУЛЯТОР ПЛИТКИ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_tile длина ширина размер_плитки запас`\n\n"
             "**Пример:**\n"
             "`/calc_tile 5 4 0.3 10`\n\n"
@@ -5231,7 +5214,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_paint":
         await query.edit_message_text(
             "🎨 **КАЛЬКУЛЯТОР КРАСКИ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_paint площадь тип поверхность слои`\n\n"
             "**Пример:**\n"
             "`/calc_paint 50 water smooth 2`\n\n"
@@ -5246,7 +5229,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_wall_area":
         await query.edit_message_text(
             "📐 **КАЛЬКУЛЯТОР ПЛОЩАДИ СТЕН**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_wall_area длина ширина высота окна двери`\n\n"
             "**Пример:**\n"
             "`/calc_wall_area 5 4 2.7 2 1`\n\n"
@@ -5260,7 +5243,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_roof":
         await query.edit_message_text(
             "🏠 **КАЛЬКУЛЯТОР КРОВЛИ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_roof длина ширина тип угол свес`\n\n"
             "**Пример:**\n"
             "`/calc_roof 10 8 gable 30 0.5`\n\n"
@@ -5275,7 +5258,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_plaster":
         await query.edit_message_text(
             "🧱 **КАЛЬКУЛЯТОР ШТУКАТУРКИ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_plaster площадь толщина тип`\n\n"
             "**Пример:**\n"
             "`/calc_plaster 100 0.02 cement`\n\n"
@@ -5289,7 +5272,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_wallpaper":
         await query.edit_message_text(
             "🖼️ **КАЛЬКУЛЯТОР ОБОЕВ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_wallpaper площадь длина_рулона ширина раппорт запас`\n\n"
             "**Пример:**\n"
             "`/calc_wallpaper 50 10 0.53 0 10`\n\n"
@@ -5304,7 +5287,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_laminate":
         await query.edit_message_text(
             "🪵 **КАЛЬКУЛЯТОР ЛАМИНАТА**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_laminate длина ширина длина_доски ширина_доски запас`\n\n"
             "**Пример:**\n"
             "`/calc_laminate 5 4 1.28 0.192 7`\n\n"
@@ -5318,7 +5301,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_insulation":
         await query.edit_message_text(
             "🧊 **КАЛЬКУЛЯТОР УТЕПЛИТЕЛЯ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_insulation площадь толщина тип`\n\n"
             "**Пример:**\n"
             "`/calc_insulation 100 0.1 mineral_wool`\n\n"
@@ -5332,7 +5315,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_foundation":
         await query.edit_message_text(
             "⚓ **КАЛЬКУЛЯТОР ФУНДАМЕНТА**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_foundation длина ширина глубина тип`\n\n"
             "**Пример:**\n"
             "`/calc_foundation 10 8 1.5 strip`\n\n"
@@ -5346,7 +5329,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_stairs":
         await query.edit_message_text(
             "🪜 **КАЛЬКУЛЯТОР ЛЕСТНИЦЫ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_stairs высота_этажа ширина_проступи высота_подступенка ширина_лестницы`\n\n"
             "**Пример:**\n"
             "`/calc_stairs 3 0.3 0.15 1`\n\n"
@@ -5361,7 +5344,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_drywall":
         await query.edit_message_text(
             "📐 **КАЛЬКУЛЯТОР ГИПСОКАРТОНА**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_drywall длина ширина высота потолок`\n\n"
             "**Пример:**\n"
             "`/calc_drywall 5 4 2.7 1`\n\n"
@@ -5374,7 +5357,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_earthwork":
         await query.edit_message_text(
             "🚜 **КАЛЬКУЛЯТОР ЗЕМЛЯНЫХ РАБОТ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_earthwork длина ширина глубина тип_грунта`\n\n"
             "**Пример:**\n"
             "`/calc_earthwork 20 15 2 clay`\n\n"
@@ -5388,7 +5371,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "calc_labor":
         await query.edit_message_text(
             "👷 **КАЛЬКУЛЯТОР ТРУДОЗАТРАТ**\n\n"
-            "Используйте интерактивный режим через меню или:\n"
+            "Используйте пошаговый режим через меню или:\n"
             "`/calc_labor тип_работы объём единица`\n\n"
             "**Пример:**\n"
             "`/calc_labor concrete 50 m3`\n\n"
@@ -5889,13 +5872,13 @@ async def calculators_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    calc_text = """🧮 **ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v5.0**
+    calc_text = """🧮 **КАЛЬКУЛЯТОРЫ v5.0**
 
 Все калькуляторы с пошаговым вводом данных!
 
 **Основные конструкции:**
-🏗️ Бетон (интерактивный) - объём, марка, материалы
-🔧 Арматура (интерактивный) - количество, вес
+🏗️ Бетон - объём, марка, материалы
+🔧 Арматура - количество, вес
 📦 Опалубка - площадь, оборачиваемость
 ⚓ Фундамент - комплексный расчет
 
@@ -6039,7 +6022,7 @@ async def setup_bot_menu(application):
         BotCommand("help", "📖 Справка по всем командам"),
         # BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),  # Отключено
         # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
-        BotCommand("calculators", "🧮 Калькуляторы (интерактивные)"),
+        BotCommand("calculators", "🧮 Калькуляторы"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
         BotCommand("regulations_menu", "📖 Категории нормативов"),
         BotCommand("faq", "❓ Частые вопросы"),
@@ -6146,13 +6129,14 @@ def main():
         application.add_handler(create_earthwork_calculator_handler())
         application.add_handler(create_labor_calculator_handler())
 
-        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21)")
+        # Быстрые команды для расчёта одной строкой
+        application.add_handler(CommandHandler("calc_concrete", quick_concrete))
+        application.add_handler(CommandHandler("calc_math", quick_math))
 
-    # Старая система калькуляторов (для обратной совместимости)
-    if INTERACTIVE_CALCS_AVAILABLE:
-        application.add_handler(create_concrete_calculator_handler())
-        application.add_handler(create_rebar_calculator_handler())
-        logger.info("✅ Старая система калькуляторов также активна")
+        logger.info("✅ Интерактивные калькуляторы v4.0 зарегистрированы (все 21 + быстрые команды)")
+
+    # УДАЛЕНО: дублирование калькуляторов создавало конфликт ConversationHandler
+    # Старая система interactive_calculators.py больше не используется
 
     # === КАТЕГОРИЗАЦИЯ НОРМАТИВОВ v1.0 ===
     if REGULATIONS_CATEGORIES_AVAILABLE:
@@ -6278,20 +6262,8 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_planner_callback, pattern="^plan_"))
         logger.info("✅ Work planner v3.8 зарегистрирован")
 
-    # === ИНТЕРАКТИВНЫЕ КАЛЬКУЛЯТОРЫ v3.5 ===
-    if CALCULATOR_HANDLERS_AVAILABLE:
-        # ConversationHandler для всех 7 калькуляторов
-        application.add_handler(create_concrete_calculator_handler())
-        application.add_handler(create_rebar_calculator_handler())
-        application.add_handler(create_formwork_calculator_handler())
-        application.add_handler(create_electrical_calculator_handler())
-        application.add_handler(create_water_calculator_handler())
-        application.add_handler(create_winter_calculator_handler())
-        application.add_handler(create_math_calculator_handler())
-        # Быстрые команды для расчёта одной строкой
-        application.add_handler(CommandHandler("calc_concrete", quick_concrete))
-        application.add_handler(CommandHandler("calc_math", quick_math))
-        logger.info("✅ Все 7 интерактивных калькуляторов зарегистрированы (v3.5)")
+    # УДАЛЕНО: дублирующаяся регистрация калькуляторов v3.5
+    # Все 21 калькулятор уже зарегистрированы выше в блоке v4.0
 
     # === ИНТЕРАКТИВНЫЕ ОБРАБОТЧИКИ ДОКУМЕНТОВ v1.0 ===
     if DOCUMENT_HANDLERS_AVAILABLE:
@@ -6347,6 +6319,21 @@ def main():
             logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
         except Exception as e:
             logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
+
+    # === OPENAI REALTIME API - АЛЬТЕРНАТИВНЫЙ ГОЛОСОВОЙ АССИСТЕНТ ===
+    if OPENAI_REALTIME_AVAILABLE:
+        try:
+            from openai_realtime_bot_integration import (
+                register_realtime_assistant_handlers,
+                init_realtime_assistant
+            )
+            # Инициализация OpenAI Realtime ассистента
+            init_realtime_assistant()
+            # Регистрация обработчиков
+            register_realtime_assistant_handlers(application)
+            logger.info("✅ OpenAI Realtime API (голосовой ассистент) активирован")
+        except Exception as e:
+            logger.error(f"❌ Ошибка активации OpenAI Realtime: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))

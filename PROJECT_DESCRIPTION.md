@@ -45,7 +45,7 @@
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │              КЛАССИФИКАТОР ЗАПРОСОВ                     │
-│  (ai_config.py → classify_query)                        │
+│  (model_selector.py → ModelSelector)                    │
 └─────────────────────┬───────────────────────────────────┘
                       ▼
     ┌─────────────────┼─────────────────┐
@@ -75,7 +75,8 @@
 ```
 StroiNadzorAI/
 ├── bot.py                    # Главный файл бота (6500+ строк)
-├── ai_config.py              # Конфигурация AI v5.0 (NEW!)
+├── model_selector.py         # Умный выбор AI модели
+├── optimized_prompts.py      # Оптимизированные промпты для AI
 │
 ├── 📚 БАЗЫ ЗНАНИЙ
 │   ├── regulations_2025.py           # 27 нормативов + 8 ФЗ
@@ -109,6 +110,16 @@ StroiNadzorAI/
 │   ├── xai_client.py                 # xAI Grok API
 │   ├── web_search.py                 # Поиск на docs.cntd.ru
 │   └── improvements_v3.py            # UI улучшения
+│
+├── 🎤 ГОЛОСОВОЙ АССИСТЕНТ (Real-time)
+│   ├── websocket_proxy.py            # WebSocket прокси для Gemini Live
+│   ├── gemini_live_client.py         # Клиент Gemini Live API
+│   ├── gemini_live_config.py         # Конфигурация Live API
+│   └── mini_app/                     # Telegram Mini App
+│       ├── index.html                # Веб-интерфейс
+│       ├── app.js                    # Логика Mini App
+│       ├── styles.css                # Стили
+│       └── vercel.json               # Конфиг для Vercel
 │
 ├── 🛠️ ВСПОМОГАТЕЛЬНЫЕ
 │   ├── role_modes.py                 # 6 ролей пользователей
