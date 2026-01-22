@@ -461,7 +461,7 @@ def register_realtime_assistant_handlers(application):
             VOICE_CONVERSATION: [
                 MessageHandler(filters.VOICE, handle_realtime_voice),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_realtime_text),
-                CallbackQueryHandler(realtime_chat_callback),
+                CallbackQueryHandler(realtime_chat_callback, pattern="^stop_realtime_chat$"),
             ]
         },
         fallbacks=[
