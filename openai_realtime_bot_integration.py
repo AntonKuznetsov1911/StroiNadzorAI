@@ -186,12 +186,32 @@ async def start_realtime_chat_command(update: Update, context: ContextTypes.DEFA
             except Exception as e:
                 logger.error(f"❌ Ошибка отправки транскрипции: {e}")
 
-    # Запускаем сессию
-    success = await realtime_assistant.start_conversation(
-        user_id=user_id,
-        on_audio_ready=send_voice_response,
-        on_text_ready=send_transcript
-    )
+    # Запускаем сессию с таймаутом
+    try:
+        success = await asyncio.wait_for(
+            realtime_assistant.start_conversation(
+                user_id=user_id,
+                on_audio_ready=send_voice_response,
+                on_text_ready=send_transcript
+            ),
+            timeout=10.0  # 10 секунд на подключение
+        )
+    except asyncio.TimeoutError:
+        await update.message.reply_text(
+            "⏱ **Таймаут подключения**\n\n"
+            "OpenAI Realtime API не отвечает.\n"
+            "Попробуйте позже или используйте обычные голосовые сообщения.",
+            parse_mode="Markdown"
+        )
+        return ConversationHandler.END
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ **Ошибка подключения**\n\n"
+            f"`{str(e)[:100]}`\n\n"
+            "Попробуйте обычные голосовые сообщения.",
+            parse_mode="Markdown"
+        )
+        return ConversationHandler.END
 
     if success:
         # Даём время на установку соединения
@@ -228,8 +248,14 @@ async def start_realtime_chat_command(update: Update, context: ContextTypes.DEFA
         return REALTIME_CONVERSATION
     else:
         await update.message.reply_text(
-            "❌ Не удалось запустить голосовую сессию.\n"
-            "Проверьте OPENAI_API_KEY и попробуйте позже."
+            "❌ **Не удалось запустить Real-time сессию**\n\n"
+            "Возможные причины:\n"
+            "• OpenAI Realtime API требует специальный доступ\n"
+            "• Неверный или недостаточный API ключ\n"
+            "• Сервис временно недоступен\n\n"
+            "💡 Пока можете использовать обычные голосовые сообщения — "
+            "бот распознает речь через Whisper.",
+            parse_mode="Markdown"
         )
         return ConversationHandler.END
 
