@@ -1776,10 +1776,8 @@ REGULATIONS = {
 
 def get_main_keyboard():
     """Создать постоянную клавиатуру с кнопками"""
-    mini_app_url = os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")
-
     keyboard = [
-        [KeyboardButton("⚡ Real-time чат", web_app=WebAppInfo(url=mini_app_url))],
+        [KeyboardButton("🎤 Real-time чат")],
     ]
     return ReplyKeyboardMarkup(
         keyboard,
@@ -1869,7 +1867,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Inline меню под сообщением
     inline_keyboard = [
-        [InlineKeyboardButton("⚡ Real-time чат (Mini App)", web_app=WebAppInfo(url=os.getenv("MINI_APP_URL", "https://your-mini-app.vercel.app/")))],
+        [InlineKeyboardButton("🎤 Real-time чат", callback_data="realtime_chat_start")],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1888,13 +1886,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_message,
         parse_mode='Markdown',
         reply_markup=inline_markup
-    )
-
-    # Устанавливаем постоянную клавиатуру
-    await update.message.reply_text(
-        "👇",
-        parse_mode='Markdown',
-        reply_markup=get_main_keyboard()
     )
 
 
@@ -3677,6 +3668,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, есть ли распознанный текст из голосового сообщения
     question = context.user_data.pop('_voice_recognized_text', None) or update.message.text
 
+    # Обработка кнопки "🎤 Real-time чат"
+    if question and question.strip() == "🎤 Real-time чат":
+        if OPENAI_REALTIME_AVAILABLE:
+            await start_realtime_chat_command(update, context)
+        else:
+            await update.message.reply_text(
+                "❌ **Real-time чат недоступен**\n\n"
+                "Требуется OPENAI_API_KEY.\n"
+                "Попробуйте команду: /realtime_chat",
+                parse_mode="Markdown"
+            )
+        return
+
     # Проверка ожидания названия проекта
     if context.user_data.get("waiting_for_project_name"):
         await handle_project_creation(update, context)
@@ -4719,33 +4723,51 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Не обрабатываем здесь - пусть обработает ConversationHandler
         return
 
-    # Специальная обработка для голосового ассистента
+    # Специальная обработка для голосового ассистента (Gemini Live)
     if query.data == "voice_chat_start":
         await query.answer("🎤 Запускаю голосовой ассистент...")
 
         if VOICE_ASSISTANT_AVAILABLE:
-            # Отправляем новое сообщение в чат для запуска голосового режима
             sent_message = await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text="🎤 Инициализация голосового ассистента..."
             )
-
-            # Создаём Update с новым сообщением для вызова команды
             adapted_update = Update(
                 update_id=update.update_id,
                 message=sent_message
             )
-
-            # Запускаем голосовой ассистент
             await start_voice_chat_command(adapted_update, context)
         else:
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text="❌ **Голосовой ассистент недоступен**\n\n"
+                text="❌ **Голосовой ассистент Gemini недоступен**\n\n"
+                    "Попробуйте OpenAI: /realtime_chat",
+                parse_mode="Markdown"
+            )
+        return
+
+    # Специальная обработка для OpenAI Realtime (кнопка Real-time чат)
+    if query.data == "realtime_chat_start":
+        await query.answer("🎤 Запускаю Real-time чат...")
+
+        if OPENAI_REALTIME_AVAILABLE:
+            sent_message = await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="🎤 Инициализация OpenAI Realtime..."
+            )
+            adapted_update = Update(
+                update_id=update.update_id,
+                message=sent_message
+            )
+            await start_realtime_chat_command(adapted_update, context)
+        else:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="❌ **Real-time чат недоступен**\n\n"
                     "Требуется:\n"
-                    "• Установить `websockets>=12.0`\n"
-                    "• Настроить GOOGLE_API_KEY\n\n"
-                    "Подробности: `GEMINI_LIVE_INTEGRATION.md`",
+                    "• OPENAI_API_KEY в переменных окружения\n"
+                    "• ffmpeg для конвертации аудио\n\n"
+                    "Команда: /realtime_chat",
                 parse_mode="Markdown"
             )
         return
