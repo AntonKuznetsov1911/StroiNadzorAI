@@ -460,12 +460,12 @@ def get_regulations_by_category(category):
 
 CALCULATORS = {
     "concrete": {
-        "name": "🏗️ Бетон (интерактивный)",
+        "name": "🏗️ Бетон",
         "description": "Объём, марка, материалы",
         "icon": "🏗️"
     },
     "reinforcement": {
-        "name": "🔧 Арматура (интерактивный)",
+        "name": "🔧 Арматура",
         "description": "Количество, вес, стоимость",
         "icon": "🔧"
     },
