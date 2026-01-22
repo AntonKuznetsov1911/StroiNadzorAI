@@ -598,6 +598,36 @@ except ImportError as e:
     LLM_COUNCIL_AVAILABLE = False
     logger.warning(f"⚠️ Модуль llm_council.py не найден: {e}")
 
+# Normative RAG - Векторный поиск по нормативам
+try:
+    from normative_rag import (
+        init_normative_rag,
+        get_normative_rag,
+        search_norms_for_query,
+        get_norm_for_answer,
+        is_rag_available
+    )
+    RAG_AVAILABLE = True
+    logger.info("✅ Normative RAG модуль загружен")
+except ImportError as e:
+    RAG_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль normative_rag.py не найден: {e}")
+
+# Verification Engine - Антигаллюцинации и проверка ответов
+try:
+    from verification_engine import (
+        verify_bot_response,
+        should_block_response,
+        get_safe_response,
+        format_verification_footer,
+        VerificationLevel
+    )
+    VERIFICATION_AVAILABLE = True
+    logger.info("✅ Verification Engine загружен")
+except ImportError as e:
+    VERIFICATION_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль verification_engine.py не найден: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -1972,6 +2002,94 @@ async def regulations_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     text += "\n💡 Задайте вопрос по любому нормативу!"
 
     await update.message.reply_text(text, parse_mode='Markdown', disable_web_page_preview=True)
+
+
+async def norms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Команда /norms - Семантический поиск по нормативам (RAG)
+
+    Использование:
+    /norms защитный слой арматуры
+    /norms минимальная толщина стены
+    """
+    if not RAG_AVAILABLE:
+        await update.message.reply_text(
+            "❌ **RAG система недоступна**\n\n"
+            "Модуль normative_rag.py не загружен.\n"
+            "Используйте /regulations для просмотра списка нормативов.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Получаем запрос
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "🔍 **Поиск по нормативам (RAG)**\n\n"
+            "Семантический поиск по базе СП, ГОСТ, СНиП.\n\n"
+            "**Использование:**\n"
+            "`/norms ваш запрос`\n\n"
+            "**Примеры:**\n"
+            "• `/norms защитный слой арматуры`\n"
+            "• `/norms минимальная толщина несущей стены`\n"
+            "• `/norms требования к бетону B25`\n"
+            "• `/norms огнестойкость перекрытий`\n\n"
+            "📊 **Статус базы:**\n"
+            f"{'✅ RAG инициализирован' if is_rag_available() else '⏳ RAG не инициализирован'}",
+            parse_mode="Markdown"
+        )
+        return
+
+    query = " ".join(args)
+
+    # Показываем что ищем
+    searching_msg = await update.message.reply_text(
+        f"🔍 Ищу: _{query}_\n\n⏳ Поиск по базе нормативов...",
+        parse_mode="Markdown"
+    )
+
+    try:
+        # Выполняем поиск
+        results = await search_norms_for_query(query, top_k=5)
+
+        if not results:
+            await searching_msg.edit_text(
+                f"🔍 Запрос: _{query}_\n\n"
+                "❌ **Ничего не найдено**\n\n"
+                "Попробуйте:\n"
+                "• Переформулировать запрос\n"
+                "• Использовать другие ключевые слова\n"
+                "• Проверить /regulations для списка доступных документов",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Форматируем результаты
+        response = f"🔍 **Результаты поиска:** _{query}_\n\n"
+
+        for i, result in enumerate(results, 1):
+            doc_code = result.get('document_code', 'Неизвестно')
+            section = result.get('section', '')
+            content = result.get('content', '')[:300]
+            relevance = result.get('relevance_score', 0)
+
+            response += f"**{i}. {doc_code}**"
+            if section:
+                response += f" (п. {section})"
+            response += f"\n📊 Релевантность: {relevance:.0%}\n"
+            response += f"_{content}{'...' if len(result.get('content', '')) > 300 else ''}_\n\n"
+
+        response += "💡 _Для детального вопроса — напишите его в чат_"
+
+        await searching_msg.edit_text(response, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Ошибка поиска нормативов: {e}")
+        await searching_msg.edit_text(
+            f"❌ Ошибка поиска: {str(e)}\n\n"
+            "Попробуйте позже или используйте /regulations",
+            parse_mode="Markdown"
+        )
 
 
 async def council_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4554,6 +4672,38 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
 
+        # ============================================================================
+        # VERIFICATION ENGINE: Проверка ответа на галлюцинации и наличие нормативов
+        # ============================================================================
+        if VERIFICATION_AVAILABLE:
+            try:
+                verification = verify_bot_response(
+                    response=answer,
+                    question=question,
+                    question_type="normative"  # Основной тип - нормативные вопросы
+                )
+
+                # Добавляем footer с информацией о верификации
+                verification_footer = format_verification_footer(verification)
+
+                # Если есть предупреждения - модифицируем ответ
+                if verification.modified_response:
+                    answer = verification.modified_response
+                else:
+                    answer = answer + verification_footer
+
+                # Логируем результат верификации
+                if verification.level == VerificationLevel.PASSED:
+                    logger.info(f"✅ Verification PASSED: confidence={verification.confidence_score:.0%}")
+                elif verification.level == VerificationLevel.WARNING:
+                    logger.warning(f"⚠️ Verification WARNING: {verification.warnings}")
+                else:
+                    logger.warning(f"❌ Verification FAILED: {verification.errors}")
+
+            except Exception as ver_error:
+                logger.error(f"Verification error: {ver_error}")
+                # Продолжаем без верификации
+
         # 🎯 ГЕНЕРАЦИЯ УМНЫХ СВЯЗАННЫХ ВОПРОСОВ (v3.1) - в фоне
         related_questions = []
         if IMPROVEMENTS_V3_AVAILABLE:
@@ -6020,6 +6170,7 @@ async def setup_bot_menu(application):
         # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
         BotCommand("calculators", "🧮 Калькуляторы"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
+        BotCommand("norms", "🔍 Поиск по нормативам (RAG)"),
         BotCommand("regulations_menu", "📖 Категории нормативов"),
         BotCommand("faq", "❓ Частые вопросы"),
         BotCommand("templates", "📄 Шаблоны документов"),
@@ -6059,6 +6210,16 @@ def main():
             logger.error(f"Ошибка инициализации PostgreSQL: {e}")
             logger.info("Продолжаем работу с JSON хранилищем")
 
+    # Инициализируем RAG систему для нормативов
+    if RAG_AVAILABLE:
+        try:
+            if init_normative_rag():
+                logger.info("✅ Normative RAG инициализирован")
+            else:
+                logger.warning("⚠️ Normative RAG не удалось инициализировать")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации RAG: {e}")
+
     logger.info("✅ Бот СтройНадзорAI запущен успешно!")
 
     # Создаем приложение
@@ -6068,6 +6229,10 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("regulations", regulations_command))
+    # RAG поиск по нормативам
+    if RAG_AVAILABLE:
+        application.add_handler(CommandHandler("norms", norms_command))
+        logger.info("✅ Команда /norms зарегистрирована")
     application.add_handler(CommandHandler("examples", examples_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("stats", stats_command))
