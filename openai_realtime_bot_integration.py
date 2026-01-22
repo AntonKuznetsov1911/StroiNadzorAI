@@ -221,6 +221,41 @@ async def start_realtime_chat_command(update: Update, context: ContextTypes.DEFA
     return VOICE_CONVERSATION
 
 
+async def start_realtime_chat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Entry point через callback кнопки (для ConversationHandler)"""
+    query = update.callback_query
+    await query.answer("🎤 Запускаю голосовой чат...")
+
+    if not openai_client:
+        await query.edit_message_text(
+            "❌ Голосовой ассистент недоступен.\n"
+            "Требуется OPENAI_API_KEY."
+        )
+        return ConversationHandler.END
+
+    # Очищаем контекст
+    context.user_data['voice_messages'] = []
+
+    keyboard = [
+        [InlineKeyboardButton("🛑 Завершить", callback_data="stop_realtime_chat")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="🎤 **ГОЛОСОВОЙ АССИСТЕНТ**\n\n"
+        "Отправьте голосовое сообщение — я отвечу голосом!\n\n"
+        "• 🎤 Говорите кратко и чётко\n"
+        "• 💬 Можно писать текстом\n"
+        "• 🔊 Ответ придёт голосом\n\n"
+        "_Whisper + GPT-4 + TTS_",
+        parse_mode="Markdown",
+        reply_markup=reply_markup
+    )
+
+    return VOICE_CONVERSATION
+
+
 async def handle_realtime_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка голосового сообщения"""
 
@@ -419,7 +454,8 @@ def register_realtime_assistant_handlers(application):
 
     conv_handler = ConversationHandler(
         entry_points=[
-            CommandHandler("realtime_chat", start_realtime_chat_command)
+            CommandHandler("realtime_chat", start_realtime_chat_command),
+            CallbackQueryHandler(start_realtime_chat_callback, pattern="^realtime_chat_start$")
         ],
         states={
             VOICE_CONVERSATION: [
