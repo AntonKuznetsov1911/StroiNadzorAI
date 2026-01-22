@@ -61,5 +61,11 @@ vosk>=0.3.45
 # ДОПОЛНИТЕЛЬНЫЕ (Extra)
 # ===========================================
 
+# RAG System - Векторная база для нормативов
+chromadb>=0.4.0
+
+# PDF Parsing - Извлечение текста из PDF нормативов
+pymupdf>=1.23.0
+
 # Logging (optional)
 # python-json-logger==2.0.7
