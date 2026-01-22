@@ -1888,13 +1888,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=inline_markup
     )
 
-    # Устанавливаем постоянную клавиатуру
-    await update.message.reply_text(
-        "👇",
-        parse_mode='Markdown',
-        reply_markup=get_main_keyboard()
-    )
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
