@@ -628,6 +628,52 @@ except ImportError as e:
     VERIFICATION_AVAILABLE = False
     logger.warning(f"⚠️ Модуль verification_engine.py не найден: {e}")
 
+# Request Classifier - Классификация запросов
+try:
+    from request_classifier import (
+        classify_request,
+        get_request_type,
+        get_processing_hints,
+        is_urgent_request,
+        RequestType
+    )
+    CLASSIFIER_AVAILABLE = True
+    logger.info("✅ Request Classifier загружен")
+except ImportError as e:
+    CLASSIFIER_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль request_classifier.py не найден: {e}")
+
+# Engineering Reasoning Engine - Инженерные расчёты
+try:
+    from engineering_reasoning import (
+        calculate_beam,
+        analyze_engineering_request,
+        get_concrete_properties,
+        get_rebar_area,
+        get_engineering_engine
+    )
+    ENGINEERING_AVAILABLE = True
+    logger.info("✅ Engineering Reasoning Engine загружен")
+except ImportError as e:
+    ENGINEERING_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль engineering_reasoning.py не найден: {e}")
+
+# Risk & Liability Engine - Оценка рисков
+try:
+    from risk_liability_engine import (
+        assess_risk,
+        is_critical_risk,
+        is_high_risk,
+        format_risk_assessment,
+        get_liability_warning,
+        RiskLevel
+    )
+    RISK_ENGINE_AVAILABLE = True
+    logger.info("✅ Risk & Liability Engine загружен")
+except ImportError as e:
+    RISK_ENGINE_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль risk_liability_engine.py не найден: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -4673,6 +4719,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await add_message_to_history_async(user_id, 'assistant', answer)
 
         # ============================================================================
+        # REQUEST CLASSIFIER: Определение типа запроса для адаптивной обработки
+        # ============================================================================
+        question_type = "normative"  # По умолчанию
+        classification_result = None
+        processing_hints = {}
+
+        if CLASSIFIER_AVAILABLE:
+            try:
+                classification_result = classify_request(question)
+                question_type = classification_result.request_type.value
+                processing_hints = get_processing_hints(question)
+
+                logger.info(f"📊 Request classified: {question_type} (confidence: {classification_result.confidence:.0%})")
+
+                # Проверка на срочный запрос
+                if is_urgent_request(question):
+                    logger.warning(f"🚨 Urgent request detected from user {user_id}")
+
+            except Exception as class_error:
+                logger.error(f"Classification error: {class_error}")
+
+        # ============================================================================
         # VERIFICATION ENGINE: Проверка ответа на галлюцинации и наличие нормативов
         # ============================================================================
         if VERIFICATION_AVAILABLE:
@@ -4680,7 +4748,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 verification = verify_bot_response(
                     response=answer,
                     question=question,
-                    question_type="normative"  # Основной тип - нормативные вопросы
+                    question_type=question_type  # Используем классифицированный тип
                 )
 
                 # Добавляем footer с информацией о верификации
@@ -4703,6 +4771,55 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as ver_error:
                 logger.error(f"Verification error: {ver_error}")
                 # Продолжаем без верификации
+
+        # ============================================================================
+        # RISK & LIABILITY ENGINE: Оценка рисков для критичных вопросов
+        # ============================================================================
+        if RISK_ENGINE_AVAILABLE:
+            try:
+                # Проверяем на высокий/критический риск
+                if is_high_risk(question) or is_high_risk(answer):
+                    risk_assessment = assess_risk(question + " " + answer)
+
+                    if risk_assessment.level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+                        # Добавляем предупреждение об ответственности
+                        liability_warning = get_liability_warning(question + " " + answer)
+                        if liability_warning:
+                            answer = answer + f"\n\n---\n{liability_warning}"
+
+                        logger.warning(f"⚠️ Risk assessment: {risk_assessment.level.value} for user {user_id}")
+
+            except Exception as risk_error:
+                logger.error(f"Risk assessment error: {risk_error}")
+
+        # ============================================================================
+        # ENGINEERING REASONING: Автоматические расчёты (если обнаружены параметры)
+        # ============================================================================
+        if ENGINEERING_AVAILABLE and classification_result:
+            try:
+                if classification_result.request_type == RequestType.CALCULATION:
+                    # Пытаемся извлечь параметры из вопроса
+                    eng_params = analyze_engineering_request(question)
+
+                    if eng_params and eng_params.get("width") and eng_params.get("height"):
+                        # Если есть момент - подбираем арматуру
+                        if eng_params.get("moment"):
+                            calc_result = calculate_beam(
+                                width=eng_params["width"],
+                                height=eng_params["height"],
+                                concrete_class=eng_params.get("concrete_class", "B25"),
+                                rebar_class=eng_params.get("rebar_class", "A500"),
+                                moment=eng_params["moment"]
+                            )
+
+                            if calc_result.success:
+                                engine = get_engineering_engine()
+                                calc_text = engine.format_result(calc_result)
+                                answer = answer + f"\n\n---\n📐 **Автоматический расчёт:**\n{calc_text}"
+                                logger.info(f"✅ Engineering calculation performed for user {user_id}")
+
+            except Exception as eng_error:
+                logger.error(f"Engineering reasoning error: {eng_error}")
 
         # 🎯 ГЕНЕРАЦИЯ УМНЫХ СВЯЗАННЫХ ВОПРОСОВ (v3.1) - в фоне
         related_questions = []
