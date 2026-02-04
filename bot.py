@@ -723,14 +723,17 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
 
 # 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
-# Основная модель: grok-4-1-fast
-#   - Улучшенная reasoning способность для глубокого анализа
-#   - Используется для технических вопросов, анализа фото и документов
-#   - Более точные и профессиональные ответы
-# Быстрая модель: grok-4-1-fast
+# Основная модель: grok-3 (стабильная)
+#   - Для сложных технических вопросов и анализа
+#   - Хороший баланс скорости и качества
+# Быстрая модель: grok-2
 #   - Для классификации запросов и простых вопросов
 #   - Быстрая генерация ответов
 # Fallback: Claude Sonnet 4.5 (при недоступности Grok)
+
+# Доступные модели xAI API:
+GROK_MODEL_MAIN = "grok-3"          # Основная модель для сложных задач
+GROK_MODEL_FAST = "grok-2"          # Быстрая модель для простых задач
 
 def check_rate_limit(user_id: int) -> bool:
     """
@@ -915,7 +918,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model="grok-4-1-fast",  # Быстрая модель для классификации
+            model=GROK_MODEL_FAST,  # Быстрая модель для классификации
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -931,13 +934,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "grok-4-1-fast"  # Быстрая модель для простых запросов
+            model = GROK_MODEL_FAST  # Быстрая модель для простых запросов
             max_tokens = 1000
         elif intent_type == "technical_question":
-            model = "grok-4-1-fast"  # Reasoning модель для технических вопросов
+            model = GROK_MODEL_MAIN  # Основная модель для технических вопросов
             max_tokens = 5000
         else:  # complex_analysis
-            model = "grok-4-1-fast"  # Reasoning модель для сложного анализа
+            model = GROK_MODEL_MAIN  # Основная модель для сложного анализа
             max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -950,10 +953,10 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем Grok Reasoning для надежности
+        # При ошибке используем основную модель для надежности
         return {
             "intent": "technical_question",
-            "model": "grok-4-1-fast",
+            "model": GROK_MODEL_MAIN,
             "max_tokens": 5000
         }
 
@@ -3464,7 +3467,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_grok_with_retry(
                 client,
-                model="grok-4-1-fast",  # Reasoning модель для анализа изображений
+                model=GROK_MODEL_MAIN,  # Основная модель для анализа изображений
                 max_tokens=6000,
                 temperature=0.7,
                 messages=[
@@ -3729,7 +3732,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         None,
                         lambda: call_grok_with_retry(
                             client,
-                            model="grok-4-1-fast",  # Reasoning модель для анализа документов
+                            model=GROK_MODEL_MAIN,  # Основная модель для анализа документов
                             max_tokens=6000,
                             temperature=0.3,
                             messages=[
@@ -4570,7 +4573,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 async for chunk in call_grok_with_streaming(
                     client,
-                    model="grok-4-1-fast",  # Быстрая модель
+                    model=GROK_MODEL_FAST,  # Быстрая модель
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
@@ -4602,7 +4605,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
                 # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
-                if len(first_phase_answer) >= 400 and selected_model != "grok-4-1-fast":
+                if len(first_phase_answer) >= 400 and selected_model != GROK_MODEL_FAST:
                     logger.info("📝 Фаза 2: Основная модель для продолжения...")
 
                     # Создаём промпт для продолжения
@@ -4834,7 +4837,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     None,
                     lambda: call_grok_with_retry(
                         client,
-                        model="grok-4-1-fast",  # Используем быструю модель
+                        model=GROK_MODEL_FAST,  # Используем быструю модель
                         max_tokens=300,
                         temperature=0.8,
                         messages=[{"role": "user", "content": related_q_prompt}]
