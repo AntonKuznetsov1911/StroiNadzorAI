@@ -2177,7 +2177,7 @@ async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Удаляем сообщение о генерации
                 try:
                     await generating_msg.delete()
-                except:
+                except Exception:
                     pass
 
                 # Формируем подпись
@@ -3131,7 +3131,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if smart_result and smart_result.get("success"):
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
                 return  # Ответ уже отправлен
 
@@ -3381,7 +3381,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "анализирую фотографию" даже в случае ошибки
         try:
             await thinking_message.delete()
-        except:
+        except Exception:
             pass
         await update.message.reply_text(
             f"❌ Ошибка при анализе фотографии: {str(e)}\n\nПопробуйте еще раз или обратитесь к администратору."
@@ -3430,7 +3430,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка обработки голоса: {e}")
         try:
             await thinking_msg.delete()
-        except:
+        except Exception:
             pass
         await update.message.reply_text(
             f"❌ Ошибка: {str(e)}\n\nПожалуйста, напишите ваш вопрос текстом."
@@ -3601,7 +3601,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "анализирую"
         try:
             await thinking_msg.delete()
-        except:
+        except Exception:
             pass
 
         # Формируем ответ
@@ -3794,7 +3794,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"LLM Council auto error: {e}")
                 try:
                     await council_thinking.delete()
-                except:
+                except Exception:
                     pass
                 # Продолжаем обычную обработку
 
@@ -4240,7 +4240,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Удаляем thinking message
                     try:
                         await thinking_message.delete()
-                    except:
+                    except Exception:
                         pass
 
                     # Отправляем погоду
@@ -4334,7 +4334,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await generating_msg.delete()
                         await thinking_message.delete()
-                    except:
+                    except Exception:
                         pass
 
                     # Отправляем изображение
@@ -4387,7 +4387,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Удаляем thinking message
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
                 # Переменные для streaming
@@ -4497,7 +4497,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
                         for chunk in chunks:
                             await update.message.reply_text(chunk)
-                    except:
+                    except Exception:
                         pass
 
             except Exception as stream_error:
@@ -4505,7 +4505,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Fallback на обычный режим
                 try:
                     await streaming_msg.delete()
-                except:
+                except Exception:
                     pass
 
                 thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
@@ -4526,7 +4526,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
         # === ОБЫЧНЫЙ РЕЖИМ (классический - ответ приходит сразу целиком) ===
@@ -4548,7 +4548,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await thinking_message.delete()
-            except:
+            except Exception:
                 pass
 
         # Добавляем ответ бота в историю
@@ -4640,7 +4640,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Если сообщение слишком длинное, удаляем streaming_msg и отправляем по частям
             try:
                 await streaming_msg.delete()
-            except:
+            except Exception:
                 pass
 
             parts = []
@@ -4676,7 +4676,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"Could not edit streaming message: {e}")
                 try:
                     await streaming_msg.delete()
-                except:
+                except Exception:
                     pass
                 await update.message.reply_text(result, reply_markup=reply_markup)
 
@@ -4688,14 +4688,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "думаю над вопросом" даже в случае ошибки
         try:
             await thinking_message.delete()
-        except:
+        except Exception:
             pass
 
         # Удаляем streaming_msg если он существует
         try:
             if 'streaming_msg' in locals():
                 await streaming_msg.delete()
-        except:
+        except Exception:
             pass
 
         await update.message.reply_text(
@@ -5968,7 +5968,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Удаляем сообщение о генерации
             try:
                 await generating_message.delete()
-            except:
+            except Exception:
                 pass
 
             # Формируем подпись

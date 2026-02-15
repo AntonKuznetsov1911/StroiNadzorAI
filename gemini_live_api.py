@@ -628,9 +628,45 @@ class TelegramVoiceAssistant:
         return session.format_transcript() if session else None
 
     async def cleanup_inactive_sessions(self, max_idle_minutes: int = 5):
-        """Очистка неактивных сессий"""
-        # TODO: Реализовать отслеживание времени последней активности
-        pass
+        """Очистка неактивных сессий
+
+        Останавливает сессии, которые не отправляли сообщений
+        дольше max_idle_minutes минут.
+        """
+        now = datetime.now()
+        inactive_users = []
+
+        for user_id, session in self.active_sessions.items():
+            # Определяем время последней активности по транскрипции
+            last_activity = None
+            if session.conversation_transcript:
+                last_entry = session.conversation_transcript[-1]
+                ts = last_entry.get("timestamp")
+                if ts:
+                    try:
+                        last_activity = datetime.fromisoformat(ts)
+                    except (ValueError, TypeError):
+                        pass
+
+            # Если нет активности или прошло слишком много времени — помечаем на удаление
+            if last_activity is None:
+                # Сессия без единого сообщения — считаем неактивной через max_idle_minutes
+                inactive_users.append(user_id)
+            elif (now - last_activity).total_seconds() > max_idle_minutes * 60:
+                inactive_users.append(user_id)
+
+        # Останавливаем неактивные сессии
+        for user_id in inactive_users:
+            try:
+                session = self.active_sessions[user_id]
+                await session.stop()
+                del self.active_sessions[user_id]
+                logger.info(f"🧹 Неактивная сессия очищена для пользователя {user_id}")
+            except Exception as e:
+                logger.error(f"Ошибка очистки сессии {user_id}: {e}")
+
+        if inactive_users:
+            logger.info(f"🧹 Очищено {len(inactive_users)} неактивных сессий")
 
 
 # ============================================================================

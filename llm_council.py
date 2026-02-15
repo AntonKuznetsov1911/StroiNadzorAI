@@ -39,8 +39,8 @@ COUNCIL_MODELS = {
         "provider": "anthropic"
     },
     "gemini": {
-        "name": "Gemini 1.5 Flash",
-        "model_id": "gemini-1.5-flash",
+        "name": "Gemini 2.5 Flash",
+        "model_id": "gemini-2.5-flash",
         "specialty": "Практические рекомендации, визуализация",
         "provider": "google"
     }
@@ -113,7 +113,7 @@ def get_gemini_model():
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
             genai.configure(api_key=api_key)
-            return genai.GenerativeModel('gemini-1.5-flash')
+            return genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         logger.error(f"Ошибка инициализации Gemini: {e}")
     return None
@@ -308,12 +308,12 @@ class LLMCouncil:
             logger.warning("⚠️ LLM Council недоступен (нужно минимум 2 модели)")
     
     async def _call_grok(self, messages: List[Dict], max_tokens: int = 2000) -> Optional[str]:
-        """Вызов Grok API"""
+        """Вызов Grok API (асинхронный, не блокирует event loop)"""
         if not self.xai_client:
             return None
-        
+
         try:
-            response = self.xai_client.chat_completions_create(
+            response = await self.xai_client.chat_completions_create_async(
                 model=COUNCIL_MODELS["grok"]["model_id"],
                 messages=messages,
                 max_tokens=max_tokens,
@@ -323,35 +323,44 @@ class LLMCouncil:
         except Exception as e:
             logger.error(f"Grok error: {e}")
             return None
-    
+
     async def _call_claude(self, system: str, messages: List[Dict], max_tokens: int = 2000) -> Optional[str]:
-        """Вызов Claude API"""
+        """Вызов Claude API (через run_in_executor, т.к. SDK синхронный)"""
         if not self.claude_client:
             return None
-        
+
         try:
             # Фильтруем сообщения для Claude формата
             claude_messages = [m for m in messages if m["role"] != "system"]
-            
-            response = self.claude_client.messages.create(
-                model=COUNCIL_MODELS["claude"]["model_id"],
-                max_tokens=max_tokens,
-                temperature=0.7,
-                system=system,
-                messages=claude_messages
+
+            # Запускаем синхронный вызов в executor, чтобы не блокировать event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.claude_client.messages.create(
+                    model=COUNCIL_MODELS["claude"]["model_id"],
+                    max_tokens=max_tokens,
+                    temperature=0.7,
+                    system=system,
+                    messages=claude_messages
+                )
             )
             return response.content[0].text
         except Exception as e:
             logger.error(f"Claude error: {e}")
             return None
-    
+
     async def _call_gemini(self, prompt: str) -> Optional[str]:
-        """Вызов Gemini API"""
+        """Вызов Gemini API (через run_in_executor, т.к. SDK синхронный)"""
         if not self.gemini_model:
             return None
-        
+
         try:
-            response = self.gemini_model.generate_content(prompt)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.gemini_model.generate_content(prompt)
+            )
             return response.text
         except Exception as e:
             logger.error(f"Gemini error: {e}")

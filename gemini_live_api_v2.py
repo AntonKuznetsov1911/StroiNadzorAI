@@ -417,10 +417,22 @@ class GeminiLiveSessionV2:
             # Вызываем функцию
             if func_name in FUNCTION_HANDLERS:
                 result = FUNCTION_HANDLERS[func_name](**func_args)
-
-                # Отправляем результат обратно
-                # TODO: Реализовать отправку результата функции через SDK
                 logger.info(f"✅ Результат функции: {result}")
+
+                # Отправляем результат обратно через SDK
+                if self.session:
+                    try:
+                        import json as json_mod
+                        function_response = types.LiveClientToolResponse(
+                            function_responses=[types.FunctionResponse(
+                                name=func_name,
+                                response={"result": json_mod.dumps(result, ensure_ascii=False, default=str)}
+                            )]
+                        )
+                        await self.session.send(input=function_response)
+                        logger.info(f"✅ Результат функции отправлен в Gemini")
+                    except Exception as send_err:
+                        logger.error(f"Ошибка отправки результата функции: {send_err}")
 
                 # Добавляем в транскрипцию
                 self.current_bot_text += f"\n[Вызвана функция {func_name}: {result.get('recommendation', str(result))}]"

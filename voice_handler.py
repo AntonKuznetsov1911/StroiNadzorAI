@@ -207,7 +207,7 @@ async def transcribe_with_openai(audio_path: str) -> dict:
         if str(file_path).endswith('.mp3') and file_path != Path(audio_path):
             try:
                 file_path.unlink(missing_ok=True)
-            except:
+            except Exception:
                 pass
 
         if text:
@@ -272,7 +272,7 @@ async def transcribe_with_vosk(audio_path: str) -> dict:
         if wav_path != audio_path:
             try:
                 Path(wav_path).unlink(missing_ok=True)
-            except:
+            except Exception:
                 pass
 
         if text:
@@ -364,7 +364,7 @@ async def process_voice_message(bot, voice_file_id: str, user_id: int) -> dict:
                 Path(file_path).unlink(missing_ok=True)
                 Path(file_path.replace('.ogg', '.wav')).unlink(missing_ok=True)
                 Path(file_path.replace('.ogg', '.mp3')).unlink(missing_ok=True)
-            except:
+            except Exception:
                 pass
 
 
