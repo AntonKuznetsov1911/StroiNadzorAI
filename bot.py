@@ -598,6 +598,82 @@ except ImportError as e:
     LLM_COUNCIL_AVAILABLE = False
     logger.warning(f"⚠️ Модуль llm_council.py не найден: {e}")
 
+# Normative RAG - Векторный поиск по нормативам
+try:
+    from normative_rag import (
+        init_normative_rag,
+        get_normative_rag,
+        search_norms_for_query,
+        get_norm_for_answer,
+        is_rag_available
+    )
+    RAG_AVAILABLE = True
+    logger.info("✅ Normative RAG модуль загружен")
+except ImportError as e:
+    RAG_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль normative_rag.py не найден: {e}")
+
+# Verification Engine - Антигаллюцинации и проверка ответов
+try:
+    from verification_engine import (
+        verify_bot_response,
+        should_block_response,
+        get_safe_response,
+        format_verification_footer,
+        VerificationLevel
+    )
+    VERIFICATION_AVAILABLE = True
+    logger.info("✅ Verification Engine загружен")
+except ImportError as e:
+    VERIFICATION_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль verification_engine.py не найден: {e}")
+
+# Request Classifier - Классификация запросов
+try:
+    from request_classifier import (
+        classify_request,
+        get_request_type,
+        get_processing_hints,
+        is_urgent_request,
+        RequestType
+    )
+    CLASSIFIER_AVAILABLE = True
+    logger.info("✅ Request Classifier загружен")
+except ImportError as e:
+    CLASSIFIER_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль request_classifier.py не найден: {e}")
+
+# Engineering Reasoning Engine - Инженерные расчёты
+try:
+    from engineering_reasoning import (
+        calculate_beam,
+        analyze_engineering_request,
+        get_concrete_properties,
+        get_rebar_area,
+        get_engineering_engine
+    )
+    ENGINEERING_AVAILABLE = True
+    logger.info("✅ Engineering Reasoning Engine загружен")
+except ImportError as e:
+    ENGINEERING_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль engineering_reasoning.py не найден: {e}")
+
+# Risk & Liability Engine - Оценка рисков
+try:
+    from risk_liability_engine import (
+        assess_risk,
+        is_critical_risk,
+        is_high_risk,
+        format_risk_assessment,
+        get_liability_warning,
+        RiskLevel
+    )
+    RISK_ENGINE_AVAILABLE = True
+    logger.info("✅ Risk & Liability Engine загружен")
+except ImportError as e:
+    RISK_ENGINE_AVAILABLE = False
+    logger.warning(f"⚠️ Модуль risk_liability_engine.py не найден: {e}")
+
 # Токены (загружаются из .env файла)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -647,14 +723,17 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
 
 # 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
-# Основная модель: grok-4-1-fast
-#   - Улучшенная reasoning способность для глубокого анализа
-#   - Используется для технических вопросов, анализа фото и документов
-#   - Более точные и профессиональные ответы
-# Быстрая модель: grok-4-1-fast
+# Основная модель: grok-3 (стабильная)
+#   - Для сложных технических вопросов и анализа
+#   - Хороший баланс скорости и качества
+# Быстрая модель: grok-2
 #   - Для классификации запросов и простых вопросов
 #   - Быстрая генерация ответов
 # Fallback: Claude Sonnet 4.5 (при недоступности Grok)
+
+# Доступные модели xAI API:
+GROK_MODEL_MAIN = "grok-3"          # Основная модель для сложных задач
+GROK_MODEL_FAST = "grok-2"          # Быстрая модель для простых задач
 
 def check_rate_limit(user_id: int) -> bool:
     """
@@ -839,7 +918,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model="grok-4-1-fast",  # Быстрая модель для классификации
+            model=GROK_MODEL_FAST,  # Быстрая модель для классификации
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -855,13 +934,13 @@ def classify_user_intent(user_message: str) -> dict:
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = "grok-4-1-fast"  # Быстрая модель для простых запросов
+            model = GROK_MODEL_FAST  # Быстрая модель для простых запросов
             max_tokens = 1000
         elif intent_type == "technical_question":
-            model = "grok-4-1-fast"  # Reasoning модель для технических вопросов
+            model = GROK_MODEL_MAIN  # Основная модель для технических вопросов
             max_tokens = 5000
         else:  # complex_analysis
-            model = "grok-4-1-fast"  # Reasoning модель для сложного анализа
+            model = GROK_MODEL_MAIN  # Основная модель для сложного анализа
             max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -874,10 +953,10 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем Grok Reasoning для надежности
+        # При ошибке используем основную модель для надежности
         return {
             "intent": "technical_question",
-            "model": "grok-4-1-fast",
+            "model": GROK_MODEL_MAIN,
             "max_tokens": 5000
         }
 
@@ -1972,6 +2051,94 @@ async def regulations_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     text += "\n💡 Задайте вопрос по любому нормативу!"
 
     await update.message.reply_text(text, parse_mode='Markdown', disable_web_page_preview=True)
+
+
+async def norms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Команда /norms - Семантический поиск по нормативам (RAG)
+
+    Использование:
+    /norms защитный слой арматуры
+    /norms минимальная толщина стены
+    """
+    if not RAG_AVAILABLE:
+        await update.message.reply_text(
+            "❌ **RAG система недоступна**\n\n"
+            "Модуль normative_rag.py не загружен.\n"
+            "Используйте /regulations для просмотра списка нормативов.",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Получаем запрос
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "🔍 **Поиск по нормативам (RAG)**\n\n"
+            "Семантический поиск по базе СП, ГОСТ, СНиП.\n\n"
+            "**Использование:**\n"
+            "`/norms ваш запрос`\n\n"
+            "**Примеры:**\n"
+            "• `/norms защитный слой арматуры`\n"
+            "• `/norms минимальная толщина несущей стены`\n"
+            "• `/norms требования к бетону B25`\n"
+            "• `/norms огнестойкость перекрытий`\n\n"
+            "📊 **Статус базы:**\n"
+            f"{'✅ RAG инициализирован' if is_rag_available() else '⏳ RAG не инициализирован'}",
+            parse_mode="Markdown"
+        )
+        return
+
+    query = " ".join(args)
+
+    # Показываем что ищем
+    searching_msg = await update.message.reply_text(
+        f"🔍 Ищу: _{query}_\n\n⏳ Поиск по базе нормативов...",
+        parse_mode="Markdown"
+    )
+
+    try:
+        # Выполняем поиск
+        results = await search_norms_for_query(query, top_k=5)
+
+        if not results:
+            await searching_msg.edit_text(
+                f"🔍 Запрос: _{query}_\n\n"
+                "❌ **Ничего не найдено**\n\n"
+                "Попробуйте:\n"
+                "• Переформулировать запрос\n"
+                "• Использовать другие ключевые слова\n"
+                "• Проверить /regulations для списка доступных документов",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Форматируем результаты
+        response = f"🔍 **Результаты поиска:** _{query}_\n\n"
+
+        for i, result in enumerate(results, 1):
+            doc_code = result.get('document_code', 'Неизвестно')
+            section = result.get('section', '')
+            content = result.get('content', '')[:300]
+            relevance = result.get('relevance_score', 0)
+
+            response += f"**{i}. {doc_code}**"
+            if section:
+                response += f" (п. {section})"
+            response += f"\n📊 Релевантность: {relevance:.0%}\n"
+            response += f"_{content}{'...' if len(result.get('content', '')) > 300 else ''}_\n\n"
+
+        response += "💡 _Для детального вопроса — напишите его в чат_"
+
+        await searching_msg.edit_text(response, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Ошибка поиска нормативов: {e}")
+        await searching_msg.edit_text(
+            f"❌ Ошибка поиска: {str(e)}\n\n"
+            "Попробуйте позже или используйте /regulations",
+            parse_mode="Markdown"
+        )
 
 
 async def council_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3300,7 +3467,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_grok_with_retry(
                 client,
-                model="grok-4-1-fast",  # Reasoning модель для анализа изображений
+                model=GROK_MODEL_MAIN,  # Основная модель для анализа изображений
                 max_tokens=6000,
                 temperature=0.7,
                 messages=[
@@ -3565,7 +3732,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         None,
                         lambda: call_grok_with_retry(
                             client,
-                            model="grok-4-1-fast",  # Reasoning модель для анализа документов
+                            model=GROK_MODEL_MAIN,  # Основная модель для анализа документов
                             max_tokens=6000,
                             temperature=0.3,
                             messages=[
@@ -4406,7 +4573,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 async for chunk in call_grok_with_streaming(
                     client,
-                    model="grok-4-1-fast",  # Быстрая модель
+                    model=GROK_MODEL_FAST,  # Быстрая модель
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
@@ -4438,7 +4605,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # ФАЗА 2: Продолжение от основной модели (если нужен развернутый ответ)
                 # Запускаем только если: 1) первая фаза дала достаточно текста И 2) выбрана полная модель (не быстрая)
-                if len(first_phase_answer) >= 400 and selected_model != "grok-4-1-fast":
+                if len(first_phase_answer) >= 400 and selected_model != GROK_MODEL_FAST:
                     logger.info("📝 Фаза 2: Основная модель для продолжения...")
 
                     # Создаём промпт для продолжения
@@ -4554,6 +4721,109 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Добавляем ответ бота в историю
         await add_message_to_history_async(user_id, 'assistant', answer)
 
+        # ============================================================================
+        # REQUEST CLASSIFIER: Определение типа запроса для адаптивной обработки
+        # ============================================================================
+        question_type = "normative"  # По умолчанию
+        classification_result = None
+        processing_hints = {}
+
+        if CLASSIFIER_AVAILABLE:
+            try:
+                classification_result = classify_request(question)
+                question_type = classification_result.request_type.value
+                processing_hints = get_processing_hints(question)
+
+                logger.info(f"📊 Request classified: {question_type} (confidence: {classification_result.confidence:.0%})")
+
+                # Проверка на срочный запрос
+                if is_urgent_request(question):
+                    logger.warning(f"🚨 Urgent request detected from user {user_id}")
+
+            except Exception as class_error:
+                logger.error(f"Classification error: {class_error}")
+
+        # ============================================================================
+        # VERIFICATION ENGINE: Проверка ответа на галлюцинации и наличие нормативов
+        # ============================================================================
+        if VERIFICATION_AVAILABLE:
+            try:
+                verification = verify_bot_response(
+                    response=answer,
+                    question=question,
+                    question_type=question_type  # Используем классифицированный тип
+                )
+
+                # Добавляем footer с информацией о верификации
+                verification_footer = format_verification_footer(verification)
+
+                # Если есть предупреждения - модифицируем ответ
+                if verification.modified_response:
+                    answer = verification.modified_response
+                else:
+                    answer = answer + verification_footer
+
+                # Логируем результат верификации
+                if verification.level == VerificationLevel.PASSED:
+                    logger.info(f"✅ Verification PASSED: confidence={verification.confidence_score:.0%}")
+                elif verification.level == VerificationLevel.WARNING:
+                    logger.warning(f"⚠️ Verification WARNING: {verification.warnings}")
+                else:
+                    logger.warning(f"❌ Verification FAILED: {verification.errors}")
+
+            except Exception as ver_error:
+                logger.error(f"Verification error: {ver_error}")
+                # Продолжаем без верификации
+
+        # ============================================================================
+        # RISK & LIABILITY ENGINE: Оценка рисков для критичных вопросов
+        # ============================================================================
+        if RISK_ENGINE_AVAILABLE:
+            try:
+                # Проверяем на высокий/критический риск
+                if is_high_risk(question) or is_high_risk(answer):
+                    risk_assessment = assess_risk(question + " " + answer)
+
+                    if risk_assessment.level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
+                        # Добавляем предупреждение об ответственности
+                        liability_warning = get_liability_warning(question + " " + answer)
+                        if liability_warning:
+                            answer = answer + f"\n\n---\n{liability_warning}"
+
+                        logger.warning(f"⚠️ Risk assessment: {risk_assessment.level.value} for user {user_id}")
+
+            except Exception as risk_error:
+                logger.error(f"Risk assessment error: {risk_error}")
+
+        # ============================================================================
+        # ENGINEERING REASONING: Автоматические расчёты (если обнаружены параметры)
+        # ============================================================================
+        if ENGINEERING_AVAILABLE and classification_result:
+            try:
+                if classification_result.request_type == RequestType.CALCULATION:
+                    # Пытаемся извлечь параметры из вопроса
+                    eng_params = analyze_engineering_request(question)
+
+                    if eng_params and eng_params.get("width") and eng_params.get("height"):
+                        # Если есть момент - подбираем арматуру
+                        if eng_params.get("moment"):
+                            calc_result = calculate_beam(
+                                width=eng_params["width"],
+                                height=eng_params["height"],
+                                concrete_class=eng_params.get("concrete_class", "B25"),
+                                rebar_class=eng_params.get("rebar_class", "A500"),
+                                moment=eng_params["moment"]
+                            )
+
+                            if calc_result.success:
+                                engine = get_engineering_engine()
+                                calc_text = engine.format_result(calc_result)
+                                answer = answer + f"\n\n---\n📐 **Автоматический расчёт:**\n{calc_text}"
+                                logger.info(f"✅ Engineering calculation performed for user {user_id}")
+
+            except Exception as eng_error:
+                logger.error(f"Engineering reasoning error: {eng_error}")
+
         # 🎯 ГЕНЕРАЦИЯ УМНЫХ СВЯЗАННЫХ ВОПРОСОВ (v3.1) - в фоне
         related_questions = []
         if IMPROVEMENTS_V3_AVAILABLE:
@@ -4567,7 +4837,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     None,
                     lambda: call_grok_with_retry(
                         client,
-                        model="grok-4-1-fast",  # Используем быструю модель
+                        model=GROK_MODEL_FAST,  # Используем быструю модель
                         max_tokens=300,
                         temperature=0.8,
                         messages=[{"role": "user", "content": related_q_prompt}]
@@ -6020,6 +6290,7 @@ async def setup_bot_menu(application):
         # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
         BotCommand("calculators", "🧮 Калькуляторы"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
+        BotCommand("norms", "🔍 Поиск по нормативам (RAG)"),
         BotCommand("regulations_menu", "📖 Категории нормативов"),
         BotCommand("faq", "❓ Частые вопросы"),
         BotCommand("templates", "📄 Шаблоны документов"),
@@ -6059,6 +6330,16 @@ def main():
             logger.error(f"Ошибка инициализации PostgreSQL: {e}")
             logger.info("Продолжаем работу с JSON хранилищем")
 
+    # Инициализируем RAG систему для нормативов
+    if RAG_AVAILABLE:
+        try:
+            if init_normative_rag():
+                logger.info("✅ Normative RAG инициализирован")
+            else:
+                logger.warning("⚠️ Normative RAG не удалось инициализировать")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации RAG: {e}")
+
     logger.info("✅ Бот СтройНадзорAI запущен успешно!")
 
     # Создаем приложение
@@ -6068,6 +6349,10 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("regulations", regulations_command))
+    # RAG поиск по нормативам
+    if RAG_AVAILABLE:
+        application.add_handler(CommandHandler("norms", norms_command))
+        logger.info("✅ Команда /norms зарегистрирована")
     application.add_handler(CommandHandler("examples", examples_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("stats", stats_command))
