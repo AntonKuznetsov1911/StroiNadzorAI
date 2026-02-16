@@ -12,19 +12,19 @@ logger = logging.getLogger(__name__)
 try:
     from voice_handler import process_voice_message
     VOICE_AVAILABLE = True
-except:
+except Exception:
     VOICE_AVAILABLE = False
 
 try:
     from document_templates import DOCUMENT_TEMPLATES, generate_document
     TEMPLATES_AVAILABLE = True
-except:
+except Exception:
     TEMPLATES_AVAILABLE = False
 
 try:
     from project_manager import get_user_projects, create_project, load_project
     PROJECTS_AVAILABLE = True
-except:
+except Exception:
     PROJECTS_AVAILABLE = False
 
 

@@ -348,24 +348,6 @@ except ImportError as e:
     gemini_vision_analyzer = None
     logger.warning(f"⚠️ Модуль gemini_vision.py не найден: {e}")
 
-# Режим разработчика v3.0 - автовыбор локальной/облачной версии
-is_developer = None
-try:
-    # Сначала пробуем загрузить ЛОКАЛЬНУЮ версию (с git автопушем)
-    from dev_mode_local import create_dev_mode_handler, is_developer
-    DEV_MODE_AVAILABLE = True
-    logger.info("✅ Режим разработчика v3.0 ЛОКАЛЬНЫЙ загружен (с git автопушем)")
-except ImportError:
-    try:
-        # Если не получилось (нет git) - загружаем ОБЛАЧНУЮ версию (только анализ)
-        from dev_mode import create_dev_mode_handler, is_developer
-        DEV_MODE_AVAILABLE = True
-        logger.info("✅ Режим разработчика v2.0 ОБЛАЧНЫЙ загружен (без git)")
-    except ImportError as e:
-        DEV_MODE_AVAILABLE = False
-        is_developer = lambda user_id: False  # Заглушка, если модули не загружены
-        logger.warning(f"⚠️ Модули dev_mode не найдены: {e}")
-
 # Автоприменение изменений v1.0 - кнопка "Применить изменения" после ответов
 try:
     from auto_apply import add_apply_button, should_show_apply_button, handle_apply_changes
@@ -571,15 +553,6 @@ try:
 except ImportError as e:
     VOICE_ASSISTANT_AVAILABLE = False
     logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
-
-# Импорт OpenAI Realtime API (альтернативный голосовой ассистент)
-try:
-    from openai_realtime_bot_integration import start_realtime_chat_command
-    OPENAI_REALTIME_AVAILABLE = True
-    logger.info("✅ OpenAI Realtime API (голосовой ассистент) загружен")
-except ImportError as e:
-    OPENAI_REALTIME_AVAILABLE = False
-    logger.warning(f"⚠️ OpenAI Realtime API недоступен: {e}")
 
 # LLM Council - Совет AI моделей для сложных вопросов (Karpathy's approach)
 try:
@@ -1851,21 +1824,6 @@ REGULATIONS = {
 }
 
 
-# === ПОСТОЯННАЯ КЛАВИАТУРА ===
-
-def get_main_keyboard():
-    """Создать постоянную клавиатуру с кнопками"""
-    keyboard = [
-        [KeyboardButton("🎤 Real-time чат")],
-    ]
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=False,
-        input_field_placeholder="Напишите вопрос или нажмите кнопку..."
-    )
-
-
 # === КОМАНДЫ ===
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1922,7 +1880,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔹 *КОМАНДЫ*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-/realtime\\_chat — Голосовой чат
 /calculators — Калькуляторы
 /regulations — Нормативы
 /templates — Шаблоны документов
@@ -1948,7 +1905,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Inline меню под сообщением
     inline_keyboard = [
-        [InlineKeyboardButton("🎤 Real-time чат", callback_data="realtime_chat_start")],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1956,9 +1912,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
          InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
         [InlineKeyboardButton("💡 Предложения", callback_data="suggestions"),
-         InlineKeyboardButton("🔧 Разработчик", callback_data="dev_mode")],
-        [InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples"),
-         InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
+         InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples")],
+        [InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
     inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
@@ -1974,10 +1929,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
     help_text = """📖 *СПРАВКА — СтройНадзорAI v3.0*
 
-*🎤 ГОЛОСОВОЙ АССИСТЕНТ:*
-   /realtime\\_chat — Начать голосовой чат
-   • Отправьте голосовое → получите голосовой ответ
-   • Whisper (распознавание) + GPT-4 + TTS (озвучка)
+*🎤 ГОЛОСОВОЙ ВВОД:*
+   • Отправьте голосовое → получите текстовый ответ
+   • Автоматическое распознавание речи
 
 *📸 АНАЛИЗ ФОТО:*
    • Отправьте фото объекта/дефекта
@@ -2017,7 +1971,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *💡 УМНЫЕ ФУНКЦИИ v5.0:*
    /calculators - Меню калькуляторов
-   /realtime_chat - Голосовой ассистент (OpenAI)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
@@ -2344,7 +2297,7 @@ async def visualize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Удаляем сообщение о генерации
                 try:
                     await generating_msg.delete()
-                except:
+                except Exception:
                     pass
 
                 # Формируем подпись
@@ -3298,7 +3251,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if smart_result and smart_result.get("success"):
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
                 return  # Ответ уже отправлен
 
@@ -3524,11 +3477,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                user_id = update.effective_user.id
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(analysis) and is_developer(user_id):
-                    part_reply_markup = add_apply_button()
 
                 if i == 0:
                     await update.message.reply_text(part, reply_markup=part_reply_markup)
@@ -3548,7 +3497,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "анализирую фотографию" даже в случае ошибки
         try:
             await thinking_message.delete()
-        except:
+        except Exception:
             pass
         await update.message.reply_text(
             f"❌ Ошибка при анализе фотографии: {str(e)}\n\nПопробуйте еще раз или обратитесь к администратору."
@@ -3597,7 +3546,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка обработки голоса: {e}")
         try:
             await thinking_msg.delete()
-        except:
+        except Exception:
             pass
         await update.message.reply_text(
             f"❌ Ошибка: {str(e)}\n\nПожалуйста, напишите ваш вопрос текстом."
@@ -3640,9 +3589,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Скачиваем файл
+        # Скачиваем файл (санитизируем имя для защиты от path traversal)
         file = await update.message.document.get_file()
-        file_name = update.message.document.file_name
+        import os as _os
+        import re as _re
+        raw_file_name = update.message.document.file_name or "document"
+        file_name = _os.path.basename(raw_file_name)
+        file_name = _re.sub(r'[^\w\.\-\(\) ]', '_', file_name)  # только безопасные символы
         file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
 
@@ -3768,7 +3721,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "анализирую"
         try:
             await thinking_msg.delete()
-        except:
+        except Exception:
             pass
 
         # Формируем ответ
@@ -3829,21 +3782,12 @@ async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
+    if not update.message:
+        return
     user_id = update.effective_user.id
     # Проверяем, есть ли распознанный текст из голосового сообщения
     question = context.user_data.pop('_voice_recognized_text', None) or update.message.text
-
-    # Обработка кнопки "🎤 Real-time чат"
-    if question and question.strip() == "🎤 Real-time чат":
-        if OPENAI_REALTIME_AVAILABLE:
-            await start_realtime_chat_command(update, context)
-        else:
-            await update.message.reply_text(
-                "❌ **Real-time чат недоступен**\n\n"
-                "Требуется OPENAI_API_KEY.\n"
-                "Попробуйте команду: /realtime_chat",
-                parse_mode="Markdown"
-            )
+    if not question:
         return
 
     # Проверка ожидания названия проекта
@@ -3961,7 +3905,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"LLM Council auto error: {e}")
                 try:
                     await council_thinking.delete()
-                except:
+                except Exception:
                     pass
                 # Продолжаем обычную обработку
 
@@ -4407,7 +4351,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Удаляем thinking message
                     try:
                         await thinking_message.delete()
-                    except:
+                    except Exception:
                         pass
 
                     # Отправляем погоду
@@ -4427,13 +4371,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
-        # ОТКЛЮЧЕНО: Теперь обрабатывается через smart_model_wrapper → gemini_image
-        if False and GEMINI_AVAILABLE and should_generate_image(question):
+        if GEMINI_AVAILABLE and IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
             logger.info("🎨 Обнаружен запрос на генерацию изображения")
 
             # Отправляем сообщение о генерации
             generating_msg = await update.message.reply_text(
-                "📐 Генерирую технический чертёж через DALL-E 3...\n\n"
+                "📐 Генерирую технический чертёж через Gemini AI...\n\n"
                 "Шаг 1/2: xAI Grok создаёт детальный промпт\n"
                 "• С точными размерами и цифрами\n"
                 "• С аннотациями на русском\n"
@@ -4445,9 +4388,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 client = get_grok_client()
 
                 # Используем оптимизированный промпт из optimized_prompts.py
-                blueprint_system_prompt = GEMINI_IMAGE_PROMPT_SYSTEM if OPTIMIZED_PROMPTS_AVAILABLE else """Ты — эксперт по созданию ТЕХНИЧЕСКИХ промптов для DALL-E 3 по ГОСТ.
+                blueprint_system_prompt = GEMINI_IMAGE_PROMPT_SYSTEM if OPTIMIZED_PROMPTS_AVAILABLE else """Ты — эксперт по созданию ТЕХНИЧЕСКИХ промптов для генерации чертежей по ГОСТ.
 📐 ОБЯЗАТЕЛЬНО: размеры в мм/м, штриховка по ГОСТ 2.306, русские подписи, масштаб.
-Формат: [Английский DALL-E prompt] ---ОПИСАНИЕ--- [Описание на русском]"""
+Формат: [Детальное описание чертежа] ---ОПИСАНИЕ--- [Описание на русском]"""
 
                 prompt_messages = [
                     {
@@ -4456,7 +4399,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     },
                     {
                         "role": "user",
-                        "content": f"Создай детальный промпт для DALL-E 3 на основе запроса: {question}"
+                        "content": f"Создай детальный промпт для генерации технического чертежа на основе запроса: {question}"
                     }
                 ]
 
@@ -4470,30 +4413,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 grok_full_response = grok_response['choices'][0]['message']['content'].strip()
 
-                # Разделяем промпт для DALL-E и описание для пользователя
+                # Разделяем промпт для Gemini и описание для пользователя
                 if "---ОПИСАНИЕ---" in grok_full_response:
                     parts = grok_full_response.split("---ОПИСАНИЕ---")
-                    dalle_prompt = parts[0].strip()
+                    image_prompt = parts[0].strip()
                     russian_description = parts[1].strip() if len(parts) > 1 else ""
                 else:
-                    dalle_prompt = grok_full_response
+                    image_prompt = grok_full_response
                     russian_description = ""
 
-                logger.info(f"✅ Промпт от Grok получен: {dalle_prompt[:100]}...")
+                logger.info(f"✅ Промпт от Grok получен: {image_prompt[:100]}...")
 
                 # Обновляем сообщение
                 await generating_msg.edit_text(
-                    "📐 Генерирую технический чертёж через DALL-E 3...\n\n"
+                    "📐 Генерирую технический чертёж через Gemini AI...\n\n"
                     "✅ Шаг 1/2: Детальный промпт готов\n"
-                    "⏳ Шаг 2/2: DALL-E 3 рисует чертёж с размерами..."
+                    "⏳ Шаг 2/2: Gemini рисует чертёж с размерами..."
                 )
 
-                # Шаг 2: Генерируем изображение через DALL-E с промптом от Grok
-                # Используем HD качество для технических чертежей с размерами
+                # Шаг 2: Генерируем изображение через Gemini с промптом от Grok
                 result = await generate_construction_image_gemini(
-                    dalle_prompt,
+                    image_prompt,
                     size="1024x1024",
-                    quality="hd"  # Высокое качество для чёткости цифр и линий
+                    quality="hd"
                 )
 
                 if result and result.get("image_data"):
@@ -4501,7 +4443,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await generating_msg.delete()
                         await thinking_message.delete()
-                    except:
+                    except Exception:
                         pass
 
                     # Отправляем изображение
@@ -4509,13 +4451,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Используем русское описание от Grok (адаптировано для телефона)
                     if russian_description:
-                        caption = f"🎨 **Сгенерировано DALL-E 3**\n\n{russian_description}\n\n"
-                        caption += "💡 *Координация: xAI Grok + OpenAI DALL-E 3*"
+                        caption = f"🎨 **Сгенерировано Gemini AI**\n\n{russian_description}\n\n"
+                        caption += "💡 *Координация: xAI Grok + Google Gemini*"
                     else:
                         # Fallback если описание не получено
-                        caption = f"🎨 **Изображение сгенерировано через DALL-E 3**\n\n"
-                        caption += f"📝 **Промпт от xAI Grok:**\n_{dalle_prompt[:100]}..._\n\n"
-                        caption += "💡 *Координация: xAI Grok + OpenAI DALL-E 3*"
+                        caption = f"🎨 **Изображение сгенерировано через Gemini AI**\n\n"
+                        caption += f"📝 **Промпт от xAI Grok:**\n_{image_prompt[:100]}..._\n\n"
+                        caption += "💡 *Координация: xAI Grok + Google Gemini*"
 
                     await update.message.reply_photo(
                         photo=result["image_data"],
@@ -4554,7 +4496,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Удаляем thinking message
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
                 # Переменные для streaming
@@ -4664,7 +4606,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         chunks = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
                         for chunk in chunks:
                             await update.message.reply_text(chunk)
-                    except:
+                    except Exception:
                         pass
 
             except Exception as stream_error:
@@ -4672,7 +4614,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Fallback на обычный режим
                 try:
                     await streaming_msg.delete()
-                except:
+                except Exception:
                     pass
 
                 thinking_message = await update.message.reply_text("🤔 Думаю над вашим вопросом...")
@@ -4693,7 +4635,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
         # === ОБЫЧНЫЙ РЕЖИМ (классический - ответ приходит сразу целиком) ===
@@ -4715,7 +4657,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await thinking_message.delete()
-            except:
+            except Exception:
                 pass
 
         # Добавляем ответ бота в историю
@@ -4899,18 +4841,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if IMPROVEMENTS_V3_AVAILABLE:
             reply_markup = create_reply_suggestions_keyboard(related_questions=related_questions)
 
-        # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
-        user_id = update.effective_user.id
-        if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-            reply_markup = add_apply_button(reply_markup)
-
         # Обновляем streaming сообщение финальным ответом с кнопками
         max_length = 4000  # Лимит Telegram
         if len(result) > max_length:
             # Если сообщение слишком длинное, удаляем streaming_msg и отправляем по частям
             try:
                 await streaming_msg.delete()
-            except:
+            except Exception:
                 pass
 
             parts = []
@@ -4946,7 +4883,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"Could not edit streaming message: {e}")
                 try:
                     await streaming_msg.delete()
-                except:
+                except Exception:
                     pass
                 await update.message.reply_text(result, reply_markup=reply_markup)
 
@@ -4958,14 +4895,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Удаляем сообщение "думаю над вопросом" даже в случае ошибки
         try:
             await thinking_message.delete()
-        except:
+        except Exception:
             pass
 
         # Удаляем streaming_msg если он существует
         try:
             if 'streaming_msg' in locals():
                 await streaming_msg.delete()
-        except:
+        except Exception:
             pass
 
         await update.message.reply_text(
@@ -4977,8 +4914,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка кнопок"""
     query = update.callback_query
 
-
-# (removed unused inline-menu helper)
+    # Проверяем что query и data не None
+    if not query or not query.data:
+        return
 
     # Пропускаем callbacks которые относятся к ConversationHandler калькуляторов
     calculator_prefixes = [
@@ -5009,12 +4947,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text="❌ **Голосовой ассистент Gemini недоступен**\n\n"
-                    "Попробуйте OpenAI: /realtime_chat",
+                    "Попробуйте отправить голосовое сообщение для распознавания.",
                 parse_mode="Markdown"
             )
         return
-
-    # Обработка realtime_chat_start теперь в ConversationHandler (openai_realtime_bot_integration.py)
 
     await query.answer()
 
@@ -5106,18 +5042,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await suggestions_menu(update, context)
         else:
             await query.edit_message_text("⚠️ Модуль предложений недоступен.")
-    elif query.data == "dev_mode":
-        # Кнопка "Разработчик" из главного меню
-        await query.edit_message_text(
-            "🔧 **РЕЖИМ РАЗРАБОТЧИКА**\n\n"
-            "Для входа в режим разработчика используйте команду /dev\n\n"
-            "Режим разработчика позволяет:\n"
-            "• Отправлять запросы на изменение кода\n"
-            "• Получать готовые решения от AI\n"
-            "• (Локально) Автоматически применять и пушить изменения\n\n"
-            "Введите: /dev",
-            parse_mode="Markdown"
-        )
     elif query.data == "project_menu":
         # Кнопка "Проект" из главного меню
         if PROJECTS_AVAILABLE:
@@ -6124,8 +6048,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ошибок"""
-    logger.error(f"Update {update} caused error {context.error}")
+    """Обработка ошибок с уведомлением пользователя"""
+    import traceback
+
+    # Логируем полный traceback
+    tb_string = ''.join(traceback.format_exception(type(context.error), context.error, context.error.__traceback__))
+    logger.error(f"Exception while handling an update:\n{tb_string}")
+
+    # Уведомляем пользователя
+    error_text = (
+        "⚠️ Произошла внутренняя ошибка.\n\n"
+        "Попробуйте повторить запрос или используйте /start для перезапуска.\n"
+        "Если ошибка повторяется — обратитесь к администратору."
+    )
+    try:
+        if update and update.effective_message:
+            await update.effective_message.reply_text(error_text)
+        elif update and update.callback_query:
+            await update.callback_query.answer(text="⚠️ Произошла ошибка. Попробуйте снова.", show_alert=True)
+    except Exception:
+        logger.error("Failed to send error notification to user")
 
 
 # === НОВЫЕ КОМАНДЫ v3.0 ===
@@ -6238,7 +6180,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Удаляем сообщение о генерации
             try:
                 await generating_message.delete()
-            except:
+            except Exception:
                 pass
 
             # Формируем подпись
@@ -6286,7 +6228,7 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
-        # BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),  # Отключено
+        BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),
         # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
         BotCommand("calculators", "🧮 Калькуляторы"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),
@@ -6304,7 +6246,6 @@ async def setup_bot_menu(application):
         BotCommand("legal", "⚖️ Юридические вопросы"),
         BotCommand("management", "📈 Управление проектами"),
         BotCommand("suggestions", "💡 Предложения по улучшению"),
-        BotCommand("dev", "🔧 Режим разработчика"),
     ]
 
     await application.bot.set_my_commands(commands)
@@ -6313,7 +6254,7 @@ async def setup_bot_menu(application):
 
 def main():
     """Запуск бота"""
-    import asyncio
+    # asyncio уже импортирован на уровне модуля (строка 27)
 
     # Создаем event loop для Python 3.14+
     try:
@@ -6555,12 +6496,6 @@ def main():
         application.add_handler(create_hidden_works_act_handler())
         logger.info("✅ Все 4 интерактивных обработчика документов зарегистрированы (v1.0)")
 
-    # === РЕЖИМ РАЗРАБОТЧИКА v1.0 ===
-    if DEV_MODE_AVAILABLE:
-        # ConversationHandler для режима разработчика
-        application.add_handler(create_dev_mode_handler())
-        logger.info("✅ Режим разработчика v1.0 зарегистрирован")
-
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
@@ -6600,21 +6535,6 @@ def main():
             logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
         except Exception as e:
             logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
-
-    # === OPENAI REALTIME API - АЛЬТЕРНАТИВНЫЙ ГОЛОСОВОЙ АССИСТЕНТ ===
-    if OPENAI_REALTIME_AVAILABLE:
-        try:
-            from openai_realtime_bot_integration import (
-                register_realtime_assistant_handlers,
-                init_realtime_assistant
-            )
-            # Инициализация OpenAI Realtime ассистента
-            init_realtime_assistant()
-            # Регистрация обработчиков
-            register_realtime_assistant_handlers(application)
-            logger.info("✅ OpenAI Realtime API (голосовой ассистент) активирован")
-        except Exception as e:
-            logger.error(f"❌ Ошибка активации OpenAI Realtime: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))

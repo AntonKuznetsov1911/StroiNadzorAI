@@ -1,12 +1,11 @@
 """
-Модуль для генерации изображений
-Поддержка: OpenAI DALL-E 3
+Модуль для генерации изображений через Gemini 2.5 Flash Image
+Поддержка: Google Gemini с генерацией изображений
 """
 
 import os
 import logging
 import asyncio
-import httpx
 from io import BytesIO
 from typing import Optional, Dict, Union
 from PIL import Image
@@ -17,31 +16,34 @@ logger = logging.getLogger(__name__)
 # ИНИЦИАЛИЗАЦИЯ ДВИЖКА ГЕНЕРАЦИИ
 # ========================================
 
-# OpenAI клиент
-openai_client = None
-OPENAI_IMAGE_ENABLED = False
+# Gemini модель
+gemini_model = None
+GEMINI_IMAGE_ENABLED = False
 
 # Движок генерации
 IMAGE_ENGINE = None
 
 
-def init_openai_image():
-    """Инициализация OpenAI DALL-E"""
-    global openai_client, OPENAI_IMAGE_ENABLED
+def init_gemini_image():
+    """Инициализация Gemini Image Generation"""
+    global gemini_model, GEMINI_IMAGE_ENABLED
 
     try:
-        from openai import OpenAI
+        import google.generativeai as genai
 
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GOOGLE_API_KEY")
         if api_key:
-            openai_client = OpenAI(api_key=api_key)
-            OPENAI_IMAGE_ENABLED = True
-            logger.info("✅ OpenAI DALL-E инициализирован")
+            genai.configure(api_key=api_key)
+            gemini_model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+            GEMINI_IMAGE_ENABLED = True
+            logger.info("✅ Gemini 2.5 Flash Image инициализирован")
             return True
+        else:
+            logger.warning("⚠️ GOOGLE_API_KEY не найден")
     except ImportError:
-        logger.debug("openai не установлен")
+        logger.debug("google-generativeai не установлен")
     except Exception as e:
-        logger.warning(f"Ошибка инициализации OpenAI: {e}")
+        logger.warning(f"Ошибка инициализации Gemini Image: {e}")
 
     return False
 
@@ -50,13 +52,13 @@ def init_image_engine():
     """Инициализация движка генерации изображений"""
     global IMAGE_ENGINE
 
-    # Пробуем OpenAI DALL-E
-    if init_openai_image():
-        IMAGE_ENGINE = "openai"
-        logger.info("🎨 Движок генерации: OpenAI DALL-E 3")
+    # Используем Gemini 2.5 Flash Image
+    if init_gemini_image():
+        IMAGE_ENGINE = "gemini"
+        logger.info("🎨 Движок генерации: Gemini 2.5 Flash Image")
         return True
 
-    logger.warning("⚠️ Генерация изображений отключена (нужен OPENAI_API_KEY)")
+    logger.warning("⚠️ Генерация изображений отключена (нужен GOOGLE_API_KEY)")
     return False
 
 
@@ -65,87 +67,92 @@ init_image_engine()
 
 
 # ========================================
-# ГЕНЕРАЦИЯ ЧЕРЕЗ OPENAI DALL-E
+# ГЕНЕРАЦИЯ ЧЕРЕЗ GEMINI
 # ========================================
 
-async def generate_with_openai(
+async def generate_with_gemini(
     prompt: str,
     size: str = "1024x1024",
-    quality: str = "standard",
-    style: str = "natural"
+    quality: str = "standard"
 ) -> Optional[Dict]:
     """
-    Генерация изображения через OpenAI DALL-E 3
+    Генерация изображения через Gemini 2.5 Flash Image
 
     Args:
         prompt: Описание изображения
-        size: Размер (1024x1024, 1024x1792, 1792x1024)
+        size: Размер (не используется напрямую, Gemini определяет сам)
         quality: Качество (standard, hd)
-        style: Стиль (natural, vivid)
 
     Returns:
         Dict с image_data, text, model
     """
-    if not OPENAI_IMAGE_ENABLED or not openai_client:
+    if not GEMINI_IMAGE_ENABLED or not gemini_model:
         return None
 
     try:
-        # Проверяем, является ли промпт уже детальным техническим
-        # (от xAI Grok - содержит "dimension lines", "annotated", "scale")
-        is_technical_prompt = any(keyword in prompt.lower() for keyword in
-                                  ["dimension lines", "annotated", "scale", "measurements labeled", "technical"])
+        import google.generativeai as genai
 
-        if is_technical_prompt:
-            # Используем промпт как есть (от xAI Grok)
-            final_prompt = prompt[:4000]  # DALL-E 3 limit
-            logger.info("📐 Используем детальный технический промпт от xAI Grok")
-        else:
-            # Старый механизм для простых запросов
-            final_prompt = f"""Professional construction technical illustration:
+        # Формируем промпт для генерации технического чертежа
+        full_prompt = f"""Создай профессиональный технический чертёж для строительства:
+
 {prompt}
 
-Style: Clean technical drawing, blueprint style, professional engineering documentation.
-Include measurement annotations and labels in Russian where appropriate.
-High quality, detailed, suitable for technical documentation."""[:4000]
-            logger.info("📝 Используем стандартный промпт с улучшением")
+Требования:
+- Стиль технического чертежа (blueprint) с точными размерами
+- Соответствие ГОСТ (российские строительные стандарты)
+- Чёткие размерные линии со стрелками
+- Спецификации материалов и подписи на русском языке
+- Высокая детализация, инженерное качество
+- Указание масштаба (1:20, 1:50 и т.д.)
+- Штриховка по ГОСТ 2.306"""
+
+        logger.info("🎨 Генерируем изображение через Gemini 2.5 Flash...")
 
         loop = asyncio.get_event_loop()
 
         def _generate():
-            response = openai_client.images.generate(
-                model="dall-e-3",
-                prompt=final_prompt,
-                size=size,
-                quality=quality,
-                style=style,
-                n=1
+            response = gemini_model.generate_content(
+                full_prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=8192,
+                    response_modalities=["TEXT", "IMAGE"]
+                )
             )
             return response
 
         response = await loop.run_in_executor(None, _generate)
 
-        if response.data and len(response.data) > 0:
-            image_url = response.data[0].url
-            revised_prompt = response.data[0].revised_prompt
+        # Извлекаем изображение из ответа
+        image_data = None
+        description = ""
 
-            # Скачиваем изображение
-            async with httpx.AsyncClient() as client:
-                img_response = await client.get(image_url)
-                img_data = BytesIO(img_response.content)
-                img_data.seek(0)
+        for part in response.parts:
+            if hasattr(part, 'inline_data') and part.inline_data:
+                image_bytes = part.inline_data.data
+                image_data = BytesIO(image_bytes)
+                image_data.name = "drawing.png"
+                logger.info(f"✅ Изображение получено ({len(image_bytes)} байт)")
+            elif hasattr(part, 'text'):
+                description = part.text
 
-            logger.info("✅ Изображение сгенерировано через DALL-E 3")
-
+        if image_data:
             return {
-                "image_data": img_data,
-                "text": revised_prompt or "",
-                "model": "dall-e-3",
-                "engine": "openai",
+                "image_data": image_data,
+                "text": description,
+                "model": "gemini-2.5-flash",
+                "engine": "gemini",
                 "prompt": prompt
             }
 
+        # Если изображение не получено
+        logger.warning("⚠️ Gemini не вернул изображение, только текст")
+        return None
+
     except Exception as e:
-        logger.error(f"Ошибка DALL-E: {e}")
+        logger.error(f"Ошибка Gemini Image: {e}")
 
     return None
 
@@ -161,11 +168,11 @@ async def generate_construction_image_gemini(
     quality: str = "standard"
 ) -> Optional[Dict]:
     """
-    Генерирует строительное изображение через OpenAI DALL-E 3
+    Генерирует строительное изображение через Gemini 2.5 Flash Image
 
     Args:
         user_request: Запрос пользователя
-        reference_image: Референсное изображение (не используется в DALL-E)
+        reference_image: Референсное изображение (не используется)
         size: Размер изображения
         quality: Качество (standard/hd)
 
@@ -173,15 +180,15 @@ async def generate_construction_image_gemini(
         Dict с image_data, text, model, engine
     """
     if not IMAGE_ENGINE:
-        logger.warning("Генерация изображений недоступна (нужен OPENAI_API_KEY)")
+        logger.warning("Генерация изображений недоступна (нужен GOOGLE_API_KEY)")
         return None
 
     logger.info(f"🎨 Генерация изображения: {user_request[:100]}...")
 
-    result = await generate_with_openai(user_request, size, quality)
+    result = await generate_with_gemini(user_request, size, quality)
 
     if result:
-        logger.info("✅ Изображение сгенерировано")
+        logger.info("✅ Изображение сгенерировано через Gemini")
 
     return result
 
@@ -201,7 +208,7 @@ def get_image_engine() -> Optional[str]:
 # ========================================
 
 class GeminiImageGenerator:
-    """Класс для генерации изображений (совместимость с bot.py)"""
+    """Класс для генерации изображений через Gemini"""
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key
@@ -224,16 +231,16 @@ class GeminiImageGenerator:
     ) -> Optional[Dict]:
         """Генерирует строительную схему"""
         scheme_prompts = {
-            "foundation": "technical blueprint of foundation, cross-section, reinforcement",
-            "wall": "technical blueprint of wall structure, layers, insulation",
-            "roof": "technical blueprint of roof structure, rafters, insulation",
-            "electrical": "electrical wiring diagram, circuit layout",
-            "plumbing": "plumbing system diagram, pipes layout",
-            "general": "technical construction blueprint"
+            "foundation": "Чертёж фундамента: поперечное сечение, армирование, размеры",
+            "wall": "Чертёж стены: слои, утепление, привязка к осям",
+            "roof": "Чертёж крыши: стропильная система, утепление, узлы",
+            "electrical": "Электрическая схема: проводка, щиток, розетки",
+            "plumbing": "Схема водоснабжения: трубы, разводка, подключения",
+            "general": "Технический строительный чертёж"
         }
 
         base = scheme_prompts.get(scheme_type, scheme_prompts["general"])
-        prompt = f"{base}: {description}, clean technical drawing, labeled parts, measurements"
+        prompt = f"{base}: {description}"
 
         return await generate_construction_image_gemini(prompt)
 
@@ -243,12 +250,12 @@ class GeminiImageGenerator:
         defect_photo: Optional[bytes] = None
     ) -> Optional[Dict]:
         """Визуализирует строительный дефект"""
-        prompt = f"""Technical illustration of construction defect:
+        prompt = f"""Техническая иллюстрация строительного дефекта:
 {defect_description}
 
-Style: technical diagram with annotations, arrows pointing to defects,
-measurement indicators, professional inspection report style.
-Labels in Russian explaining the defect and recommended repairs."""
+Стиль: техническая схема с аннотациями, стрелками к дефектам,
+размерными указателями, в стиле акта строительной инспекции.
+Подписи на русском языке с описанием дефекта и рекомендуемых мер."""
 
         return await generate_construction_image_gemini(prompt)
 

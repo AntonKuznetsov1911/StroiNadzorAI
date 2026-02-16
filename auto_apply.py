@@ -300,7 +300,7 @@ NEW: |новый код|
             # Убираем кнопку из оригинального сообщения
             try:
                 await query.edit_message_reply_markup(reply_markup=None)
-            except:
+            except Exception:
                 pass
 
         except subprocess.CalledProcessError as e:

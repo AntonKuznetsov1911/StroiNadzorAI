@@ -52,7 +52,7 @@ async def smart_model_selection_text(
                 # Удаляем thinking message
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
                 # Отправляем ответ
@@ -86,7 +86,7 @@ async def smart_model_selection_text(
 
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
                 # Если получили изображение - отправляем его
@@ -138,7 +138,7 @@ async def smart_model_selection_text(
                 # Удаляем thinking message
                 try:
                     await thinking_message.delete()
-                except:
+                except Exception:
                     pass
 
                 # Отправляем ответ

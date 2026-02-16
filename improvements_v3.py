@@ -3,6 +3,7 @@
 Интерактивные кнопки, навигация, калькуляторы
 """
 
+from datetime import datetime
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -668,7 +669,7 @@ def save_user_query(user_id, query_text, answer_text):
     saved_queries_db[user_id].append({
         "query": query_text,
         "answer": answer_text,
-        "timestamp": None  # TODO: добавить время
+        "timestamp": datetime.now().isoformat()
     })
 
     return True
@@ -837,14 +838,24 @@ def check_achievements(user_stats):
     """Проверить новые достижения пользователя"""
     new_achievements = []
 
-    # Логика проверки достижений
-    if user_stats.get('total_messages', 0) >= 1:
+    total_messages = user_stats.get('total_messages', 0)
+    photos_analyzed = user_stats.get('photos_analyzed', 0)
+    calcs_used = user_stats.get('calculators_used', 0)
+
+    if total_messages >= 1:
         new_achievements.append('first_question')
 
-    if user_stats.get('total_messages', 0) >= 10:
+    if total_messages >= 10:
         new_achievements.append('curious')
 
-    # TODO: добавить остальные
+    if total_messages >= 100:
+        new_achievements.append('expert')
+
+    if photos_analyzed >= 5:
+        new_achievements.append('photo_analyzer')
+
+    if calcs_used >= 10:
+        new_achievements.append('calculator_user')
 
     return new_achievements
 

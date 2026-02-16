@@ -170,9 +170,21 @@ class GeminiLiveProxy:
                     data = json.loads(message)
 
                     if data.get("type") == "interrupt":
-                        # Пользователь перебил бота
+                        # Пользователь перебил бота — отправляем пустой аудиочанк
+                        # для сброса текущей генерации ответа Gemini
                         logger.info("⏸️ Interruption detected")
-                        # TODO: Отправить команду прерывания в Gemini
+                        if self.gemini_ws:
+                            try:
+                                interrupt_msg = json.dumps({
+                                    "client_content": {
+                                        "turns": [{"role": "user", "parts": [{"text": ""}]}],
+                                        "turn_complete": True
+                                    }
+                                })
+                                await self.gemini_ws.send(interrupt_msg)
+                                logger.info("⏸️ Interrupt command sent to Gemini")
+                            except Exception as e:
+                                logger.error(f"Error sending interrupt to Gemini: {e}")
 
                     elif data.get("type") == "stop":
                         logger.info("🛑 Stop signal received")

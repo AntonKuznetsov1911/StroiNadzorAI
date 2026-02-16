@@ -1,5 +1,5 @@
 """
-Модуль кэширования ответов v3.8
+Модуль кэширования ответов v3.9
 Redis для хранения популярных вопросов и ответов
 Экономия API токенов на повторяющихся вопросах
 """
@@ -8,6 +8,7 @@ import os
 import json
 import hashlib
 import logging
+from time import time
 from typing import Optional, Dict, Any
 from datetime import timedelta
 
@@ -95,7 +96,7 @@ def generate_cache_key(question: str, user_context: Optional[str] = None) -> str
         user_context: Дополнительный контекст (роль пользователя и т.д.)
 
     Returns:
-        MD5 хэш ключа
+        SHA-256 хэш ключа (первые 32 символа)
     """
     # Нормализуем вопрос
     normalized = question.lower().strip()
@@ -107,8 +108,8 @@ def generate_cache_key(question: str, user_context: Optional[str] = None) -> str
     if user_context:
         normalized = f"{user_context}:{normalized}"
 
-    # Генерируем хэш
-    return hashlib.md5(normalized.encode()).hexdigest()
+    # Генерируем хэш (SHA-256 вместо MD5 для надёжности)
+    return hashlib.sha256(normalized.encode()).hexdigest()[:32]
 
 
 async def get_cached_answer(question: str, user_context: Optional[str] = None) -> Optional[str]:
@@ -138,11 +139,18 @@ async def get_cached_answer(question: str, user_context: Optional[str] = None) -
 
                 return answer
 
-        # Локальный кэш
+        # Локальный кэш (с проверкой TTL)
         elif cache_key in MEMORY_CACHE:
+            entry = MEMORY_CACHE[cache_key]
+            # Проверяем TTL — если запись просрочена, удаляем
+            if entry.get('expires_at') and entry['expires_at'] < time():
+                del MEMORY_CACHE[cache_key]
+                CACHE_STATS['misses'] += 1
+                return None
             CACHE_STATS['hits'] += 1
+            entry['count'] = entry.get('count', 0) + 1
             logger.info(f"✅ Memory cache HIT: {cache_key[:16]}...")
-            return MEMORY_CACHE[cache_key]['answer']
+            return entry['answer']
 
         # Кэш мисс
         CACHE_STATS['misses'] += 1
@@ -196,26 +204,41 @@ async def set_cached_answer(
             logger.info(f"💾 Ответ сохранён в Redis: {cache_key[:16]}... (TTL: {ttl_hours}h)")
             return True
 
-        # Локальный кэш
+        # Локальный кэш (с TTL)
         else:
             MEMORY_CACHE[cache_key] = {
                 'answer': answer,
                 'question': question,
-                'count': 0
+                'count': 0,
+                'expires_at': time() + (ttl_hours * 3600)
             }
 
-            # Ограничиваем размер кэша в памяти
+            # Очищаем просроченные записи + ограничиваем размер
+            _cleanup_expired_cache()
             if len(MEMORY_CACHE) > 1000:
                 # Удаляем самый старый элемент
                 oldest_key = next(iter(MEMORY_CACHE))
                 del MEMORY_CACHE[oldest_key]
 
-            logger.info(f"💾 Ответ сохранён в памяти: {cache_key[:16]}...")
+            logger.info(f"💾 Ответ сохранён в памяти: {cache_key[:16]}... (TTL: {ttl_hours}h)")
             return True
 
     except Exception as e:
         logger.error(f"Ошибка сохранения в кэш: {e}")
         return False
+
+
+def _cleanup_expired_cache():
+    """Удалить просроченные записи из локального кэша"""
+    now = time()
+    expired_keys = [
+        key for key, data in MEMORY_CACHE.items()
+        if data.get('expires_at') and data['expires_at'] < now
+    ]
+    for key in expired_keys:
+        del MEMORY_CACHE[key]
+    if expired_keys:
+        logger.debug(f"🧹 Очищено {len(expired_keys)} просроченных записей из кэша")
 
 
 async def get_popular_questions(limit: int = 10) -> list:
@@ -384,7 +407,11 @@ async def find_similar_cached_question(question: str, threshold: float = 0.7) ->
             best_similarity = 0
             best_answer = None
 
+            now = time()
             for cache_key, data in MEMORY_CACHE.items():
+                # Пропускаем просроченные записи
+                if data.get('expires_at') and data['expires_at'] < now:
+                    continue
                 cached_question = data.get('question', '')
                 similarity = calculate_similarity(question, cached_question)
 

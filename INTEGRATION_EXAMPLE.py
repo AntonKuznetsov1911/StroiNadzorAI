@@ -470,7 +470,7 @@ async def get_conversation_history(user_id: int, limit: int = 10) -> List[Dict]:
         from history_manager import get_user_history
         history = await get_user_history(user_id, limit=limit)
         return history
-    except:
+    except Exception:
         return []
 
 
