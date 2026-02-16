@@ -126,10 +126,14 @@ class XAIClient:
         messages: List[Dict[str, str]],
         max_tokens: int = 1000,
         temperature: float = 0.7,
-        timeout: int = 120
+        timeout: int = 120,
+        search_parameters: Optional[Dict[str, Any]] = None
     ):
         """
         Streaming версия chat completions (асинхронный генератор)
+
+        Args:
+            search_parameters: Параметры поиска для live_search
 
         Yields:
             str - части текста по мере их получения от API
@@ -143,6 +147,10 @@ class XAIClient:
             "temperature": temperature,
             "stream": True
         }
+
+        # Добавляем параметры поиска если переданы
+        if search_parameters:
+            payload["search_parameters"] = search_parameters
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
