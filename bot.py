@@ -746,7 +746,7 @@ def get_claude_client():
         claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return claude_client
 
-def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None, tools=None):
     """
     Вызов xAI Grok API с автоматическим fallback на Claude при сбое
 
@@ -756,7 +756,8 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
     3. Логирует какой API был использован
 
     Args:
-        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: УСТАРЕЛ. Используйте tools.
+        tools: Инструменты [{"type": "web_search"}, {"type": "x_search"}]
     """
     # Сначала пытаемся Grok
     try:
@@ -766,7 +767,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         )
         logger.info("✅ Ответ получен от xAI Grok")
         return response
@@ -818,7 +819,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
-async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None):
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None, tools=None):
     """
     Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
 
@@ -828,7 +829,8 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
         messages: Список сообщений
         max_tokens: Максимум токенов
         temperature: Температура
-        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: УСТАРЕЛ. Используйте tools.
+        tools: Инструменты [{"type": "web_search"}, {"type": "x_search"}]
 
     Yields:
         str - части текста по мере получения от API
@@ -840,7 +842,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         ):
             yield chunk
 
@@ -855,7 +857,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         )
         # Отдаём весь ответ целиком
         yield response["choices"][0]["message"]["content"]
@@ -3413,8 +3415,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         loop = asyncio.get_event_loop()
 
         # Включаем web_search для анализа фото (поиск информации о дефектах)
-        search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
+        # Используем Responses API с tools (search_parameters устарел с 12.01.2026)
+        search_tools = [{"type": "web_search"}]
 
         response = await loop.run_in_executor(
             None,
@@ -3446,7 +3448,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                     }
                 ],
-                search_parameters=search_params
+                tools=search_tools
             )
         )
         analysis = response["choices"][0]["message"]["content"]
@@ -3678,8 +3680,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     loop = asyncio.get_event_loop()
 
                     # Включаем web_search для анализа документов (поиск нормативов)
-                    search_params = {
-                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
+                    # Используем Responses API с tools (search_parameters устарел с 12.01.2026)
+                    search_tools = [{"type": "web_search"}]
 
                     response = await loop.run_in_executor(
                         None,
@@ -3692,7 +3694,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
                                 {"role": "user", "content": analysis_prompt}
                             ],
-                            search_parameters=search_params
+                            tools=search_tools
                         )
                     )
                     expert_opinion = response["choices"][0]["message"]["content"]
@@ -4319,10 +4321,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         selected_max_tokens = intent_info["max_tokens"]
         intent_type = intent_info.get("intent_type", "technical_question")
 
-        # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
-        search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}  # Поиск в интернете
-        logger.info("🌐 Grok Tools включены для всех запросов: live_search")
+        # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (Responses API с tools)
+        # Миграция: search_parameters устарел с 12.01.2026, используем tools в /v1/responses
+        search_tools = [{"type": "web_search"}, {"type": "x_search"}]
+        logger.info("🌐 Grok Responses API: tools=[web_search, x_search] для всех запросов")
 
         # Универсальный системный промпт v5.0 (оптимизирован)
         # Использует промпты из optimized_prompts.py
@@ -4335,7 +4337,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 ПРИНЦИПЫ: краткость, точность, практичность, безопасность.
 📱 ФОРМАТ: для телефона, 35 символов в строке, эмодзи в начале разделов.
 📌 СТРУКТУРА: Суть → Детали → Действия → Контроль.
-🌐 ПОИСК: live_search для актуальных данных.
+🌐 ПОИСК: web_search для актуальных данных из интернета.
 ⚠️ БЕЗОПАСНОСТЬ: на первом месте для опасных работ."""
 
         # 🌤️ ПОГОДА: Проверяем, является ли это запросом о погоде
@@ -4361,14 +4363,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await add_message_to_history_async(user_id, 'user', question)
                     await add_message_to_history_async(user_id, 'assistant', weather_response)
 
-                    logger.info("✅ Погода отправлена пользователю")
+                    logger.info("✅ Погода отправлена пользователю (Яндекс Погода API)")
                     return  # Прерываем обработку
+                else:
+                    logger.warning("⚠️ Яндекс Погода вернула None (проверьте YANDEX_WEATHER_API_KEY). Fallback на Grok web_search.")
             except Exception as e:
-                logger.error(f"Ошибка получения погоды: {e}")
-                # Продолжаем обычную обработку если погода не получена
+                logger.error(f"Ошибка получения погоды: {e}. Fallback на Grok web_search.")
+                # Продолжаем обычную обработку - Grok получит данные через web_search
 
-        # 🌐 ВЕБ-ПОИСК: Теперь выполняется через Grok инструменты (live_search)
-        # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
+        # 🌐 ВЕБ-ПОИСК: Выполняется через Grok Responses API (tools: web_search, x_search)
+        # Миграция с live_search (search_parameters) на Responses API (/v1/responses) выполнена 16.02.2026
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
         if GEMINI_AVAILABLE and IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
@@ -4519,7 +4523,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
-                    search_parameters=search_params
+                    tools=search_tools
                 ):
                     first_phase_answer += chunk
                     answer += chunk
@@ -4562,7 +4566,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         messages=continuation_messages,
                         max_tokens=selected_max_tokens - 500,
                         temperature=0.7,
-                        search_parameters=search_params
+                        tools=search_tools
                     ):
                         answer += chunk
 
@@ -4628,7 +4632,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         max_tokens=selected_max_tokens,
                         temperature=0.7,
                         messages=messages_with_system,
-                        search_parameters=search_params
+                        tools=search_tools
                     )
                 )
                 answer = response["choices"][0]["message"]["content"]
@@ -4650,7 +4654,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=selected_max_tokens,
                     temperature=0.7,
                     messages=messages_with_system,
-                    search_parameters=search_params
+                    tools=search_tools
                 )
             )
             answer = response["choices"][0]["message"]["content"]
@@ -4825,7 +4829,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # По умолчанию показываем только ответ (как в примере: всё остальное можно раскрыть/скрыть кнопками)
         result = answer
 
-        # Веб-поиск теперь выполняется через инструменты Grok (live_search)
+        # Веб-поиск выполняется через Grok Responses API (tools: web_search, x_search)
 
         # Сохраняем доп.информацию в context.user_data, чтобы можно было «раскрыть» по кнопке
         context.user_data["last_answer"] = answer
