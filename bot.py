@@ -348,24 +348,6 @@ except ImportError as e:
     gemini_vision_analyzer = None
     logger.warning(f"⚠️ Модуль gemini_vision.py не найден: {e}")
 
-# Режим разработчика v3.0 - автовыбор локальной/облачной версии
-is_developer = None
-try:
-    # Сначала пробуем загрузить ЛОКАЛЬНУЮ версию (с git автопушем)
-    from dev_mode_local import create_dev_mode_handler, is_developer
-    DEV_MODE_AVAILABLE = True
-    logger.info("✅ Режим разработчика v3.0 ЛОКАЛЬНЫЙ загружен (с git автопушем)")
-except ImportError:
-    try:
-        # Если не получилось (нет git) - загружаем ОБЛАЧНУЮ версию (только анализ)
-        from dev_mode import create_dev_mode_handler, is_developer
-        DEV_MODE_AVAILABLE = True
-        logger.info("✅ Режим разработчика v2.0 ОБЛАЧНЫЙ загружен (без git)")
-    except ImportError as e:
-        DEV_MODE_AVAILABLE = False
-        is_developer = lambda user_id: False  # Заглушка, если модули не загружены
-        logger.warning(f"⚠️ Модули dev_mode не найдены: {e}")
-
 # Автоприменение изменений v1.0 - кнопка "Применить изменения" после ответов
 try:
     from auto_apply import add_apply_button, should_show_apply_button, handle_apply_changes
@@ -571,15 +553,6 @@ try:
 except ImportError as e:
     VOICE_ASSISTANT_AVAILABLE = False
     logger.warning(f"⚠️ Gemini Live API недоступен: {e}")
-
-# Импорт OpenAI Realtime API (альтернативный голосовой ассистент)
-try:
-    from openai_realtime_bot_integration import start_realtime_chat_command
-    OPENAI_REALTIME_AVAILABLE = True
-    logger.info("✅ OpenAI Realtime API (голосовой ассистент) загружен")
-except ImportError as e:
-    OPENAI_REALTIME_AVAILABLE = False
-    logger.warning(f"⚠️ OpenAI Realtime API недоступен: {e}")
 
 # LLM Council - Совет AI моделей для сложных вопросов (Karpathy's approach)
 try:
@@ -1772,21 +1745,6 @@ REGULATIONS = {
 }
 
 
-# === ПОСТОЯННАЯ КЛАВИАТУРА ===
-
-def get_main_keyboard():
-    """Создать постоянную клавиатуру с кнопками"""
-    keyboard = [
-        [KeyboardButton("🎤 Real-time чат")],
-    ]
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=False,
-        input_field_placeholder="Напишите вопрос или нажмите кнопку..."
-    )
-
-
 # === КОМАНДЫ ===
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1843,7 +1801,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔹 *КОМАНДЫ*
 ━━━━━━━━━━━━━━━━━━━━━━
 
-/realtime\\_chat — Голосовой чат
 /calculators — Калькуляторы
 /regulations — Нормативы
 /templates — Шаблоны документов
@@ -1869,7 +1826,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Inline меню под сообщением
     inline_keyboard = [
-        [InlineKeyboardButton("🎤 Real-time чат", callback_data="realtime_chat_start")],
         [InlineKeyboardButton("📁 Проект", callback_data="project_menu"),
          InlineKeyboardButton("🧮 Калькуляторы", callback_data="calculators_menu")],
         [InlineKeyboardButton("📚 Нормативы", callback_data="regulations"),
@@ -1877,9 +1833,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📋 Шаблоны", callback_data="templates"),
          InlineKeyboardButton("👔 Выбрать роль", callback_data="role")],
         [InlineKeyboardButton("💡 Предложения", callback_data="suggestions"),
-         InlineKeyboardButton("🔧 Разработчик", callback_data="dev_mode")],
-        [InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples"),
-         InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
+         InlineKeyboardButton("📝 Примеры вопросов", callback_data="examples")],
+        [InlineKeyboardButton("ℹ️ Справка", callback_data="help")]
     ]
     inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
@@ -1895,10 +1850,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
     help_text = """📖 *СПРАВКА — СтройНадзорAI v3.0*
 
-*🎤 ГОЛОСОВОЙ АССИСТЕНТ:*
-   /realtime\\_chat — Начать голосовой чат
-   • Отправьте голосовое → получите голосовой ответ
-   • Whisper (распознавание) + GPT-4 + TTS (озвучка)
+*🎤 ГОЛОСОВОЙ ВВОД:*
+   • Отправьте голосовое → получите текстовый ответ
+   • Автоматическое распознавание речи
 
 *📸 АНАЛИЗ ФОТО:*
    • Отправьте фото объекта/дефекта
@@ -1938,7 +1892,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *💡 УМНЫЕ ФУНКЦИИ v5.0:*
    /calculators - Меню калькуляторов
-   /realtime_chat - Голосовой ассистент (OpenAI)
    /saved - Сохранённые расчёты калькуляторов
    /templates - Шаблоны документов
    /role - Выбор режима работы (прораб/ГИП/ОТК)
@@ -3357,11 +3310,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Отправляем по частям БЕЗ parse_mode (избегаем ошибок парсинга)
             for i, part in enumerate(parts):
-                # Добавляем кнопку "Применить изменения" к последней части (только для разработчика)
                 part_reply_markup = None
-                user_id = update.effective_user.id
-                if i == len(parts) - 1 and AUTO_APPLY_AVAILABLE and should_show_apply_button(analysis) and is_developer(user_id):
-                    part_reply_markup = add_apply_button()
 
                 if i == 0:
                     await update.message.reply_text(part, reply_markup=part_reply_markup)
@@ -3672,19 +3621,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, есть ли распознанный текст из голосового сообщения
     question = context.user_data.pop('_voice_recognized_text', None) or update.message.text
     if not question:
-        return
-
-    # Обработка кнопки "🎤 Real-time чат"
-    if question and question.strip() == "🎤 Real-time чат":
-        if OPENAI_REALTIME_AVAILABLE:
-            await start_realtime_chat_command(update, context)
-        else:
-            await update.message.reply_text(
-                "❌ **Real-time чат недоступен**\n\n"
-                "Требуется OPENAI_API_KEY.\n"
-                "Попробуйте команду: /realtime_chat",
-                parse_mode="Markdown"
-            )
         return
 
     # Проверка ожидания названия проекта
@@ -4637,11 +4573,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if IMPROVEMENTS_V3_AVAILABLE:
             reply_markup = create_reply_suggestions_keyboard(related_questions=related_questions)
 
-        # Добавляем кнопку "Применить изменения" если в ответе есть код (только для разработчика)
-        user_id = update.effective_user.id
-        if AUTO_APPLY_AVAILABLE and should_show_apply_button(answer) and is_developer(user_id):
-            reply_markup = add_apply_button(reply_markup)
-
         # Обновляем streaming сообщение финальным ответом с кнопками
         max_length = 4000  # Лимит Telegram
         if len(result) > max_length:
@@ -4748,12 +4679,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text="❌ **Голосовой ассистент Gemini недоступен**\n\n"
-                    "Попробуйте OpenAI: /realtime_chat",
+                    "Попробуйте отправить голосовое сообщение для распознавания.",
                 parse_mode="Markdown"
             )
         return
-
-    # Обработка realtime_chat_start теперь в ConversationHandler (openai_realtime_bot_integration.py)
 
     await query.answer()
 
@@ -4845,18 +4774,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await suggestions_menu(update, context)
         else:
             await query.edit_message_text("⚠️ Модуль предложений недоступен.")
-    elif query.data == "dev_mode":
-        # Кнопка "Разработчик" из главного меню
-        await query.edit_message_text(
-            "🔧 **РЕЖИМ РАЗРАБОТЧИКА**\n\n"
-            "Для входа в режим разработчика используйте команду /dev\n\n"
-            "Режим разработчика позволяет:\n"
-            "• Отправлять запросы на изменение кода\n"
-            "• Получать готовые решения от AI\n"
-            "• (Локально) Автоматически применять и пушить изменения\n\n"
-            "Введите: /dev",
-            parse_mode="Markdown"
-        )
     elif query.data == "project_menu":
         # Кнопка "Проект" из главного меню
         if PROJECTS_AVAILABLE:
@@ -6060,7 +5977,6 @@ async def setup_bot_menu(application):
         BotCommand("legal", "⚖️ Юридические вопросы"),
         BotCommand("management", "📈 Управление проектами"),
         BotCommand("suggestions", "💡 Предложения по улучшению"),
-        BotCommand("dev", "🔧 Режим разработчика"),
     ]
 
     await application.bot.set_my_commands(commands)
@@ -6297,12 +6213,6 @@ def main():
         application.add_handler(create_hidden_works_act_handler())
         logger.info("✅ Все 4 интерактивных обработчика документов зарегистрированы (v1.0)")
 
-    # === РЕЖИМ РАЗРАБОТЧИКА v1.0 ===
-    if DEV_MODE_AVAILABLE:
-        # ConversationHandler для режима разработчика
-        application.add_handler(create_dev_mode_handler())
-        logger.info("✅ Режим разработчика v1.0 зарегистрирован")
-
     # Регистрируем обработчики сообщений
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
@@ -6342,21 +6252,6 @@ def main():
             logger.info("✅ Gemini Live API (голосовой ассистент) активирован")
         except Exception as e:
             logger.error(f"❌ Ошибка активации голосового ассистента: {e}")
-
-    # === OPENAI REALTIME API - АЛЬТЕРНАТИВНЫЙ ГОЛОСОВОЙ АССИСТЕНТ ===
-    if OPENAI_REALTIME_AVAILABLE:
-        try:
-            from openai_realtime_bot_integration import (
-                register_realtime_assistant_handlers,
-                init_realtime_assistant
-            )
-            # Инициализация OpenAI Realtime ассистента
-            init_realtime_assistant()
-            # Регистрация обработчиков
-            register_realtime_assistant_handlers(application)
-            logger.info("✅ OpenAI Realtime API (голосовой ассистент) активирован")
-        except Exception as e:
-            logger.error(f"❌ Ошибка активации OpenAI Realtime: {e}")
 
     # Регистрируем обработчик кнопок
     application.add_handler(CallbackQueryHandler(handle_callback))
