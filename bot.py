@@ -4204,13 +4204,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
-        # ОТКЛЮЧЕНО: Теперь обрабатывается через smart_model_wrapper → gemini_image
-        if False and GEMINI_AVAILABLE and should_generate_image(question):
+        if GEMINI_AVAILABLE and IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
             logger.info("🎨 Обнаружен запрос на генерацию изображения")
 
             # Отправляем сообщение о генерации
             generating_msg = await update.message.reply_text(
-                "📐 Генерирую технический чертёж через DALL-E 3...\n\n"
+                "📐 Генерирую технический чертёж через Gemini AI...\n\n"
                 "Шаг 1/2: xAI Grok создаёт детальный промпт\n"
                 "• С точными размерами и цифрами\n"
                 "• С аннотациями на русском\n"
@@ -4222,9 +4221,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 client = get_grok_client()
 
                 # Используем оптимизированный промпт из optimized_prompts.py
-                blueprint_system_prompt = GEMINI_IMAGE_PROMPT_SYSTEM if OPTIMIZED_PROMPTS_AVAILABLE else """Ты — эксперт по созданию ТЕХНИЧЕСКИХ промптов для DALL-E 3 по ГОСТ.
+                blueprint_system_prompt = GEMINI_IMAGE_PROMPT_SYSTEM if OPTIMIZED_PROMPTS_AVAILABLE else """Ты — эксперт по созданию ТЕХНИЧЕСКИХ промптов для генерации чертежей по ГОСТ.
 📐 ОБЯЗАТЕЛЬНО: размеры в мм/м, штриховка по ГОСТ 2.306, русские подписи, масштаб.
-Формат: [Английский DALL-E prompt] ---ОПИСАНИЕ--- [Описание на русском]"""
+Формат: [Детальное описание чертежа] ---ОПИСАНИЕ--- [Описание на русском]"""
 
                 prompt_messages = [
                     {
@@ -4233,7 +4232,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     },
                     {
                         "role": "user",
-                        "content": f"Создай детальный промпт для DALL-E 3 на основе запроса: {question}"
+                        "content": f"Создай детальный промпт для генерации технического чертежа на основе запроса: {question}"
                     }
                 ]
 
@@ -4247,30 +4246,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 grok_full_response = grok_response['choices'][0]['message']['content'].strip()
 
-                # Разделяем промпт для DALL-E и описание для пользователя
+                # Разделяем промпт для Gemini и описание для пользователя
                 if "---ОПИСАНИЕ---" in grok_full_response:
                     parts = grok_full_response.split("---ОПИСАНИЕ---")
-                    dalle_prompt = parts[0].strip()
+                    image_prompt = parts[0].strip()
                     russian_description = parts[1].strip() if len(parts) > 1 else ""
                 else:
-                    dalle_prompt = grok_full_response
+                    image_prompt = grok_full_response
                     russian_description = ""
 
-                logger.info(f"✅ Промпт от Grok получен: {dalle_prompt[:100]}...")
+                logger.info(f"✅ Промпт от Grok получен: {image_prompt[:100]}...")
 
                 # Обновляем сообщение
                 await generating_msg.edit_text(
-                    "📐 Генерирую технический чертёж через DALL-E 3...\n\n"
+                    "📐 Генерирую технический чертёж через Gemini AI...\n\n"
                     "✅ Шаг 1/2: Детальный промпт готов\n"
-                    "⏳ Шаг 2/2: DALL-E 3 рисует чертёж с размерами..."
+                    "⏳ Шаг 2/2: Gemini рисует чертёж с размерами..."
                 )
 
-                # Шаг 2: Генерируем изображение через DALL-E с промптом от Grok
-                # Используем HD качество для технических чертежей с размерами
+                # Шаг 2: Генерируем изображение через Gemini с промптом от Grok
                 result = await generate_construction_image_gemini(
-                    dalle_prompt,
+                    image_prompt,
                     size="1024x1024",
-                    quality="hd"  # Высокое качество для чёткости цифр и линий
+                    quality="hd"
                 )
 
                 if result and result.get("image_data"):
@@ -4286,13 +4284,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Используем русское описание от Grok (адаптировано для телефона)
                     if russian_description:
-                        caption = f"🎨 **Сгенерировано DALL-E 3**\n\n{russian_description}\n\n"
-                        caption += "💡 *Координация: xAI Grok + OpenAI DALL-E 3*"
+                        caption = f"🎨 **Сгенерировано Gemini AI**\n\n{russian_description}\n\n"
+                        caption += "💡 *Координация: xAI Grok + Google Gemini*"
                     else:
                         # Fallback если описание не получено
-                        caption = f"🎨 **Изображение сгенерировано через DALL-E 3**\n\n"
-                        caption += f"📝 **Промпт от xAI Grok:**\n_{dalle_prompt[:100]}..._\n\n"
-                        caption += "💡 *Координация: xAI Grok + OpenAI DALL-E 3*"
+                        caption = f"🎨 **Изображение сгенерировано через Gemini AI**\n\n"
+                        caption += f"📝 **Промпт от xAI Grok:**\n_{image_prompt[:100]}..._\n\n"
+                        caption += "💡 *Координация: xAI Grok + Google Gemini*"
 
                     await update.message.reply_photo(
                         photo=result["image_data"],
@@ -5960,7 +5958,7 @@ async def setup_bot_menu(application):
     commands = [
         BotCommand("start", "🏠 Главное меню"),
         BotCommand("help", "📖 Справка по всем командам"),
-        # BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),  # Отключено
+        BotCommand("generate", "🎨 Генерация схем (Gemini AI)"),
         # BotCommand("visualize", "🎨 Визуализация дефектов (Gemini AI)"),  # Отключено
         BotCommand("calculators", "🧮 Калькуляторы"),
         BotCommand("regulations", "📚 Нормативы (27 документов)"),

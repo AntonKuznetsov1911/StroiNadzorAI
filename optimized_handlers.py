@@ -234,29 +234,30 @@ async def handle_with_gemini_image(
         # Конфигурируем Gemini
         genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-        # Используем модель с поддержкой генерации изображений
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        # Используем актуальную модель с поддержкой генерации изображений
+        model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
 
         # Формируем промпт для генерации изображения
-        full_prompt = f"""Create a professional technical drawing for construction:
+        full_prompt = f"""Создай профессиональный технический чертёж для строительства:
 
 {question}
 
-Requirements:
-- Technical blueprint style with precise measurements
-- GOST standards compliance (Russian construction standards)
-- Clear dimension lines with arrows
-- Material specifications and labels in Russian
-- High detail, engineering quality
-- Scale notation (1:20, 1:50, etc.)"""
+Требования:
+- Стиль технического чертежа (blueprint) с точными размерами
+- Соответствие ГОСТ (российские строительные стандарты)
+- Чёткие размерные линии со стрелками
+- Спецификации материалов и подписи на русском языке
+- Высокая детализация, инженерное качество
+- Указание масштаба (1:20, 1:50 и т.д.)
+- Штриховка по ГОСТ 2.306"""
 
-        logger.info("🎨 Генерируем изображение через Gemini...")
+        logger.info("🎨 Генерируем изображение через Gemini 2.5 Flash Image...")
 
         # Генерируем изображение
         loop = asyncio.get_event_loop()
 
         def _call_gemini():
-            # Указываем что хотим получить изображение
+            # Запрашиваем текст + изображение
             response = model.generate_content(
                 full_prompt,
                 generation_config=genai.GenerationConfig(
@@ -264,7 +265,7 @@ Requirements:
                     top_p=0.95,
                     top_k=40,
                     max_output_tokens=8192,
-                    response_modalities=["IMAGE"]  # Запрашиваем изображение
+                    response_modalities=["TEXT", "IMAGE"]
                 )
             )
             return response
