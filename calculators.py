@@ -4,8 +4,81 @@
 С интеграцией актуальных СП и СНиП 2025
 """
 
+import ast
 import math
+import operator
 from typing import Dict, Tuple, Union, Optional, List
+
+
+# ========================================
+# БЕЗОПАСНЫЙ ПАРСЕР МАТЕМАТИЧЕСКИХ ВЫРАЖЕНИЙ
+# ========================================
+
+class SafeMathEvaluator:
+    """Безопасный вычислитель математических выражений на базе AST.
+
+    Поддерживает: +, -, *, /, ^/**, sqrt(), скобки, числа.
+    Не использует eval() — невозможна инъекция кода.
+    """
+
+    _OPERATORS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+
+    _FUNCTIONS = {
+        'sqrt': math.sqrt,
+        'abs': abs,
+    }
+
+    def evaluate(self, expression: str) -> float:
+        """Вычислить математическое выражение безопасно."""
+        expr = expression.replace('^', '**')
+        try:
+            tree = ast.parse(expr, mode='eval')
+        except SyntaxError as e:
+            raise ValueError(f"Синтаксическая ошибка: {e}")
+        return self._eval_node(tree.body)
+
+    def _eval_node(self, node):
+        if isinstance(node, ast.Expression):
+            return self._eval_node(node.body)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        elif isinstance(node, ast.Num):  # Python 3.7 compatibility
+            return node.n
+        elif isinstance(node, ast.UnaryOp):
+            op_func = self._OPERATORS.get(type(node.op))
+            if op_func is None:
+                raise ValueError(f"Неподдерживаемая операция: {type(node.op).__name__}")
+            return op_func(self._eval_node(node.operand))
+        elif isinstance(node, ast.BinOp):
+            op_func = self._OPERATORS.get(type(node.op))
+            if op_func is None:
+                raise ValueError(f"Неподдерживаемая операция: {type(node.op).__name__}")
+            left = self._eval_node(node.left)
+            right = self._eval_node(node.right)
+            return op_func(left, right)
+        elif isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ValueError("Вызовы методов не поддерживаются")
+            func_name = node.func.id
+            if func_name not in self._FUNCTIONS:
+                raise ValueError(f"Неподдерживаемая функция: {func_name}")
+            if len(node.args) != 1 or node.keywords:
+                raise ValueError(f"Функция {func_name} принимает ровно 1 аргумент")
+            arg = self._eval_node(node.args[0])
+            return self._FUNCTIONS[func_name](arg)
+        else:
+            raise ValueError(f"Недопустимое выражение: {ast.dump(node)}")
+
+
+_safe_evaluator = SafeMathEvaluator()
 
 # ======================
 # НОРМАТИВНЫЕ ДОКУМЕНТЫ 2025
@@ -400,14 +473,13 @@ def calculate_water(
 # ========================================
 
 def calculate_math_expression(expression: str) -> Dict:
-    """Безопасный математический калькулятор"""
+    """Безопасный математический калькулятор (AST-парсер, без eval)"""
     try:
-        allowed_chars = set('0123456789+-*/().^sqrt ')
-        if not all(c in allowed_chars for c in expression.replace('sqrt', '').replace('^', '')):
+        allowed_chars = set('0123456789+-*/().^sqrt abs')
+        if not all(c in allowed_chars for c in expression.replace('sqrt', '').replace('abs', '').replace('^', '')):
             return {"success": False, "error": "Недопустимые символы в выражении", "expression": expression}
 
-        expr = expression.replace('^', '**').replace('sqrt', 'math.sqrt')
-        result = eval(expr, {"__builtins__": {}}, {"math": math})
+        result = _safe_evaluator.evaluate(expression)
 
         return {
             "success": True,

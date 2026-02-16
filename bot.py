@@ -3473,9 +3473,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Скачиваем файл
+        # Скачиваем файл (санитизируем имя для защиты от path traversal)
         file = await update.message.document.get_file()
-        file_name = update.message.document.file_name
+        import os as _os
+        import re as _re
+        raw_file_name = update.message.document.file_name or "document"
+        file_name = _os.path.basename(raw_file_name)
+        file_name = _re.sub(r'[^\w\.\-\(\) ]', '_', file_name)  # только безопасные символы
         file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
 
@@ -3662,9 +3666,13 @@ async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений с контекстом истории"""
+    if not update.message:
+        return
     user_id = update.effective_user.id
     # Проверяем, есть ли распознанный текст из голосового сообщения
     question = context.user_data.pop('_voice_recognized_text', None) or update.message.text
+    if not question:
+        return
 
     # Обработка кнопки "🎤 Real-time чат"
     if question and question.strip() == "🎤 Real-time чат":
@@ -4707,8 +4715,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка кнопок"""
     query = update.callback_query
 
-
-# (removed unused inline-menu helper)
+    # Проверяем что query и data не None
+    if not query or not query.data:
+        return
 
     # Пропускаем callbacks которые относятся к ConversationHandler калькуляторов
     calculator_prefixes = [
@@ -5854,8 +5863,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ошибок"""
-    logger.error(f"Update {update} caused error {context.error}")
+    """Обработка ошибок с уведомлением пользователя"""
+    import traceback
+
+    # Логируем полный traceback
+    tb_string = ''.join(traceback.format_exception(type(context.error), context.error, context.error.__traceback__))
+    logger.error(f"Exception while handling an update:\n{tb_string}")
+
+    # Уведомляем пользователя
+    error_text = (
+        "⚠️ Произошла внутренняя ошибка.\n\n"
+        "Попробуйте повторить запрос или используйте /start для перезапуска.\n"
+        "Если ошибка повторяется — обратитесь к администратору."
+    )
+    try:
+        if update and update.effective_message:
+            await update.effective_message.reply_text(error_text)
+        elif update and update.callback_query:
+            await update.callback_query.answer(text="⚠️ Произошла ошибка. Попробуйте снова.", show_alert=True)
+    except Exception:
+        logger.error("Failed to send error notification to user")
 
 
 # === НОВЫЕ КОМАНДЫ v3.0 ===
@@ -6042,7 +6069,7 @@ async def setup_bot_menu(application):
 
 def main():
     """Запуск бота"""
-    import asyncio
+    # asyncio уже импортирован на уровне модуля (строка 27)
 
     # Создаем event loop для Python 3.14+
     try:
