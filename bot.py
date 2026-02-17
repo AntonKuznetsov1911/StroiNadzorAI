@@ -3578,10 +3578,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Скачиваем файл (санитизируем имя для защиты от path traversal)
         file = await update.message.document.get_file()
-        import os as _os
         import re as _re
         raw_file_name = update.message.document.file_name or "document"
-        file_name = _os.path.basename(raw_file_name)
+        file_name = os.path.basename(raw_file_name)
         file_name = _re.sub(r'[^\w\.\-\(\) ]', '_', file_name)  # только безопасные символы
         file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
@@ -3602,9 +3601,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_image = ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp') or 'image' in ft_lower
         is_text = ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm', '.md', '.rtf')
         is_cad = ext in ('.dwg', '.dxf', '.ifc', '.rvt')
+        is_archive_other = ext in ('.7z', '.rar', '.tar', '.gz', '.bz2', '.tar.gz', '.tgz')
 
         # Определяем, можем ли мы извлечь текст/данные из файла
-        can_analyze = is_pdf or is_zip or is_docx or is_xlsx or is_image or is_text or is_cad or is_doc
+        can_analyze = is_pdf or is_zip or is_docx or is_xlsx or is_image or is_text or is_cad or is_doc or is_archive_other
 
         # Сообщение о начале анализа
         if is_zip:
@@ -3617,8 +3617,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             status_text = "Анализирую документ..."
 
         thinking_msg = await update.message.reply_text(
-            f"📄 Получен: **{file_name}**\n⏳ {status_text}",
-            parse_mode="Markdown"
+            f"📄 Получен: {file_name}\n⏳ {status_text}"
         )
 
         # === УНИВЕРСАЛЬНОЕ ИЗВЛЕЧЕНИЕ ТЕКСТА/ДАННЫХ ИЗ ФАЙЛА ===
@@ -3772,6 +3771,17 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"[Файл формата {cad_type}]\n\n"
                 f"Это бинарный файл чертежа. Текст из него нельзя извлечь напрямую.\n"
                 f"Для полного анализа откройте в {cad_type.split()[0]} или конвертируйте в PDF."
+            )
+
+        # --- Другие архивы (7z, RAR, TAR) ---
+        elif is_archive_other:
+            doc_type_label = "АРХИВ"
+            archive_names = {'.7z': '7-Zip', '.rar': 'RAR', '.tar': 'TAR', '.gz': 'GZIP', '.bz2': 'BZIP2', '.tgz': 'TAR.GZ'}
+            arc_type = archive_names.get(ext, 'архив')
+            extracted_content = (
+                f"[Файл формата {arc_type}]\n\n"
+                f"Бот поддерживает распаковку только ZIP-архивов.\n"
+                f"Пожалуйста, пересохраните как ZIP и отправьте повторно."
             )
 
         # === ОТПРАВКА НА АНАЛИЗ GROK (если есть текст и нет ошибок) ===
@@ -4004,7 +4014,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = project.add_file(file_path, file_type, description)
 
         # Удаляем временный файл
-        import os
         os.remove(file_path)
 
         # Удаляем сообщение "анализирую"
@@ -4063,12 +4072,11 @@ async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
-                f"✅ **Проект создан:** {project_name}\n\n"
+                f"✅ Проект создан: {project_name}\n\n"
                 "📌 Проект активирован!\n"
                 "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
                 "Можете начинать работу!",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
+                reply_markup=reply_markup
             )
         else:
             await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
@@ -4109,9 +4117,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 await update.message.reply_text(
-                    f"✅ Заметка добавлена в проект **{project_name}**",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    f"✅ Заметка добавлена в проект: {project_name}",
+                    reply_markup=reply_markup
                 )
             else:
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
