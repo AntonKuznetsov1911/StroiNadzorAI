@@ -3591,11 +3591,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Определяем тип документа
         is_pdf = file_name.lower().endswith('.pdf') or 'pdf' in file_type.lower()
+        is_zip = file_name.lower().endswith('.zip') or 'zip' in file_type.lower()
 
         # Сообщение о начале анализа
         thinking_msg = await update.message.reply_text(
             f"📄 Получен документ: **{file_name}**\n\n"
-            f"⏳ Анализирую документ...",
+            f"⏳ {'Распаковываю и анализирую архив...' if is_zip else 'Анализирую документ...'}",
             parse_mode="Markdown"
         )
 
@@ -3698,7 +3699,197 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Ошибка анализа PDF: {e}")
                 expert_opinion = f"⚠️ Не удалось проанализировать PDF: {str(e)}"
 
-        # Сохраняем файл в проект
+        # === ОБРАБОТКА ZIP АРХИВОВ ===
+        if is_zip:
+            import zipfile
+            import tempfile
+            import shutil
+
+            try:
+                if not zipfile.is_zipfile(file_path):
+                    expert_opinion = "❌ Файл повреждён или не является ZIP-архивом."
+                else:
+                    # Создаём временную директорию для распаковки
+                    extract_dir = tempfile.mkdtemp(prefix=f"zip_{user_id}_")
+
+                    try:
+                        with zipfile.ZipFile(file_path, 'r') as zf:
+                            # Защита от zip bomb: проверяем суммарный размер
+                            total_uncompressed = sum(info.file_size for info in zf.infolist())
+                            max_uncompressed = 100 * 1024 * 1024  # 100 МБ лимит
+
+                            if total_uncompressed > max_uncompressed:
+                                expert_opinion = (
+                                    f"❌ Архив слишком большой после распаковки\n\n"
+                                    f"📊 Размер: {total_uncompressed / (1024*1024):.1f} МБ\n"
+                                    f"📏 Лимит: 100 МБ\n\n"
+                                    f"💡 Уменьшите количество файлов или сожмите их"
+                                )
+                            else:
+                                # Безопасная распаковка (защита от path traversal)
+                                file_list = []
+                                extracted_texts = {}
+
+                                for info in zf.infolist():
+                                    # Пропускаем директории и скрытые/системные файлы
+                                    if info.is_dir():
+                                        continue
+                                    basename = os.path.basename(info.filename)
+                                    if not basename or basename.startswith('.') or basename.startswith('__'):
+                                        continue
+
+                                    # Защита от path traversal
+                                    member_path = os.path.normpath(info.filename)
+                                    if member_path.startswith('..') or os.path.isabs(member_path):
+                                        continue
+
+                                    size_kb = info.file_size / 1024
+                                    ext = os.path.splitext(basename)[1].lower()
+                                    file_list.append({
+                                        "name": info.filename,
+                                        "size_kb": size_kb,
+                                        "ext": ext
+                                    })
+
+                                    # Извлекаем файл
+                                    safe_path = os.path.join(extract_dir, basename)
+                                    with zf.open(info) as src, open(safe_path, 'wb') as dst:
+                                        dst.write(src.read())
+
+                                    # Извлекаем текст из поддерживаемых форматов
+                                    try:
+                                        if ext == '.pdf':
+                                            import PyPDF2
+                                            with open(safe_path, 'rb') as pf:
+                                                reader = PyPDF2.PdfReader(pf)
+                                                pages = min(len(reader.pages), 5)
+                                                text = ""
+                                                for p in range(pages):
+                                                    text += reader.pages[p].extract_text() + "\n"
+                                                if text.strip():
+                                                    extracted_texts[info.filename] = text[:5000]
+
+                                        elif ext == '.docx':
+                                            try:
+                                                from docx import Document as DocxDocument
+                                                doc = DocxDocument(safe_path)
+                                                text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                                                if text.strip():
+                                                    extracted_texts[info.filename] = text[:5000]
+                                            except Exception:
+                                                pass
+
+                                        elif ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm'):
+                                            for encoding in ('utf-8', 'cp1251', 'latin-1'):
+                                                try:
+                                                    with open(safe_path, 'r', encoding=encoding) as tf:
+                                                        text = tf.read(5000)
+                                                    if text.strip():
+                                                        extracted_texts[info.filename] = text
+                                                    break
+                                                except (UnicodeDecodeError, Exception):
+                                                    continue
+
+                                    except Exception as extract_err:
+                                        logger.warning(f"Не удалось извлечь текст из {info.filename}: {extract_err}")
+
+                                    # Сохраняем каждый файл из архива в проект
+                                    try:
+                                        project.add_file(safe_path, f"zip/{ext.lstrip('.')}", f"Из архива {file_name}: {info.filename}")
+                                    except Exception:
+                                        pass
+
+                                # Формируем сводку по архиву
+                                file_list_text = "\n".join(
+                                    f"  {'📄' if f['ext'] in ('.pdf','.docx','.doc') else '📊' if f['ext'] in ('.xlsx','.xls','.csv') else '🖼️' if f['ext'] in ('.jpg','.jpeg','.png','.bmp','.dwg') else '📎'} {f['name']} ({f['size_kb']:.1f} КБ)"
+                                    for f in file_list[:50]
+                                )
+                                if len(file_list) > 50:
+                                    file_list_text += f"\n  ... и ещё {len(file_list) - 50} файлов"
+
+                                # Отправляем на анализ Grok
+                                extracted_summary = ""
+                                if extracted_texts:
+                                    extracted_summary = "\n\n---\n📝 ИЗВЛЕЧЁННЫЙ ТЕКСТ ИЗ ФАЙЛОВ:\n\n"
+                                    for fname, text in list(extracted_texts.items())[:10]:
+                                        extracted_summary += f"=== {fname} ===\n{text[:3000]}\n\n"
+
+                                zip_analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ.
+
+📦 **ЗАДАЧА:** Проанализируйте содержимое ZIP-архива строительного проекта.
+
+📁 **Архив:** {file_name}
+📊 **Файлов:** {len(file_list)}
+{'📝 **Запрос пользователя:** ' + description if description else ''}
+
+📋 **СОДЕРЖИМОЕ АРХИВА:**
+{file_list_text}
+{extracted_summary}
+
+🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
+
+1. **СОСТАВ АРХИВА:**
+   • Определите тип проектной документации (РД, ПД, ИД, сметы, акты и т.д.)
+   • Какие разделы проекта представлены
+   • Полнота комплекта документов
+
+2. **АНАЛИЗ ДОКУМЕНТОВ:**
+   • Основное содержание ключевых документов
+   • Ссылки на применённые нормативы (СП, ГОСТ, СНиП)
+   • Ключевые технические решения
+
+3. **ЭКСПЕРТНАЯ ОЦЕНКА:**
+   • Полнота комплекта документации
+   • Соответствие актуальным нормам 2024-2025
+   • Выявленные проблемы или пробелы
+
+4. **РЕКОМЕНДАЦИИ:**
+   • Каких документов не хватает
+   • Что требует проверки
+   • Практические советы
+
+**ВАЖНО:** Будьте конкретны, ссылайтесь на нормативы с пунктами."""
+
+                                client = get_grok_client()
+                                loop = asyncio.get_event_loop()
+                                search_tools = [{"type": "web_search"}]
+
+                                response = await loop.run_in_executor(
+                                    None,
+                                    lambda: call_grok_with_retry(
+                                        client,
+                                        model="grok-4-1-fast",
+                                        max_tokens=6000,
+                                        temperature=0.3,
+                                        messages=[
+                                            {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Анализируете комплекты проектной документации."},
+                                            {"role": "user", "content": zip_analysis_prompt}
+                                        ],
+                                        tools=search_tools
+                                    )
+                                )
+                                expert_opinion = response["choices"][0]["message"]["content"]
+
+                                # Сохраняем анализ архива в проект
+                                if expert_opinion:
+                                    project.add_conversation_entry(
+                                        f"[ZIP-АРХИВ] {file_name} ({len(file_list)} файлов)" + (f": {description}" if description else ""),
+                                        expert_opinion,
+                                        "zip_analysis"
+                                    )
+
+                    finally:
+                        # Очищаем временную директорию
+                        try:
+                            shutil.rmtree(extract_dir)
+                        except Exception:
+                            pass
+
+            except Exception as e:
+                logger.error(f"Ошибка обработки ZIP: {e}")
+                expert_opinion = f"⚠️ Не удалось обработать ZIP-архив: {str(e)}"
+
+        # Сохраняем оригинальный файл в проект
         result = project.add_file(file_path, file_type, description)
 
         # Удаляем временный файл
@@ -3722,9 +3913,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response_text += f"📝 **Описание:** {description}\n"
 
         # Добавляем экспертное заключение
-        if expert_opinion and is_pdf:
+        if expert_opinion and (is_pdf or is_zip):
             response_text += f"\n{'='*40}\n\n"
-            response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
+            if is_zip:
+                response_text += f"📦 **АНАЛИЗ АРХИВА:**\n\n{expert_opinion}"
+            else:
+                response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
 
         # Отправляем ответ частями если нужно (БЕЗ parse_mode для избежания ошибок парсинга)
         max_length = 4000
