@@ -112,9 +112,10 @@ except ImportError:
 try:
     from optimized_prompts import (
         CLAUDE_SYSTEM_PROMPT_TECHNICAL,
-        CLAUDE_DALLE_PROMPT_CREATOR,
         GROK_SYSTEM_PROMPT_GENERAL,
-        GEMINI_VISION_PROMPT_DEFECTS
+        GEMINI_IMAGE_PROMPT_SYSTEM,
+        GEMINI_VISION_PROMPT_DEFECTS,
+        WEB_SEARCH_DECISION_PROMPT
     )
     OPTIMIZED_PROMPTS_AVAILABLE = True
     logger.info("✅ Оптимизированные промпты загружены")
@@ -492,23 +493,14 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
 
-# Оптимизированные промпты и селектор моделей v5.0
+# Инициализация селектора моделей v5.0 (промпты уже загружены выше)
 try:
-    from optimized_prompts import (
-        CLAUDE_SYSTEM_PROMPT_TECHNICAL,
-        GROK_SYSTEM_PROMPT_GENERAL,
-        GEMINI_IMAGE_PROMPT_SYSTEM,
-        GEMINI_VISION_PROMPT_DEFECTS,
-        WEB_SEARCH_DECISION_PROMPT
-    )
     from model_selector import ModelSelector
-    OPTIMIZED_PROMPTS_AVAILABLE = True
     model_selector = ModelSelector()
-    logger.info("✅ Оптимизированные промпты и селектор моделей v5.0 загружены")
+    logger.info("✅ Селектор моделей v5.0 инициализирован")
 except ImportError as e:
-    OPTIMIZED_PROMPTS_AVAILABLE = False
     model_selector = None
-    logger.warning(f"⚠️ Модули optimized_prompts/model_selector не найдены: {e}")
+    logger.warning(f"⚠️ ModelSelector не найден: {e}")
 
 # Интерактивные калькуляторы v4.0 - УДАЛЁН дублирующий импорт
 # Все калькуляторы импортируются из calculator_handlers.py (строка 257)
@@ -4409,7 +4401,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 logger.info("📝 Запрашиваем детальный технический промпт у xAI Grok...")
                 grok_response = await client.chat_completions_create_async(
-                    model="grok-3",
+                    model="grok-4-1-fast",
                     messages=prompt_messages,
                     max_tokens=1500,  # Увеличено для детальных технических промптов с размерами
                     temperature=0.5  # Снижено для большей точности и конкретики
