@@ -309,14 +309,7 @@ except ImportError as e:
     WEB_SEARCH_AVAILABLE = False
     logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
 
-# Модуль погоды (Яндекс Погода API)
-try:
-    from weather import get_weather, is_weather_query
-    WEATHER_AVAILABLE = True
-    logger.info("✅ Модуль погоды загружен (Яндекс Погода API)")
-except ImportError as e:
-    WEATHER_AVAILABLE = False
-    logger.warning(f"⚠️ Модуль weather.py не найден: {e}")
+# Модуль погоды удалён — все запросы о погоде обрабатываются Grok через web_search
 
 # Модуль генерации изображений
 try:
@@ -4332,39 +4325,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🌐 ПОИСК: web_search для актуальных данных из интернета.
 ⚠️ БЕЗОПАСНОСТЬ: на первом месте для опасных работ."""
 
-        # 🌤️ ПОГОДА: Проверяем, является ли это запросом о погоде
-        if WEATHER_AVAILABLE and is_weather_query(question):
-            try:
-                logger.info("🌤️ Обнаружен запрос о погоде")
-                weather_response = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: get_weather(question)
-                )
-
-                if weather_response:
-                    # Удаляем thinking message
-                    try:
-                        await thinking_message.delete()
-                    except Exception:
-                        pass
-
-                    # Отправляем погоду
-                    await update.message.reply_text(weather_response, parse_mode="Markdown")
-
-                    # Добавляем в историю
-                    await add_message_to_history_async(user_id, 'user', question)
-                    await add_message_to_history_async(user_id, 'assistant', weather_response)
-
-                    logger.info("✅ Погода отправлена пользователю (Яндекс Погода API)")
-                    return  # Прерываем обработку
-                else:
-                    logger.warning("⚠️ Яндекс Погода вернула None (проверьте YANDEX_WEATHER_API_KEY). Fallback на Grok web_search.")
-            except Exception as e:
-                logger.error(f"Ошибка получения погоды: {e}. Fallback на Grok web_search.")
-                # Продолжаем обычную обработку - Grok получит данные через web_search
-
-        # 🌐 ВЕБ-ПОИСК: Выполняется через Grok Responses API (tools: web_search, x_search)
-        # Миграция с live_search (search_parameters) на Responses API (/v1/responses) выполнена 16.02.2026
+        # 🌤️ Погода и другие актуальные данные — обрабатываются Grok через web_search
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
         if GEMINI_AVAILABLE and IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
