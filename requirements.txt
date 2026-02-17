@@ -52,6 +52,9 @@ redis==5.0.1
 # PDF Processing - для обработки PDF документов
 PyPDF2==3.0.1
 
+# Excel Processing - для анализа XLSX/XLS файлов
+openpyxl>=3.1.0
+
 # Vosk - офлайн распознавание речи (fallback для голосовых сообщений)
 # Без этого голос работает только через OpenAI Whisper
 # Требуется также скачать модель: vosk-model-small-ru-0.22

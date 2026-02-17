@@ -3589,44 +3589,200 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description = update.message.caption or ""
         file_type = update.message.document.mime_type or "unknown"
 
-        # Определяем тип документа
-        is_pdf = file_name.lower().endswith('.pdf') or 'pdf' in file_type.lower()
-        is_zip = file_name.lower().endswith('.zip') or 'zip' in file_type.lower()
+        # === ОПРЕДЕЛЯЕМ ТИП ДОКУМЕНТА ===
+        fn_lower = file_name.lower()
+        ft_lower = file_type.lower()
+        ext = os.path.splitext(fn_lower)[1]
+
+        is_pdf = ext == '.pdf' or 'pdf' in ft_lower
+        is_zip = ext == '.zip' or 'zip' in ft_lower
+        is_docx = ext == '.docx' or 'wordprocessingml' in ft_lower
+        is_doc = ext == '.doc' and not is_docx
+        is_xlsx = ext in ('.xlsx', '.xls') or 'spreadsheet' in ft_lower or 'excel' in ft_lower
+        is_image = ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp') or 'image' in ft_lower
+        is_text = ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm', '.md', '.rtf')
+        is_cad = ext in ('.dwg', '.dxf', '.ifc', '.rvt')
+
+        # Определяем, можем ли мы извлечь текст/данные из файла
+        can_analyze = is_pdf or is_zip or is_docx or is_xlsx or is_image or is_text or is_cad or is_doc
 
         # Сообщение о начале анализа
+        if is_zip:
+            status_text = "Распаковываю и анализирую архив..."
+        elif is_image:
+            status_text = "Анализирую изображение..."
+        elif is_cad:
+            status_text = "Обрабатываю чертёж..."
+        else:
+            status_text = "Анализирую документ..."
+
         thinking_msg = await update.message.reply_text(
-            f"📄 Получен документ: **{file_name}**\n\n"
-            f"⏳ {'Распаковываю и анализирую архив...' if is_zip else 'Анализирую документ...'}",
+            f"📄 Получен: **{file_name}**\n⏳ {status_text}",
             parse_mode="Markdown"
         )
 
-        # Анализируем PDF
+        # === УНИВЕРСАЛЬНОЕ ИЗВЛЕЧЕНИЕ ТЕКСТА/ДАННЫХ ИЗ ФАЙЛА ===
         expert_opinion = None
+        extracted_content = ""
+        doc_type_label = "ДОКУМЕНТ"
+
+        # --- PDF ---
         if is_pdf:
+            doc_type_label = "PDF"
             try:
-                # Извлекаем текст из PDF
                 import PyPDF2
-                pdf_text = ""
                 with open(file_path, 'rb') as pdf_file:
                     pdf_reader = PyPDF2.PdfReader(pdf_file)
                     num_pages = len(pdf_reader.pages)
-
-                    # Читаем максимум первые 10 страниц
                     max_pages = min(num_pages, 10)
                     for page_num in range(max_pages):
-                        page = pdf_reader.pages[page_num]
-                        pdf_text += page.extract_text() + "\n"
+                        extracted_content += pdf_reader.pages[page_num].extract_text() + "\n"
+                extracted_content = extracted_content[:15000]
+                if num_pages > 10:
+                    extracted_content += f"\n\n[... показаны первые 10 из {num_pages} страниц]"
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа PDF установите: `pip install PyPDF2`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения PDF: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать PDF: {str(e)}"
 
-                # Ограничиваем размер текста
-                pdf_text = pdf_text[:15000]  # ~3000 токенов
+        # --- DOCX (Word) ---
+        elif is_docx:
+            doc_type_label = "WORD"
+            try:
+                from docx import Document as DocxDocument
+                doc = DocxDocument(file_path)
+                paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                extracted_content = "\n".join(paragraphs)[:15000]
 
-                if pdf_text.strip():
-                    # Формируем промпт для анализа
-                    analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
+                # Извлекаем таблицы
+                tables_text = ""
+                for i, table in enumerate(doc.tables[:5]):
+                    tables_text += f"\n[Таблица {i+1}]\n"
+                    for row in table.rows[:20]:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        tables_text += " | ".join(cells) + "\n"
+                if tables_text:
+                    extracted_content += f"\n\n--- ТАБЛИЦЫ ---{tables_text}"
+                    extracted_content = extracted_content[:15000]
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа DOCX установите: `pip install python-docx`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения DOCX: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать DOCX: {str(e)}"
+
+        # --- DOC (старый Word) ---
+        elif is_doc:
+            doc_type_label = "WORD (DOC)"
+            extracted_content = "[Формат .doc — устаревший бинарный формат Microsoft Word]\n"
+            extracted_content += "Для анализа пересохраните файл в формате .docx"
+
+        # --- XLSX / XLS (Excel) ---
+        elif is_xlsx:
+            doc_type_label = "EXCEL"
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                sheets_data = []
+                for sheet_name in wb.sheetnames[:10]:
+                    ws = wb[sheet_name]
+                    sheet_text = f"\n=== Лист: {sheet_name} ===\n"
+                    row_count = 0
+                    for row in ws.iter_rows(max_row=50, values_only=True):
+                        cells = [str(c) if c is not None else "" for c in row]
+                        if any(cells):
+                            sheet_text += " | ".join(cells) + "\n"
+                            row_count += 1
+                    if ws.max_row and ws.max_row > 50:
+                        sheet_text += f"[... показаны первые 50 из {ws.max_row} строк]\n"
+                    sheets_data.append(sheet_text)
+                wb.close()
+                extracted_content = "\n".join(sheets_data)[:15000]
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа Excel установите: `pip install openpyxl`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения XLSX: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать Excel: {str(e)}"
+
+        # --- Изображения (JPG, PNG и т.д.) ---
+        elif is_image:
+            doc_type_label = "ИЗОБРАЖЕНИЕ"
+            try:
+                import base64
+                with open(file_path, 'rb') as img_file:
+                    img_data = img_file.read()
+                    if len(img_data) > 10 * 1024 * 1024:
+                        expert_opinion = "⚠️ Изображение слишком большое (>10 МБ)"
+                    else:
+                        photo_base64 = base64.b64encode(img_data).decode('utf-8')
+                        # Определяем MIME
+                        mime_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                                    '.bmp': 'image/bmp', '.webp': 'image/webp', '.tiff': 'image/tiff', '.tif': 'image/tiff'}
+                        img_mime = mime_map.get(ext, 'image/jpeg')
+
+                        client = get_grok_client()
+                        loop = asyncio.get_event_loop()
+                        search_tools = [{"type": "web_search"}]
+
+                        img_prompt = "Проведите технический анализ изображения. Определите что изображено, выявите дефекты, нарушения строительных норм."
+                        if description:
+                            img_prompt += f"\n\nКомментарий пользователя: {description}"
+
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: call_grok_with_retry(
+                                client,
+                                model="grok-4-1-fast",
+                                max_tokens=6000,
+                                temperature=0.3,
+                                messages=[
+                                    {"role": "system", "content": "Вы — эксперт по строительному контролю и техническому надзору в РФ."},
+                                    {"role": "user", "content": [
+                                        {"type": "image", "source": {"type": "base64", "media_type": img_mime, "data": photo_base64}},
+                                        {"type": "text", "text": img_prompt}
+                                    ]}
+                                ],
+                                tools=search_tools
+                            )
+                        )
+                        expert_opinion = response["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.error(f"Ошибка анализа изображения: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать изображение: {str(e)}"
+
+        # --- Текстовые файлы (TXT, CSV, XML, JSON, HTML, MD) ---
+        elif is_text:
+            doc_type_label = "ТЕКСТ"
+            for encoding in ('utf-8', 'cp1251', 'cp866', 'latin-1'):
+                try:
+                    with open(file_path, 'r', encoding=encoding) as tf:
+                        extracted_content = tf.read(15000)
+                    break
+                except (UnicodeDecodeError, Exception):
+                    continue
+            if not extracted_content:
+                extracted_content = "[Не удалось прочитать файл — неизвестная кодировка]"
+
+        # --- CAD файлы (DWG, DXF, IFC, RVT) ---
+        elif is_cad:
+            doc_type_label = "ЧЕРТЁЖ"
+            cad_names = {'.dwg': 'AutoCAD DWG', '.dxf': 'AutoCAD DXF', '.ifc': 'IFC (BIM)', '.rvt': 'Revit'}
+            cad_type = cad_names.get(ext, 'CAD')
+            extracted_content = (
+                f"[Файл формата {cad_type}]\n\n"
+                f"Это бинарный файл чертежа. Текст из него нельзя извлечь напрямую.\n"
+                f"Для полного анализа откройте в {cad_type.split()[0]} или конвертируйте в PDF."
+            )
+
+        # === ОТПРАВКА НА АНАЛИЗ GROK (если есть текст и нет ошибок) ===
+        if extracted_content.strip() and not expert_opinion and not is_zip and not is_image:
+            try:
+                analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
 
 📋 **ЗАДАЧА:** Проанализируйте предоставленный строительный документ и дайте экспертное заключение.
 
-{'📝 **ЗАПРОС ПОЛЬЗОВАТЕЛЯ:** ' + description if description else ''}
+📄 **Файл:** {file_name} ({doc_type_label})
+{'📝 **Запрос пользователя:** ' + description if description else ''}
 
 🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
 
@@ -3650,54 +3806,45 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Какие документы могут потребоваться
    • Практические советы по применению
 
-**ВАЖНО:**
-- Если документ частично нечитаем - укажите это
-- Ссылайтесь на конкретные СП/ГОСТ с пунктами
-- Будьте объективны и конкретны
+**ВАЖНО:** Ссылайтесь на конкретные СП/ГОСТ с пунктами. Будьте объективны и конкретны.
 
 ---
 
-📄 **ТЕКСТ ДОКУМЕНТА:**
+📄 **СОДЕРЖИМОЕ ДОКУМЕНТА:**
 
-{pdf_text}"""
+{extracted_content}"""
 
-                    # Отправляем на анализ Grok
-                    client = get_grok_client()
-                    loop = asyncio.get_event_loop()
+                client = get_grok_client()
+                loop = asyncio.get_event_loop()
+                search_tools = [{"type": "web_search"}]
 
-                    # Включаем web_search для анализа документов (поиск нормативов)
-                    # Используем Responses API с tools (search_parameters устарел с 12.01.2026)
-                    search_tools = [{"type": "web_search"}]
-
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: call_grok_with_retry(
-                            client,
-                            model=GROK_MODEL_MAIN,  # Основная модель для анализа документов
-                            max_tokens=6000,
-                            temperature=0.3,
-                            messages=[
-                                {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
-                                {"role": "user", "content": analysis_prompt}
-                            ],
-                            tools=search_tools
-                        )
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model=GROK_MODEL_FAST,
+                        max_tokens=6000,
+                        temperature=0.3,
+                        messages=[
+                            {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
+                            {"role": "user", "content": analysis_prompt}
+                        ],
+                        tools=search_tools
                     )
-                    expert_opinion = response["choices"][0]["message"]["content"]
+                )
+                expert_opinion = response["choices"][0]["message"]["content"]
 
-                    # Сохраняем анализ в проект
-                    if expert_opinion:
-                        project.add_conversation_entry(
-                            f"[ДОКУМЕНТ] {file_name}" + (f": {description}" if description else ""),
-                            expert_opinion,
-                            "document_analysis"
-                        )
+                # Сохраняем анализ в проект
+                if expert_opinion:
+                    project.add_conversation_entry(
+                        f"[{doc_type_label}] {file_name}" + (f": {description}" if description else ""),
+                        expert_opinion,
+                        "document_analysis"
+                    )
 
-            except ImportError:
-                expert_opinion = "⚠️ Для анализа PDF установите библиотеку PyPDF2:\n`pip install PyPDF2`"
             except Exception as e:
-                logger.error(f"Ошибка анализа PDF: {e}")
-                expert_opinion = f"⚠️ Не удалось проанализировать PDF: {str(e)}"
+                logger.error(f"Ошибка анализа {doc_type_label}: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать {doc_type_label}: {str(e)}"
 
         # === ОБРАБОТКА ZIP АРХИВОВ ===
         if is_zip:
@@ -3709,146 +3856,116 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not zipfile.is_zipfile(file_path):
                     expert_opinion = "❌ Файл повреждён или не является ZIP-архивом."
                 else:
-                    # Создаём временную директорию для распаковки
                     extract_dir = tempfile.mkdtemp(prefix=f"zip_{user_id}_")
 
                     try:
                         with zipfile.ZipFile(file_path, 'r') as zf:
-                            # Защита от zip bomb: проверяем суммарный размер
                             total_uncompressed = sum(info.file_size for info in zf.infolist())
-                            max_uncompressed = 100 * 1024 * 1024  # 100 МБ лимит
+                            max_uncompressed = 100 * 1024 * 1024
 
                             if total_uncompressed > max_uncompressed:
                                 expert_opinion = (
                                     f"❌ Архив слишком большой после распаковки\n\n"
                                     f"📊 Размер: {total_uncompressed / (1024*1024):.1f} МБ\n"
-                                    f"📏 Лимит: 100 МБ\n\n"
-                                    f"💡 Уменьшите количество файлов или сожмите их"
+                                    f"📏 Лимит: 100 МБ"
                                 )
                             else:
-                                # Безопасная распаковка (защита от path traversal)
                                 file_list = []
                                 extracted_texts = {}
 
                                 for info in zf.infolist():
-                                    # Пропускаем директории и скрытые/системные файлы
                                     if info.is_dir():
                                         continue
                                     basename = os.path.basename(info.filename)
                                     if not basename or basename.startswith('.') or basename.startswith('__'):
                                         continue
-
-                                    # Защита от path traversal
                                     member_path = os.path.normpath(info.filename)
                                     if member_path.startswith('..') or os.path.isabs(member_path):
                                         continue
 
                                     size_kb = info.file_size / 1024
-                                    ext = os.path.splitext(basename)[1].lower()
-                                    file_list.append({
-                                        "name": info.filename,
-                                        "size_kb": size_kb,
-                                        "ext": ext
-                                    })
+                                    f_ext = os.path.splitext(basename)[1].lower()
+                                    file_list.append({"name": info.filename, "size_kb": size_kb, "ext": f_ext})
 
-                                    # Извлекаем файл
                                     safe_path = os.path.join(extract_dir, basename)
                                     with zf.open(info) as src, open(safe_path, 'wb') as dst:
                                         dst.write(src.read())
 
-                                    # Извлекаем текст из поддерживаемых форматов
+                                    # Извлекаем текст из файлов внутри архива
                                     try:
-                                        if ext == '.pdf':
+                                        if f_ext == '.pdf':
                                             import PyPDF2
                                             with open(safe_path, 'rb') as pf:
                                                 reader = PyPDF2.PdfReader(pf)
-                                                pages = min(len(reader.pages), 5)
-                                                text = ""
-                                                for p in range(pages):
-                                                    text += reader.pages[p].extract_text() + "\n"
+                                                text = "".join(reader.pages[p].extract_text() + "\n" for p in range(min(len(reader.pages), 5)))
                                                 if text.strip():
                                                     extracted_texts[info.filename] = text[:5000]
-
-                                        elif ext == '.docx':
+                                        elif f_ext == '.docx':
+                                            from docx import Document as DocxDocument
+                                            doc = DocxDocument(safe_path)
+                                            text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                                            if text.strip():
+                                                extracted_texts[info.filename] = text[:5000]
+                                        elif f_ext in ('.xlsx', '.xls'):
                                             try:
-                                                from docx import Document as DocxDocument
-                                                doc = DocxDocument(safe_path)
-                                                text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-                                                if text.strip():
-                                                    extracted_texts[info.filename] = text[:5000]
+                                                import openpyxl
+                                                wb = openpyxl.load_workbook(safe_path, read_only=True, data_only=True)
+                                                sheet_text = ""
+                                                for ws in [wb[s] for s in wb.sheetnames[:3]]:
+                                                    for row in ws.iter_rows(max_row=20, values_only=True):
+                                                        cells = [str(c) if c is not None else "" for c in row]
+                                                        if any(cells):
+                                                            sheet_text += " | ".join(cells) + "\n"
+                                                wb.close()
+                                                if sheet_text.strip():
+                                                    extracted_texts[info.filename] = sheet_text[:5000]
                                             except Exception:
                                                 pass
-
-                                        elif ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm'):
-                                            for encoding in ('utf-8', 'cp1251', 'latin-1'):
+                                        elif f_ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm', '.md'):
+                                            for enc in ('utf-8', 'cp1251', 'latin-1'):
                                                 try:
-                                                    with open(safe_path, 'r', encoding=encoding) as tf:
+                                                    with open(safe_path, 'r', encoding=enc) as tf:
                                                         text = tf.read(5000)
                                                     if text.strip():
                                                         extracted_texts[info.filename] = text
                                                     break
                                                 except (UnicodeDecodeError, Exception):
                                                     continue
-
                                     except Exception as extract_err:
                                         logger.warning(f"Не удалось извлечь текст из {info.filename}: {extract_err}")
 
-                                    # Сохраняем каждый файл из архива в проект
                                     try:
-                                        project.add_file(safe_path, f"zip/{ext.lstrip('.')}", f"Из архива {file_name}: {info.filename}")
+                                        project.add_file(safe_path, f"zip/{f_ext.lstrip('.')}", f"Из архива {file_name}: {info.filename}")
                                     except Exception:
                                         pass
 
-                                # Формируем сводку по архиву
+                                # Сводка и анализ
                                 file_list_text = "\n".join(
-                                    f"  {'📄' if f['ext'] in ('.pdf','.docx','.doc') else '📊' if f['ext'] in ('.xlsx','.xls','.csv') else '🖼️' if f['ext'] in ('.jpg','.jpeg','.png','.bmp','.dwg') else '📎'} {f['name']} ({f['size_kb']:.1f} КБ)"
+                                    f"  {'📄' if f['ext'] in ('.pdf','.docx','.doc') else '📊' if f['ext'] in ('.xlsx','.xls','.csv') else '🖼️' if f['ext'] in ('.jpg','.jpeg','.png','.bmp','.dwg','.dxf') else '📎'} {f['name']} ({f['size_kb']:.1f} КБ)"
                                     for f in file_list[:50]
                                 )
                                 if len(file_list) > 50:
                                     file_list_text += f"\n  ... и ещё {len(file_list) - 50} файлов"
 
-                                # Отправляем на анализ Grok
                                 extracted_summary = ""
                                 if extracted_texts:
-                                    extracted_summary = "\n\n---\n📝 ИЗВЛЕЧЁННЫЙ ТЕКСТ ИЗ ФАЙЛОВ:\n\n"
+                                    extracted_summary = "\n\n---\n📝 ИЗВЛЕЧЁННЫЙ ТЕКСТ:\n\n"
                                     for fname, text in list(extracted_texts.items())[:10]:
                                         extracted_summary += f"=== {fname} ===\n{text[:3000]}\n\n"
 
-                                zip_analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ.
+                                zip_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ.
 
-📦 **ЗАДАЧА:** Проанализируйте содержимое ZIP-архива строительного проекта.
+📦 **ЗАДАЧА:** Проанализируйте ZIP-архив строительного проекта.
 
-📁 **Архив:** {file_name}
-📊 **Файлов:** {len(file_list)}
-{'📝 **Запрос пользователя:** ' + description if description else ''}
+📁 **Архив:** {file_name} | 📊 **Файлов:** {len(file_list)}
+{'📝 **Запрос:** ' + description if description else ''}
 
-📋 **СОДЕРЖИМОЕ АРХИВА:**
+📋 **СОДЕРЖИМОЕ:**
 {file_list_text}
 {extracted_summary}
 
-🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
-
-1. **СОСТАВ АРХИВА:**
-   • Определите тип проектной документации (РД, ПД, ИД, сметы, акты и т.д.)
-   • Какие разделы проекта представлены
-   • Полнота комплекта документов
-
-2. **АНАЛИЗ ДОКУМЕНТОВ:**
-   • Основное содержание ключевых документов
-   • Ссылки на применённые нормативы (СП, ГОСТ, СНиП)
-   • Ключевые технические решения
-
-3. **ЭКСПЕРТНАЯ ОЦЕНКА:**
-   • Полнота комплекта документации
-   • Соответствие актуальным нормам 2024-2025
-   • Выявленные проблемы или пробелы
-
-4. **РЕКОМЕНДАЦИИ:**
-   • Каких документов не хватает
-   • Что требует проверки
-   • Практические советы
-
-**ВАЖНО:** Будьте конкретны, ссылайтесь на нормативы с пунктами."""
+🎯 **АНАЛИЗ:** Определите тип документации, полноту комплекта, соответствие нормам 2024-2025.
+Укажите конкретные СП/ГОСТ. Дайте рекомендации по недостающим документам."""
 
                                 client = get_grok_client()
                                 loop = asyncio.get_event_loop()
@@ -3857,29 +3974,23 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 response = await loop.run_in_executor(
                                     None,
                                     lambda: call_grok_with_retry(
-                                        client,
-                                        model="grok-4-1-fast",
-                                        max_tokens=6000,
-                                        temperature=0.3,
+                                        client, model="grok-4-1-fast", max_tokens=6000, temperature=0.3,
                                         messages=[
                                             {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Анализируете комплекты проектной документации."},
-                                            {"role": "user", "content": zip_analysis_prompt}
+                                            {"role": "user", "content": zip_prompt}
                                         ],
                                         tools=search_tools
                                     )
                                 )
                                 expert_opinion = response["choices"][0]["message"]["content"]
 
-                                # Сохраняем анализ архива в проект
                                 if expert_opinion:
                                     project.add_conversation_entry(
-                                        f"[ZIP-АРХИВ] {file_name} ({len(file_list)} файлов)" + (f": {description}" if description else ""),
-                                        expert_opinion,
-                                        "zip_analysis"
+                                        f"[ZIP] {file_name} ({len(file_list)} файлов)" + (f": {description}" if description else ""),
+                                        expert_opinion, "zip_analysis"
                                     )
 
                     finally:
-                        # Очищаем временную директорию
                         try:
                             shutil.rmtree(extract_dir)
                         except Exception:
@@ -3913,12 +4024,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response_text += f"📝 **Описание:** {description}\n"
 
         # Добавляем экспертное заключение
-        if expert_opinion and (is_pdf or is_zip):
+        if expert_opinion:
             response_text += f"\n{'='*40}\n\n"
             if is_zip:
                 response_text += f"📦 **АНАЛИЗ АРХИВА:**\n\n{expert_opinion}"
+            elif is_image:
+                response_text += f"🖼️ **АНАЛИЗ ИЗОБРАЖЕНИЯ:**\n\n{expert_opinion}"
             else:
-                response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
+                response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ ({doc_type_label}):**\n\n{expert_opinion}"
 
         # Отправляем ответ частями если нужно (БЕЗ parse_mode для избежания ошибок парсинга)
         max_length = 4000
