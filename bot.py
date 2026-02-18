@@ -680,18 +680,16 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 # False = ответы приходят сразу целиком (классический режим)
 STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
 
-# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
-# Основная модель: grok-3 (стабильная)
-#   - Для сложных технических вопросов и анализа
-#   - Хороший баланс скорости и качества
-# Быстрая модель: grok-2
-#   - Для классификации запросов и простых вопросов
-#   - Быстрая генерация ответов
+# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok, обновлено Февраль 2026)
+# Основная модель: grok-4-1-fast-reasoning (Elo #1, 1483)
+#   - Полноценное рассуждение, анализ документов, фото, нормативов
+#   - 2M контекст, web_search, сниженные галлюцинации (4.22%)
+# Быстрая модель: grok-4-1-fast-non-reasoning
+#   - Мгновенные ответы без thinking tokens
+#   - Для классификации, простых вопросов, генерации изображений
 # Fallback: Claude Sonnet 4.5 (при недоступности Grok)
-
-# Доступные модели xAI API:
-GROK_MODEL_MAIN = "grok-3"          # Основная модель для сложных задач
-GROK_MODEL_FAST = "grok-2"          # Быстрая модель для простых задач
+GROK_MODEL_REASONING = "grok-4-1-fast-reasoning"
+GROK_MODEL_FAST = "grok-4-1-fast-non-reasoning"
 
 def check_rate_limit(user_id: int) -> bool:
     """
@@ -878,7 +876,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model=GROK_MODEL_FAST,  # Быстрая модель для классификации
+            model=GROK_MODEL_FAST,
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -889,18 +887,17 @@ def classify_user_intent(user_message: str) -> dict:
         # Валидация ответа
         valid_types = ["simple_save", "simple_question", "technical_question", "complex_analysis"]
         if intent_type not in valid_types:
-            # По умолчанию считаем технический вопрос
             intent_type = "technical_question"
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = GROK_MODEL_FAST  # Быстрая модель для простых запросов
+            model = GROK_MODEL_FAST
             max_tokens = 1000
         elif intent_type == "technical_question":
-            model = GROK_MODEL_MAIN  # Основная модель для технических вопросов
+            model = GROK_MODEL_REASONING
             max_tokens = 5000
         else:  # complex_analysis
-            model = GROK_MODEL_MAIN  # Основная модель для сложного анализа
+            model = GROK_MODEL_REASONING
             max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -913,10 +910,9 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем основную модель для надежности
         return {
             "intent": "technical_question",
-            "model": GROK_MODEL_MAIN,
+            "model": GROK_MODEL_REASONING,
             "max_tokens": 5000
         }
 
@@ -963,7 +959,7 @@ def save_user_history(user_id: int):
     except Exception as e:
         logger.error(f"Error saving history for user {user_id}: {e}")
 
-async def add_message_to_history_async(user_id: int, role: str, content: str, image_analyzed: bool = False):
+async def add_message_to_history_async(user_id: int, role: str, content: str, image_analyzed: bool = False, project_name: str = ""):
     """Добавить сообщение в историю (PostgreSQL с fallback на JSON)"""
     # Извлекаем теги
     tags = extract_tags_from_message(content)
@@ -971,7 +967,7 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
     # Сохраняем в PostgreSQL если доступен
     if DATABASE_AVAILABLE:
         try:
-            await save_message(user_id, role, content, image_analyzed, tags)
+            await save_message(user_id, role, content, image_analyzed, tags, project_name)
             # Обновляем in-memory кеш
             load_user_history(user_id)
             message = {
@@ -979,7 +975,8 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
                 'content': content,
                 'timestamp': datetime.now().isoformat(),
                 'image_analyzed': image_analyzed,
-                'tags': tags
+                'tags': tags,
+                'project': project_name
             }
             user_conversations[user_id].append(message)
             if len(user_conversations[user_id]) > 50:
@@ -995,7 +992,8 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
         'content': content,
         'timestamp': datetime.now().isoformat(),
         'image_analyzed': image_analyzed,
-        'tags': tags
+        'tags': tags,
+        'project': project_name
     }
     user_conversations[user_id].append(message)
     if len(user_conversations[user_id]) > 50:
@@ -1018,17 +1016,27 @@ def add_message_to_history(user_id: int, role: str, content: str, image_analyzed
         user_conversations[user_id] = user_conversations[user_id][-50:]
     save_user_history(user_id)
 
-def get_conversation_context(user_id: int) -> list:
-    """Получить контекст диалога для Claude API (последние N сообщений)"""
+def get_conversation_context(user_id: int, current_project: str = "") -> list:
+    """Получить контекст диалога (фильтрация по текущему проекту)"""
     load_user_history(user_id)
 
-    # Берём последние MAX_CONTEXT_MESSAGES сообщений
-    recent_messages = user_conversations[user_id][-MAX_CONTEXT_MESSAGES:]
+    all_messages = user_conversations[user_id]
 
-    # Преобразуем в формат Claude API
+    # Фильтруем по проекту: берём только сообщения текущего проекта или без проекта
+    if current_project:
+        filtered = [
+            msg for msg in all_messages
+            if not msg.get('project') or msg.get('project') == current_project
+        ]
+    else:
+        filtered = all_messages
+
+    # Берём последние MAX_CONTEXT_MESSAGES
+    recent_messages = filtered[-MAX_CONTEXT_MESSAGES:]
+
+    # Преобразуем в формат API
     grok_messages = []
     for msg in recent_messages:
-        # Пропускаем сообщения с изображениями (они уже обработаны)
         if not msg.get('image_analyzed', False):
             grok_messages.append({
                 'role': msg['role'],
@@ -3407,7 +3415,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: call_grok_with_retry(
                 client,
-                model=GROK_MODEL_MAIN,  # Основная модель для анализа изображений
+                model=GROK_MODEL_REASONING,
                 max_tokens=6000,
                 temperature=0.7,
                 messages=[
@@ -3731,7 +3739,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             None,
                             lambda: call_grok_with_retry(
                                 client,
-                                model="grok-4-1-fast",
+                                model=GROK_MODEL_REASONING,
                                 max_tokens=6000,
                                 temperature=0.3,
                                 messages=[
@@ -4140,8 +4148,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Добавляем вопрос пользователя в историю
-    await add_message_to_history_async(user_id, 'user', question)
+    # Добавляем вопрос пользователя в историю (с привязкой к проекту)
+    _cur_proj_hist = context.user_data.get("current_project", "") if PROJECTS_AVAILABLE else ""
+    await add_message_to_history_async(user_id, 'user', question, project_name=_cur_proj_hist)
 
     # ============================================================================
     # LLM COUNCIL: Автоматическое определение сложных вопросов
@@ -4193,7 +4202,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             parse_mode="Markdown"
                         )
                         
-                        await add_message_to_history_async(user_id, 'assistant', final_answer)
+                        await add_message_to_history_async(user_id, 'assistant', final_answer, project_name=_cur_proj_hist)
                         logger.info(f"✅ LLM Council auto: ответ за {duration:.1f} сек для user {user_id}")
                         return  # Ответ от Совета отправлен
                     else:
@@ -4604,8 +4613,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **ГЛАВНОЕ ПРАВИЛО: Анализируйте намерение пользователя и отвечайте соразмерно запросу!**
 """
 
-        # Получаем контекст предыдущих сообщений
-        conversation_history = get_conversation_context(user_id)
+        # Получаем контекст предыдущих сообщений (фильтрация по проекту)
+        _cur_proj = context.user_data.get("current_project", "") if PROJECTS_AVAILABLE else ""
+        conversation_history = get_conversation_context(user_id, _cur_proj)
 
         # Добавляем текущий вопрос
         conversation_history.append({"role": "user", "content": question})
@@ -4737,8 +4747,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
 
                     # Добавляем в историю
-                    await add_message_to_history_async(user_id, 'user', question)
-                    await add_message_to_history_async(user_id, 'assistant', f"[Сгенерировано изображение с промптом от xAI Grok]")
+                    await add_message_to_history_async(user_id, 'user', question, project_name=_cur_proj_hist)
+                    await add_message_to_history_async(user_id, 'assistant', f"[Сгенерировано изображение с промптом от xAI Grok]", project_name=_cur_proj_hist)
 
                     logger.info(f"✅ Изображение сгенерировано и отправлено")
 
@@ -4931,8 +4941,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
-        # Добавляем ответ бота в историю
-        await add_message_to_history_async(user_id, 'assistant', answer)
+        # Добавляем ответ бота в историю (с привязкой к проекту)
+        await add_message_to_history_async(user_id, 'assistant', answer, project_name=_cur_proj_hist)
 
         # ============================================================================
         # REQUEST CLASSIFIER: Определение типа запроса для адаптивной обработки
@@ -5992,15 +6002,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                info_text = f"📁 **ПРОЕКТ: {project_name}**\n\n"
+                info_text = f"📁 ПРОЕКТ: {project_name}\n\n"
                 info_text += f"✅ Проект активирован\n\n"
                 info_text += f"{project.get_log_summary()}\n\n"
                 info_text += "Что вы хотите сделать?"
 
                 await query.edit_message_text(
                     info_text,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    reply_markup=reply_markup
                 )
             else:
                 await query.edit_message_text("❌ Ошибка загрузки проекта")
@@ -6182,7 +6191,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ Модуль проектов недоступен", show_alert=True)
     elif query.data.startswith("proj_files_"):
-        # Файлы проекта
+        # Файлы проекта — список с кнопками скачивания
         if PROJECTS_AVAILABLE:
             project_name = query.data.replace("proj_files_", "")
             user_id = update.effective_user.id
@@ -6191,44 +6200,114 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if project:
                 files = project.list_files()
 
-                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
                 if not files:
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(
                         "📁 В проекте пока нет файлов\n\n"
-                        "Отправьте файл с подписью для добавления в проект",
+                        "Отправьте файл боту для добавления в проект",
                         reply_markup=reply_markup
                     )
                 else:
-                    response = f"📁 **ФАЙЛЫ ПРОЕКТА: {project_name}**\n\n"
+                    response = f"📁 ФАЙЛЫ ПРОЕКТА: {project_name}\n\n"
                     response += f"Всего файлов: {len(files)}\n\n"
 
+                    # Кнопки для каждого файла (скачать)
+                    keyboard = []
                     for i, file_info in enumerate(files, 1):
                         name = file_info["original_name"]
-                        size_mb = file_info["size_bytes"] / 1024 / 1024
-                        file_type = file_info["type"]
-                        response += f"{i}. {name}\n"
-                        response += f"   Тип: {file_type} | Размер: {size_mb:.2f} МБ\n\n"
+                        size_kb = file_info["size_bytes"] / 1024
+                        ftype = file_info["type"]
+                        file_id = file_info["id"]
+
+                        # Иконки по типу
+                        if 'pdf' in ftype.lower():
+                            icon = "📄"
+                        elif 'image' in ftype.lower() or ftype.lower().startswith('image'):
+                            icon = "🖼️"
+                        elif 'spreadsheet' in ftype.lower() or 'excel' in ftype.lower() or ftype.lower().endswith(('xlsx', 'xls')):
+                            icon = "📊"
+                        elif 'word' in ftype.lower() or ftype.lower().endswith(('docx', 'doc')):
+                            icon = "📝"
+                        elif 'zip' in ftype.lower():
+                            icon = "📦"
+                        else:
+                            icon = "📎"
+
+                        if size_kb >= 1024:
+                            size_str = f"{size_kb/1024:.1f} МБ"
+                        else:
+                            size_str = f"{size_kb:.0f} КБ"
+
+                        response += f"{i}. {icon} {name} ({size_str})\n"
+
+                        # Кнопка скачивания для файла
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                f"📥 {name[:30]}{'...' if len(name) > 30 else ''}",
+                                callback_data=f"file_dl_{project_name}_{file_id}"
+                            )
+                        ])
+
+                    keyboard.append([InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
 
                     await query.edit_message_text(
                         response,
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
+                        reply_markup=reply_markup
                     )
             else:
                 await query.edit_message_text("❌ Ошибка загрузки проекта")
         else:
             await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+
+    elif query.data.startswith("file_dl_"):
+        # Скачивание файла из проекта
+        if PROJECTS_AVAILABLE:
+            # Парсим: file_dl_{project_name}_{file_id}
+            parts = query.data[len("file_dl_"):].rsplit("_", 1)
+            if len(parts) == 2:
+                project_name, file_id = parts
+                user_id = update.effective_user.id
+                project = load_project(user_id, project_name)
+
+                if project:
+                    file_path = project.get_file_path(file_id)
+                    if file_path and os.path.exists(file_path):
+                        # Находим оригинальное имя
+                        original_name = None
+                        for f in project.list_files():
+                            if f["id"] == file_id:
+                                original_name = f["original_name"]
+                                break
+
+                        try:
+                            await query.answer("📥 Отправляю файл...")
+                            with open(file_path, 'rb') as f:
+                                await query.message.reply_document(
+                                    document=f,
+                                    filename=original_name or os.path.basename(file_path),
+                                    caption=f"📁 Из проекта: {project_name}"
+                                )
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки файла: {e}")
+                            await query.answer("❌ Не удалось отправить файл", show_alert=True)
+                    else:
+                        await query.answer("❌ Файл не найден на диске", show_alert=True)
+                else:
+                    await query.answer("❌ Проект не найден", show_alert=True)
+            else:
+                await query.answer("❌ Ошибка данных", show_alert=True)
+        else:
+            await query.answer("⚠️ Модуль проектов недоступен", show_alert=True)
     elif query.data.startswith("proj_note_"):
         # Добавление заметки
         if PROJECTS_AVAILABLE:
             project_name = query.data.replace("proj_note_", "")
             await query.edit_message_text(
-                f"📝 **ДОБАВЛЕНИЕ ЗАМЕТКИ**\n\n"
+                f"📝 ДОБАВЛЕНИЕ ЗАМЕТКИ\n\n"
                 f"Проект: {project_name}\n\n"
-                "Введите текст заметки:",
-                parse_mode="Markdown"
+                "Введите текст заметки:"
             )
             context.user_data["waiting_for_note"] = project_name
         else:
