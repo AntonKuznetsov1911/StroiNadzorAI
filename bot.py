@@ -112,9 +112,10 @@ except ImportError:
 try:
     from optimized_prompts import (
         CLAUDE_SYSTEM_PROMPT_TECHNICAL,
-        CLAUDE_DALLE_PROMPT_CREATOR,
         GROK_SYSTEM_PROMPT_GENERAL,
-        GEMINI_VISION_PROMPT_DEFECTS
+        GEMINI_IMAGE_PROMPT_SYSTEM,
+        GEMINI_VISION_PROMPT_DEFECTS,
+        WEB_SEARCH_DECISION_PROMPT
     )
     OPTIMIZED_PROMPTS_AVAILABLE = True
     logger.info("✅ Оптимизированные промпты загружены")
@@ -308,14 +309,7 @@ except ImportError as e:
     WEB_SEARCH_AVAILABLE = False
     logger.warning(f"⚠️ Модуль web_search.py не найден: {e}")
 
-# Модуль погоды (Яндекс Погода API)
-try:
-    from weather import get_weather, is_weather_query
-    WEATHER_AVAILABLE = True
-    logger.info("✅ Модуль погоды загружен (Яндекс Погода API)")
-except ImportError as e:
-    WEATHER_AVAILABLE = False
-    logger.warning(f"⚠️ Модуль weather.py не найден: {e}")
+# Модуль погоды удалён — все запросы о погоде обрабатываются Grok через web_search
 
 # Модуль генерации изображений
 try:
@@ -492,23 +486,14 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logger.warning("⚠️ Модуль gemini_image_gen.py не найден")
 
-# Оптимизированные промпты и селектор моделей v5.0
+# Инициализация селектора моделей v5.0 (промпты уже загружены выше)
 try:
-    from optimized_prompts import (
-        CLAUDE_SYSTEM_PROMPT_TECHNICAL,
-        GROK_SYSTEM_PROMPT_GENERAL,
-        GEMINI_IMAGE_PROMPT_SYSTEM,
-        GEMINI_VISION_PROMPT_DEFECTS,
-        WEB_SEARCH_DECISION_PROMPT
-    )
     from model_selector import ModelSelector
-    OPTIMIZED_PROMPTS_AVAILABLE = True
     model_selector = ModelSelector()
-    logger.info("✅ Оптимизированные промпты и селектор моделей v5.0 загружены")
+    logger.info("✅ Селектор моделей v5.0 инициализирован")
 except ImportError as e:
-    OPTIMIZED_PROMPTS_AVAILABLE = False
     model_selector = None
-    logger.warning(f"⚠️ Модули optimized_prompts/model_selector не найдены: {e}")
+    logger.warning(f"⚠️ ModelSelector не найден: {e}")
 
 # Интерактивные калькуляторы v4.0 - УДАЛЁН дублирующий импорт
 # Все калькуляторы импортируются из calculator_handlers.py (строка 257)
@@ -695,18 +680,16 @@ RATE_LIMIT_WINDOW_SECONDS = 60  # За 60 секунд
 # False = ответы приходят сразу целиком (классический режим)
 STREAMING_ENABLED = False  # По умолчанию ВЫКЛЮЧЕН
 
-# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok)
-# Основная модель: grok-3 (стабильная)
-#   - Для сложных технических вопросов и анализа
-#   - Хороший баланс скорости и качества
-# Быстрая модель: grok-2
-#   - Для классификации запросов и простых вопросов
-#   - Быстрая генерация ответов
+# 🤖 КОНФИГУРАЦИЯ AI МОДЕЛЕЙ (xAI Grok, обновлено Февраль 2026)
+# Основная модель: grok-4-1-fast-reasoning (Elo #1, 1483)
+#   - Полноценное рассуждение, анализ документов, фото, нормативов
+#   - 2M контекст, web_search, сниженные галлюцинации (4.22%)
+# Быстрая модель: grok-4-1-fast-non-reasoning
+#   - Мгновенные ответы без thinking tokens
+#   - Для классификации, простых вопросов, генерации изображений
 # Fallback: Claude Sonnet 4.5 (при недоступности Grok)
-
-# Доступные модели xAI API:
-GROK_MODEL_MAIN = "grok-3"          # Основная модель для сложных задач
-GROK_MODEL_FAST = "grok-2"          # Быстрая модель для простых задач
+GROK_MODEL_REASONING = "grok-4-1-fast-reasoning"
+GROK_MODEL_FAST = "grok-4-1-fast-non-reasoning"
 
 def check_rate_limit(user_id: int) -> bool:
     """
@@ -746,7 +729,7 @@ def get_claude_client():
         claude_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return claude_client
 
-def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None):
+def call_grok_with_retry(client, model, messages, max_tokens, temperature, search_parameters=None, tools=None):
     """
     Вызов xAI Grok API с автоматическим fallback на Claude при сбое
 
@@ -756,7 +739,8 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
     3. Логирует какой API был использован
 
     Args:
-        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: УСТАРЕЛ. Используйте tools.
+        tools: Инструменты [{"type": "web_search"}, {"type": "x_search"}]
     """
     # Сначала пытаемся Grok
     try:
@@ -766,7 +750,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         )
         logger.info("✅ Ответ получен от xAI Grok")
         return response
@@ -818,7 +802,7 @@ def call_grok_with_retry(client, model, messages, max_tokens, temperature, searc
             raise Exception("⚠️ Оба AI сервиса (Grok и Claude) временно недоступны. Попробуйте позже.")
 
 
-async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None):
+async def call_grok_with_streaming(client, model, messages, max_tokens, temperature, search_parameters=None, tools=None):
     """
     Вызов xAI Grok API с streaming режимом (постепенная отдача ответа)
 
@@ -828,7 +812,8 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
         messages: Список сообщений
         max_tokens: Максимум токенов
         temperature: Температура
-        search_parameters: Параметры поиска {"mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}]
+        search_parameters: УСТАРЕЛ. Используйте tools.
+        tools: Инструменты [{"type": "web_search"}, {"type": "x_search"}]
 
     Yields:
         str - части текста по мере получения от API
@@ -840,7 +825,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         ):
             yield chunk
 
@@ -855,7 +840,7 @@ async def call_grok_with_streaming(client, model, messages, max_tokens, temperat
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            search_parameters=search_parameters
+            tools=tools
         )
         # Отдаём весь ответ целиком
         yield response["choices"][0]["message"]["content"]
@@ -891,7 +876,7 @@ def classify_user_intent(user_message: str) -> dict:
 
         response = call_grok_with_retry(
             client,
-            model=GROK_MODEL_FAST,  # Быстрая модель для классификации
+            model=GROK_MODEL_FAST,
             max_tokens=50,
             temperature=0.1,
             messages=[{"role": "user", "content": classification_prompt}]
@@ -902,18 +887,17 @@ def classify_user_intent(user_message: str) -> dict:
         # Валидация ответа
         valid_types = ["simple_save", "simple_question", "technical_question", "complex_analysis"]
         if intent_type not in valid_types:
-            # По умолчанию считаем технический вопрос
             intent_type = "technical_question"
 
         # Выбор модели на основе типа запроса
         if intent_type == "simple_save" or intent_type == "simple_question":
-            model = GROK_MODEL_FAST  # Быстрая модель для простых запросов
+            model = GROK_MODEL_FAST
             max_tokens = 1000
         elif intent_type == "technical_question":
-            model = GROK_MODEL_MAIN  # Основная модель для технических вопросов
+            model = GROK_MODEL_REASONING
             max_tokens = 5000
         else:  # complex_analysis
-            model = GROK_MODEL_MAIN  # Основная модель для сложного анализа
+            model = GROK_MODEL_REASONING
             max_tokens = 8000
 
         logger.info(f"📊 Intent: {intent_type} → Model: {model}")
@@ -926,10 +910,9 @@ def classify_user_intent(user_message: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error in intent classification: {e}")
-        # При ошибке используем основную модель для надежности
         return {
             "intent": "technical_question",
-            "model": GROK_MODEL_MAIN,
+            "model": GROK_MODEL_REASONING,
             "max_tokens": 5000
         }
 
@@ -976,7 +959,7 @@ def save_user_history(user_id: int):
     except Exception as e:
         logger.error(f"Error saving history for user {user_id}: {e}")
 
-async def add_message_to_history_async(user_id: int, role: str, content: str, image_analyzed: bool = False):
+async def add_message_to_history_async(user_id: int, role: str, content: str, image_analyzed: bool = False, project_name: str = ""):
     """Добавить сообщение в историю (PostgreSQL с fallback на JSON)"""
     # Извлекаем теги
     tags = extract_tags_from_message(content)
@@ -984,7 +967,7 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
     # Сохраняем в PostgreSQL если доступен
     if DATABASE_AVAILABLE:
         try:
-            await save_message(user_id, role, content, image_analyzed, tags)
+            await save_message(user_id, role, content, image_analyzed, tags, project_name)
             # Обновляем in-memory кеш
             load_user_history(user_id)
             message = {
@@ -992,7 +975,8 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
                 'content': content,
                 'timestamp': datetime.now().isoformat(),
                 'image_analyzed': image_analyzed,
-                'tags': tags
+                'tags': tags,
+                'project': project_name
             }
             user_conversations[user_id].append(message)
             if len(user_conversations[user_id]) > 50:
@@ -1008,7 +992,8 @@ async def add_message_to_history_async(user_id: int, role: str, content: str, im
         'content': content,
         'timestamp': datetime.now().isoformat(),
         'image_analyzed': image_analyzed,
-        'tags': tags
+        'tags': tags,
+        'project': project_name
     }
     user_conversations[user_id].append(message)
     if len(user_conversations[user_id]) > 50:
@@ -1031,17 +1016,27 @@ def add_message_to_history(user_id: int, role: str, content: str, image_analyzed
         user_conversations[user_id] = user_conversations[user_id][-50:]
     save_user_history(user_id)
 
-def get_conversation_context(user_id: int) -> list:
-    """Получить контекст диалога для Claude API (последние N сообщений)"""
+def get_conversation_context(user_id: int, current_project: str = "") -> list:
+    """Получить контекст диалога (фильтрация по текущему проекту)"""
     load_user_history(user_id)
 
-    # Берём последние MAX_CONTEXT_MESSAGES сообщений
-    recent_messages = user_conversations[user_id][-MAX_CONTEXT_MESSAGES:]
+    all_messages = user_conversations[user_id]
 
-    # Преобразуем в формат Claude API
+    # Фильтруем по проекту: берём только сообщения текущего проекта или без проекта
+    if current_project:
+        filtered = [
+            msg for msg in all_messages
+            if not msg.get('project') or msg.get('project') == current_project
+        ]
+    else:
+        filtered = all_messages
+
+    # Берём последние MAX_CONTEXT_MESSAGES
+    recent_messages = filtered[-MAX_CONTEXT_MESSAGES:]
+
+    # Преобразуем в формат API
     grok_messages = []
     for msg in recent_messages:
-        # Пропускаем сообщения с изображениями (они уже обработаны)
         if not msg.get('image_analyzed', False):
             grok_messages.append({
                 'role': msg['role'],
@@ -3413,14 +3408,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         loop = asyncio.get_event_loop()
 
         # Включаем web_search для анализа фото (поиск информации о дефектах)
-        search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
+        # Используем Responses API с tools (search_parameters устарел с 12.01.2026)
+        search_tools = [{"type": "web_search"}]
 
         response = await loop.run_in_executor(
             None,
             lambda: call_grok_with_retry(
                 client,
-                model=GROK_MODEL_MAIN,  # Основная модель для анализа изображений
+                model=GROK_MODEL_REASONING,
                 max_tokens=6000,
                 temperature=0.7,
                 messages=[
@@ -3446,7 +3441,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]
                     }
                 ],
-                search_parameters=search_params
+                tools=search_tools
             )
         )
         analysis = response["choices"][0]["message"]["content"]
@@ -3591,10 +3586,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Скачиваем файл (санитизируем имя для защиты от path traversal)
         file = await update.message.document.get_file()
-        import os as _os
         import re as _re
         raw_file_name = update.message.document.file_name or "document"
-        file_name = _os.path.basename(raw_file_name)
+        file_name = os.path.basename(raw_file_name)
         file_name = _re.sub(r'[^\w\.\-\(\) ]', '_', file_name)  # только безопасные символы
         file_path = f"temp_{user_id}_{file_name}"
         await file.download_to_drive(file_path)
@@ -3602,43 +3596,211 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description = update.message.caption or ""
         file_type = update.message.document.mime_type or "unknown"
 
-        # Определяем тип документа
-        is_pdf = file_name.lower().endswith('.pdf') or 'pdf' in file_type.lower()
+        # === ОПРЕДЕЛЯЕМ ТИП ДОКУМЕНТА ===
+        fn_lower = file_name.lower()
+        ft_lower = file_type.lower()
+        ext = os.path.splitext(fn_lower)[1]
+
+        is_pdf = ext == '.pdf' or 'pdf' in ft_lower
+        is_zip = ext == '.zip' or 'zip' in ft_lower
+        is_docx = ext == '.docx' or 'wordprocessingml' in ft_lower
+        is_doc = ext == '.doc' and not is_docx
+        is_xlsx = ext in ('.xlsx', '.xls') or 'spreadsheet' in ft_lower or 'excel' in ft_lower
+        is_image = ext in ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp') or 'image' in ft_lower
+        is_text = ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm', '.md', '.rtf')
+        is_cad = ext in ('.dwg', '.dxf', '.ifc', '.rvt')
+        is_archive_other = ext in ('.7z', '.rar', '.tar', '.gz', '.bz2', '.tar.gz', '.tgz')
+
+        # Определяем, можем ли мы извлечь текст/данные из файла
+        can_analyze = is_pdf or is_zip or is_docx or is_xlsx or is_image or is_text or is_cad or is_doc or is_archive_other
 
         # Сообщение о начале анализа
+        if is_zip:
+            status_text = "Распаковываю и анализирую архив..."
+        elif is_image:
+            status_text = "Анализирую изображение..."
+        elif is_cad:
+            status_text = "Обрабатываю чертёж..."
+        else:
+            status_text = "Анализирую документ..."
+
         thinking_msg = await update.message.reply_text(
-            f"📄 Получен документ: **{file_name}**\n\n"
-            f"⏳ Анализирую документ...",
-            parse_mode="Markdown"
+            f"📄 Получен: {file_name}\n⏳ {status_text}"
         )
 
-        # Анализируем PDF
+        # === УНИВЕРСАЛЬНОЕ ИЗВЛЕЧЕНИЕ ТЕКСТА/ДАННЫХ ИЗ ФАЙЛА ===
         expert_opinion = None
+        extracted_content = ""
+        doc_type_label = "ДОКУМЕНТ"
+
+        # --- PDF ---
         if is_pdf:
+            doc_type_label = "PDF"
             try:
-                # Извлекаем текст из PDF
                 import PyPDF2
-                pdf_text = ""
                 with open(file_path, 'rb') as pdf_file:
                     pdf_reader = PyPDF2.PdfReader(pdf_file)
                     num_pages = len(pdf_reader.pages)
-
-                    # Читаем максимум первые 10 страниц
                     max_pages = min(num_pages, 10)
                     for page_num in range(max_pages):
-                        page = pdf_reader.pages[page_num]
-                        pdf_text += page.extract_text() + "\n"
+                        extracted_content += pdf_reader.pages[page_num].extract_text() + "\n"
+                extracted_content = extracted_content[:15000]
+                if num_pages > 10:
+                    extracted_content += f"\n\n[... показаны первые 10 из {num_pages} страниц]"
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа PDF установите: `pip install PyPDF2`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения PDF: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать PDF: {str(e)}"
 
-                # Ограничиваем размер текста
-                pdf_text = pdf_text[:15000]  # ~3000 токенов
+        # --- DOCX (Word) ---
+        elif is_docx:
+            doc_type_label = "WORD"
+            try:
+                from docx import Document as DocxDocument
+                doc = DocxDocument(file_path)
+                paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                extracted_content = "\n".join(paragraphs)[:15000]
 
-                if pdf_text.strip():
-                    # Формируем промпт для анализа
-                    analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
+                # Извлекаем таблицы
+                tables_text = ""
+                for i, table in enumerate(doc.tables[:5]):
+                    tables_text += f"\n[Таблица {i+1}]\n"
+                    for row in table.rows[:20]:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        tables_text += " | ".join(cells) + "\n"
+                if tables_text:
+                    extracted_content += f"\n\n--- ТАБЛИЦЫ ---{tables_text}"
+                    extracted_content = extracted_content[:15000]
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа DOCX установите: `pip install python-docx`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения DOCX: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать DOCX: {str(e)}"
+
+        # --- DOC (старый Word) ---
+        elif is_doc:
+            doc_type_label = "WORD (DOC)"
+            extracted_content = "[Формат .doc — устаревший бинарный формат Microsoft Word]\n"
+            extracted_content += "Для анализа пересохраните файл в формате .docx"
+
+        # --- XLSX / XLS (Excel) ---
+        elif is_xlsx:
+            doc_type_label = "EXCEL"
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                sheets_data = []
+                for sheet_name in wb.sheetnames[:10]:
+                    ws = wb[sheet_name]
+                    sheet_text = f"\n=== Лист: {sheet_name} ===\n"
+                    row_count = 0
+                    for row in ws.iter_rows(max_row=50, values_only=True):
+                        cells = [str(c) if c is not None else "" for c in row]
+                        if any(cells):
+                            sheet_text += " | ".join(cells) + "\n"
+                            row_count += 1
+                    if ws.max_row and ws.max_row > 50:
+                        sheet_text += f"[... показаны первые 50 из {ws.max_row} строк]\n"
+                    sheets_data.append(sheet_text)
+                wb.close()
+                extracted_content = "\n".join(sheets_data)[:15000]
+            except ImportError:
+                expert_opinion = "⚠️ Для анализа Excel установите: `pip install openpyxl`"
+            except Exception as e:
+                logger.error(f"Ошибка чтения XLSX: {e}")
+                expert_opinion = f"⚠️ Не удалось прочитать Excel: {str(e)}"
+
+        # --- Изображения (JPG, PNG и т.д.) ---
+        elif is_image:
+            doc_type_label = "ИЗОБРАЖЕНИЕ"
+            try:
+                import base64
+                with open(file_path, 'rb') as img_file:
+                    img_data = img_file.read()
+                    if len(img_data) > 10 * 1024 * 1024:
+                        expert_opinion = "⚠️ Изображение слишком большое (>10 МБ)"
+                    else:
+                        photo_base64 = base64.b64encode(img_data).decode('utf-8')
+                        # Определяем MIME
+                        mime_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                                    '.bmp': 'image/bmp', '.webp': 'image/webp', '.tiff': 'image/tiff', '.tif': 'image/tiff'}
+                        img_mime = mime_map.get(ext, 'image/jpeg')
+
+                        client = get_grok_client()
+                        loop = asyncio.get_event_loop()
+                        search_tools = [{"type": "web_search"}]
+
+                        img_prompt = "Проведите технический анализ изображения. Определите что изображено, выявите дефекты, нарушения строительных норм."
+                        if description:
+                            img_prompt += f"\n\nКомментарий пользователя: {description}"
+
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda: call_grok_with_retry(
+                                client,
+                                model=GROK_MODEL_REASONING,
+                                max_tokens=6000,
+                                temperature=0.3,
+                                messages=[
+                                    {"role": "system", "content": "Вы — эксперт по строительному контролю и техническому надзору в РФ."},
+                                    {"role": "user", "content": [
+                                        {"type": "image", "source": {"type": "base64", "media_type": img_mime, "data": photo_base64}},
+                                        {"type": "text", "text": img_prompt}
+                                    ]}
+                                ],
+                                tools=search_tools
+                            )
+                        )
+                        expert_opinion = response["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.error(f"Ошибка анализа изображения: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать изображение: {str(e)}"
+
+        # --- Текстовые файлы (TXT, CSV, XML, JSON, HTML, MD) ---
+        elif is_text:
+            doc_type_label = "ТЕКСТ"
+            for encoding in ('utf-8', 'cp1251', 'cp866', 'latin-1'):
+                try:
+                    with open(file_path, 'r', encoding=encoding) as tf:
+                        extracted_content = tf.read(15000)
+                    break
+                except (UnicodeDecodeError, Exception):
+                    continue
+            if not extracted_content:
+                extracted_content = "[Не удалось прочитать файл — неизвестная кодировка]"
+
+        # --- CAD файлы (DWG, DXF, IFC, RVT) ---
+        elif is_cad:
+            doc_type_label = "ЧЕРТЁЖ"
+            cad_names = {'.dwg': 'AutoCAD DWG', '.dxf': 'AutoCAD DXF', '.ifc': 'IFC (BIM)', '.rvt': 'Revit'}
+            cad_type = cad_names.get(ext, 'CAD')
+            extracted_content = (
+                f"[Файл формата {cad_type}]\n\n"
+                f"Это бинарный файл чертежа. Текст из него нельзя извлечь напрямую.\n"
+                f"Для полного анализа откройте в {cad_type.split()[0]} или конвертируйте в PDF."
+            )
+
+        # --- Другие архивы (7z, RAR, TAR) ---
+        elif is_archive_other:
+            doc_type_label = "АРХИВ"
+            archive_names = {'.7z': '7-Zip', '.rar': 'RAR', '.tar': 'TAR', '.gz': 'GZIP', '.bz2': 'BZIP2', '.tgz': 'TAR.GZ'}
+            arc_type = archive_names.get(ext, 'архив')
+            extracted_content = (
+                f"[Файл формата {arc_type}]\n\n"
+                f"Бот поддерживает распаковку только ZIP-архивов.\n"
+                f"Пожалуйста, пересохраните как ZIP и отправьте повторно."
+            )
+
+        # === ОТПРАВКА НА АНАЛИЗ GROK (если есть текст и нет ошибок) ===
+        if extracted_content.strip() and not expert_opinion and not is_zip and not is_image:
+            try:
+                analysis_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ с 20-летним опытом.
 
 📋 **ЗАДАЧА:** Проанализируйте предоставленный строительный документ и дайте экспертное заключение.
 
-{'📝 **ЗАПРОС ПОЛЬЗОВАТЕЛЯ:** ' + description if description else ''}
+📄 **Файл:** {file_name} ({doc_type_label})
+{'📝 **Запрос пользователя:** ' + description if description else ''}
 
 🎯 **ТРЕБОВАНИЯ К АНАЛИЗУ:**
 
@@ -3662,60 +3824,204 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
    • Какие документы могут потребоваться
    • Практические советы по применению
 
-**ВАЖНО:**
-- Если документ частично нечитаем - укажите это
-- Ссылайтесь на конкретные СП/ГОСТ с пунктами
-- Будьте объективны и конкретны
+**ВАЖНО:** Ссылайтесь на конкретные СП/ГОСТ с пунктами. Будьте объективны и конкретны.
 
 ---
 
-📄 **ТЕКСТ ДОКУМЕНТА:**
+📄 **СОДЕРЖИМОЕ ДОКУМЕНТА:**
 
-{pdf_text}"""
+{extracted_content}"""
 
-                    # Отправляем на анализ Grok
-                    client = get_grok_client()
-                    loop = asyncio.get_event_loop()
+                client = get_grok_client()
+                loop = asyncio.get_event_loop()
+                search_tools = [{"type": "web_search"}]
 
-                    # Включаем web_search для анализа документов (поиск нормативов)
-                    search_params = {
-                        "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}
-
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: call_grok_with_retry(
-                            client,
-                            model=GROK_MODEL_MAIN,  # Основная модель для анализа документов
-                            max_tokens=6000,
-                            temperature=0.3,
-                            messages=[
-                                {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
-                                {"role": "user", "content": analysis_prompt}
-                            ],
-                            search_parameters=search_params
-                        )
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: call_grok_with_retry(
+                        client,
+                        model=GROK_MODEL_FAST,
+                        max_tokens=6000,
+                        temperature=0.3,
+                        messages=[
+                            {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Даёте профессиональные заключения по документам."},
+                            {"role": "user", "content": analysis_prompt}
+                        ],
+                        tools=search_tools
                     )
-                    expert_opinion = response["choices"][0]["message"]["content"]
+                )
+                expert_opinion = response["choices"][0]["message"]["content"]
 
-                    # Сохраняем анализ в проект
-                    if expert_opinion:
-                        project.add_conversation_entry(
-                            f"[ДОКУМЕНТ] {file_name}" + (f": {description}" if description else ""),
-                            expert_opinion,
-                            "document_analysis"
-                        )
+                # Сохраняем анализ в проект
+                if expert_opinion:
+                    project.add_conversation_entry(
+                        f"[{doc_type_label}] {file_name}" + (f": {description}" if description else ""),
+                        expert_opinion,
+                        "document_analysis"
+                    )
 
-            except ImportError:
-                expert_opinion = "⚠️ Для анализа PDF установите библиотеку PyPDF2:\n`pip install PyPDF2`"
             except Exception as e:
-                logger.error(f"Ошибка анализа PDF: {e}")
-                expert_opinion = f"⚠️ Не удалось проанализировать PDF: {str(e)}"
+                logger.error(f"Ошибка анализа {doc_type_label}: {e}")
+                expert_opinion = f"⚠️ Не удалось проанализировать {doc_type_label}: {str(e)}"
 
-        # Сохраняем файл в проект
+        # === ОБРАБОТКА ZIP АРХИВОВ ===
+        if is_zip:
+            import zipfile
+            import tempfile
+            import shutil
+
+            try:
+                if not zipfile.is_zipfile(file_path):
+                    expert_opinion = "❌ Файл повреждён или не является ZIP-архивом."
+                else:
+                    extract_dir = tempfile.mkdtemp(prefix=f"zip_{user_id}_")
+
+                    try:
+                        with zipfile.ZipFile(file_path, 'r') as zf:
+                            total_uncompressed = sum(info.file_size for info in zf.infolist())
+                            max_uncompressed = 100 * 1024 * 1024
+
+                            if total_uncompressed > max_uncompressed:
+                                expert_opinion = (
+                                    f"❌ Архив слишком большой после распаковки\n\n"
+                                    f"📊 Размер: {total_uncompressed / (1024*1024):.1f} МБ\n"
+                                    f"📏 Лимит: 100 МБ"
+                                )
+                            else:
+                                file_list = []
+                                extracted_texts = {}
+
+                                for info in zf.infolist():
+                                    if info.is_dir():
+                                        continue
+                                    basename = os.path.basename(info.filename)
+                                    if not basename or basename.startswith('.') or basename.startswith('__'):
+                                        continue
+                                    member_path = os.path.normpath(info.filename)
+                                    if member_path.startswith('..') or os.path.isabs(member_path):
+                                        continue
+
+                                    size_kb = info.file_size / 1024
+                                    f_ext = os.path.splitext(basename)[1].lower()
+                                    file_list.append({"name": info.filename, "size_kb": size_kb, "ext": f_ext})
+
+                                    safe_path = os.path.join(extract_dir, basename)
+                                    with zf.open(info) as src, open(safe_path, 'wb') as dst:
+                                        dst.write(src.read())
+
+                                    # Извлекаем текст из файлов внутри архива
+                                    try:
+                                        if f_ext == '.pdf':
+                                            import PyPDF2
+                                            with open(safe_path, 'rb') as pf:
+                                                reader = PyPDF2.PdfReader(pf)
+                                                text = "".join(reader.pages[p].extract_text() + "\n" for p in range(min(len(reader.pages), 5)))
+                                                if text.strip():
+                                                    extracted_texts[info.filename] = text[:5000]
+                                        elif f_ext == '.docx':
+                                            from docx import Document as DocxDocument
+                                            doc = DocxDocument(safe_path)
+                                            text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                                            if text.strip():
+                                                extracted_texts[info.filename] = text[:5000]
+                                        elif f_ext in ('.xlsx', '.xls'):
+                                            try:
+                                                import openpyxl
+                                                wb = openpyxl.load_workbook(safe_path, read_only=True, data_only=True)
+                                                sheet_text = ""
+                                                for ws in [wb[s] for s in wb.sheetnames[:3]]:
+                                                    for row in ws.iter_rows(max_row=20, values_only=True):
+                                                        cells = [str(c) if c is not None else "" for c in row]
+                                                        if any(cells):
+                                                            sheet_text += " | ".join(cells) + "\n"
+                                                wb.close()
+                                                if sheet_text.strip():
+                                                    extracted_texts[info.filename] = sheet_text[:5000]
+                                            except Exception:
+                                                pass
+                                        elif f_ext in ('.txt', '.csv', '.log', '.xml', '.json', '.html', '.htm', '.md'):
+                                            for enc in ('utf-8', 'cp1251', 'latin-1'):
+                                                try:
+                                                    with open(safe_path, 'r', encoding=enc) as tf:
+                                                        text = tf.read(5000)
+                                                    if text.strip():
+                                                        extracted_texts[info.filename] = text
+                                                    break
+                                                except (UnicodeDecodeError, Exception):
+                                                    continue
+                                    except Exception as extract_err:
+                                        logger.warning(f"Не удалось извлечь текст из {info.filename}: {extract_err}")
+
+                                    try:
+                                        project.add_file(safe_path, f"zip/{f_ext.lstrip('.')}", f"Из архива {file_name}: {info.filename}")
+                                    except Exception:
+                                        pass
+
+                                # Сводка и анализ
+                                file_list_text = "\n".join(
+                                    f"  {'📄' if f['ext'] in ('.pdf','.docx','.doc') else '📊' if f['ext'] in ('.xlsx','.xls','.csv') else '🖼️' if f['ext'] in ('.jpg','.jpeg','.png','.bmp','.dwg','.dxf') else '📎'} {f['name']} ({f['size_kb']:.1f} КБ)"
+                                    for f in file_list[:50]
+                                )
+                                if len(file_list) > 50:
+                                    file_list_text += f"\n  ... и ещё {len(file_list) - 50} файлов"
+
+                                extracted_summary = ""
+                                if extracted_texts:
+                                    extracted_summary = "\n\n---\n📝 ИЗВЛЕЧЁННЫЙ ТЕКСТ:\n\n"
+                                    for fname, text in list(extracted_texts.items())[:10]:
+                                        extracted_summary += f"=== {fname} ===\n{text[:3000]}\n\n"
+
+                                zip_prompt = f"""Вы — ведущий инженер-эксперт по строительным нормативам РФ.
+
+📦 **ЗАДАЧА:** Проанализируйте ZIP-архив строительного проекта.
+
+📁 **Архив:** {file_name} | 📊 **Файлов:** {len(file_list)}
+{'📝 **Запрос:** ' + description if description else ''}
+
+📋 **СОДЕРЖИМОЕ:**
+{file_list_text}
+{extracted_summary}
+
+🎯 **АНАЛИЗ:** Определите тип документации, полноту комплекта, соответствие нормам 2024-2025.
+Укажите конкретные СП/ГОСТ. Дайте рекомендации по недостающим документам."""
+
+                                client = get_grok_client()
+                                loop = asyncio.get_event_loop()
+                                search_tools = [{"type": "web_search"}]
+
+                                response = await loop.run_in_executor(
+                                    None,
+                                    lambda: call_grok_with_retry(
+                                        client, model=GROK_MODEL_FAST, max_tokens=6000, temperature=0.3,
+                                        messages=[
+                                            {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Анализируете комплекты проектной документации."},
+                                            {"role": "user", "content": zip_prompt}
+                                        ],
+                                        tools=search_tools
+                                    )
+                                )
+                                expert_opinion = response["choices"][0]["message"]["content"]
+
+                                if expert_opinion:
+                                    project.add_conversation_entry(
+                                        f"[ZIP] {file_name} ({len(file_list)} файлов)" + (f": {description}" if description else ""),
+                                        expert_opinion, "zip_analysis"
+                                    )
+
+                    finally:
+                        try:
+                            shutil.rmtree(extract_dir)
+                        except Exception:
+                            pass
+
+            except Exception as e:
+                logger.error(f"Ошибка обработки ZIP: {e}")
+                expert_opinion = f"⚠️ Не удалось обработать ZIP-архив: {str(e)}"
+
+        # Сохраняем оригинальный файл в проект
         result = project.add_file(file_path, file_type, description)
 
         # Удаляем временный файл
-        import os
         os.remove(file_path)
 
         # Удаляем сообщение "анализирую"
@@ -3735,9 +4041,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response_text += f"📝 **Описание:** {description}\n"
 
         # Добавляем экспертное заключение
-        if expert_opinion and is_pdf:
+        if expert_opinion:
             response_text += f"\n{'='*40}\n\n"
-            response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ:**\n\n{expert_opinion}"
+            if is_zip:
+                response_text += f"📦 **АНАЛИЗ АРХИВА:**\n\n{expert_opinion}"
+            elif is_image:
+                response_text += f"🖼️ **АНАЛИЗ ИЗОБРАЖЕНИЯ:**\n\n{expert_opinion}"
+            else:
+                response_text += f"🎓 **ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ ({doc_type_label}):**\n\n{expert_opinion}"
 
         # Отправляем ответ частями если нужно (БЕЗ parse_mode для избежания ошибок парсинга)
         max_length = 4000
@@ -3769,12 +4080,11 @@ async def handle_project_creation(update: Update, context: ContextTypes.DEFAULT_
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
-                f"✅ **Проект создан:** {project_name}\n\n"
+                f"✅ Проект создан: {project_name}\n\n"
                 "📌 Проект активирован!\n"
                 "Все ваши вопросы и ответы теперь сохраняются в этот проект.\n\n"
                 "Можете начинать работу!",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
+                reply_markup=reply_markup
             )
         else:
             await update.message.reply_text(f"❌ Ошибка создания проекта: {result.get('error', '')}")
@@ -3815,9 +4125,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 await update.message.reply_text(
-                    f"✅ Заметка добавлена в проект **{project_name}**",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    f"✅ Заметка добавлена в проект: {project_name}",
+                    reply_markup=reply_markup
                 )
             else:
                 await update.message.reply_text("❌ Ошибка загрузки проекта")
@@ -3839,8 +4148,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Добавляем вопрос пользователя в историю
-    await add_message_to_history_async(user_id, 'user', question)
+    # Добавляем вопрос пользователя в историю (с привязкой к проекту)
+    _cur_proj_hist = context.user_data.get("current_project", "") if PROJECTS_AVAILABLE else ""
+    await add_message_to_history_async(user_id, 'user', question, project_name=_cur_proj_hist)
 
     # ============================================================================
     # LLM COUNCIL: Автоматическое определение сложных вопросов
@@ -3892,7 +4202,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             parse_mode="Markdown"
                         )
                         
-                        await add_message_to_history_async(user_id, 'assistant', final_answer)
+                        await add_message_to_history_async(user_id, 'assistant', final_answer, project_name=_cur_proj_hist)
                         logger.info(f"✅ LLM Council auto: ответ за {duration:.1f} сек для user {user_id}")
                         return  # Ответ от Совета отправлен
                     else:
@@ -4303,8 +4613,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **ГЛАВНОЕ ПРАВИЛО: Анализируйте намерение пользователя и отвечайте соразмерно запросу!**
 """
 
-        # Получаем контекст предыдущих сообщений
-        conversation_history = get_conversation_context(user_id)
+        # Получаем контекст предыдущих сообщений (фильтрация по проекту)
+        _cur_proj = context.user_data.get("current_project", "") if PROJECTS_AVAILABLE else ""
+        conversation_history = get_conversation_context(user_id, _cur_proj)
 
         # Добавляем текущий вопрос
         conversation_history.append({"role": "user", "content": question})
@@ -4319,10 +4630,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         selected_max_tokens = intent_info["max_tokens"]
         intent_type = intent_info.get("intent_type", "technical_question")
 
-        # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (всегда проверяем актуальность в интернете)
-        search_params = {
-            "mode": "auto", "return_citations": True, "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}]}  # Поиск в интернете
-        logger.info("🌐 Grok Tools включены для всех запросов: live_search")
+        # 🌐 ИНСТРУМЕНТЫ ПОИСКА: Включаем для ВСЕХ запросов (Responses API с tools)
+        # Миграция: search_parameters устарел с 12.01.2026, используем tools в /v1/responses
+        search_tools = [{"type": "web_search"}, {"type": "x_search"}]
+        logger.info("🌐 Grok Responses API: tools=[web_search, x_search] для всех запросов")
 
         # Универсальный системный промпт v5.0 (оптимизирован)
         # Использует промпты из optimized_prompts.py
@@ -4335,40 +4646,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 ПРИНЦИПЫ: краткость, точность, практичность, безопасность.
 📱 ФОРМАТ: для телефона, 35 символов в строке, эмодзи в начале разделов.
 📌 СТРУКТУРА: Суть → Детали → Действия → Контроль.
-🌐 ПОИСК: live_search для актуальных данных.
+🌐 ПОИСК: web_search для актуальных данных из интернета.
 ⚠️ БЕЗОПАСНОСТЬ: на первом месте для опасных работ."""
 
-        # 🌤️ ПОГОДА: Проверяем, является ли это запросом о погоде
-        if WEATHER_AVAILABLE and is_weather_query(question):
-            try:
-                logger.info("🌤️ Обнаружен запрос о погоде")
-                weather_response = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: get_weather(question)
-                )
-
-                if weather_response:
-                    # Удаляем thinking message
-                    try:
-                        await thinking_message.delete()
-                    except Exception:
-                        pass
-
-                    # Отправляем погоду
-                    await update.message.reply_text(weather_response, parse_mode="Markdown")
-
-                    # Добавляем в историю
-                    await add_message_to_history_async(user_id, 'user', question)
-                    await add_message_to_history_async(user_id, 'assistant', weather_response)
-
-                    logger.info("✅ Погода отправлена пользователю")
-                    return  # Прерываем обработку
-            except Exception as e:
-                logger.error(f"Ошибка получения погоды: {e}")
-                # Продолжаем обычную обработку если погода не получена
-
-        # 🌐 ВЕБ-ПОИСК: Теперь выполняется через Grok инструменты (live_search)
-        # Старый механизм perform_live_search отключен - Grok сам ищет актуальную информацию
+        # 🌤️ Погода и другие актуальные данные — обрабатываются Grok через web_search
 
         # 🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ: Проверяем, нужна ли генерация
         if GEMINI_AVAILABLE and IMAGE_GENERATION_AVAILABLE and should_generate_image(question):
@@ -4405,7 +4686,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 logger.info("📝 Запрашиваем детальный технический промпт у xAI Grok...")
                 grok_response = await client.chat_completions_create_async(
-                    model="grok-3",
+                    model=GROK_MODEL_FAST,
                     messages=prompt_messages,
                     max_tokens=1500,  # Увеличено для детальных технических промптов с размерами
                     temperature=0.5  # Снижено для большей точности и конкретики
@@ -4466,8 +4747,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
 
                     # Добавляем в историю
-                    await add_message_to_history_async(user_id, 'user', question)
-                    await add_message_to_history_async(user_id, 'assistant', f"[Сгенерировано изображение с промптом от xAI Grok]")
+                    await add_message_to_history_async(user_id, 'user', question, project_name=_cur_proj_hist)
+                    await add_message_to_history_async(user_id, 'assistant', f"[Сгенерировано изображение с промптом от xAI Grok]", project_name=_cur_proj_hist)
 
                     logger.info(f"✅ Изображение сгенерировано и отправлено")
 
@@ -4515,11 +4796,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 async for chunk in call_grok_with_streaming(
                     client,
-                    model=GROK_MODEL_FAST,  # Быстрая модель
+                    model=GROK_MODEL_FAST,
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
-                    search_parameters=search_params
+                    tools=search_tools
                 ):
                     first_phase_answer += chunk
                     answer += chunk
@@ -4562,7 +4843,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         messages=continuation_messages,
                         max_tokens=selected_max_tokens - 500,
                         temperature=0.7,
-                        search_parameters=search_params
+                        tools=search_tools
                     ):
                         answer += chunk
 
@@ -4628,7 +4909,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         max_tokens=selected_max_tokens,
                         temperature=0.7,
                         messages=messages_with_system,
-                        search_parameters=search_params
+                        tools=search_tools
                     )
                 )
                 answer = response["choices"][0]["message"]["content"]
@@ -4650,7 +4931,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=selected_max_tokens,
                     temperature=0.7,
                     messages=messages_with_system,
-                    search_parameters=search_params
+                    tools=search_tools
                 )
             )
             answer = response["choices"][0]["message"]["content"]
@@ -4660,8 +4941,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
-        # Добавляем ответ бота в историю
-        await add_message_to_history_async(user_id, 'assistant', answer)
+        # Добавляем ответ бота в историю (с привязкой к проекту)
+        await add_message_to_history_async(user_id, 'assistant', answer, project_name=_cur_proj_hist)
 
         # ============================================================================
         # REQUEST CLASSIFIER: Определение типа запроса для адаптивной обработки
@@ -4779,7 +5060,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     None,
                     lambda: call_grok_with_retry(
                         client,
-                        model=GROK_MODEL_FAST,  # Используем быструю модель
+                        model=GROK_MODEL_FAST,
                         max_tokens=300,
                         temperature=0.8,
                         messages=[{"role": "user", "content": related_q_prompt}]
@@ -4825,7 +5106,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # По умолчанию показываем только ответ (как в примере: всё остальное можно раскрыть/скрыть кнопками)
         result = answer
 
-        # Веб-поиск теперь выполняется через инструменты Grok (live_search)
+        # Веб-поиск выполняется через Grok Responses API (tools: web_search, x_search)
 
         # Сохраняем доп.информацию в context.user_data, чтобы можно было «раскрыть» по кнопке
         context.user_data["last_answer"] = answer
@@ -5721,15 +6002,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                info_text = f"📁 **ПРОЕКТ: {project_name}**\n\n"
+                info_text = f"📁 ПРОЕКТ: {project_name}\n\n"
                 info_text += f"✅ Проект активирован\n\n"
                 info_text += f"{project.get_log_summary()}\n\n"
                 info_text += "Что вы хотите сделать?"
 
                 await query.edit_message_text(
                     info_text,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
+                    reply_markup=reply_markup
                 )
             else:
                 await query.edit_message_text("❌ Ошибка загрузки проекта")
@@ -5911,7 +6191,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ Модуль проектов недоступен", show_alert=True)
     elif query.data.startswith("proj_files_"):
-        # Файлы проекта
+        # Файлы проекта — список с кнопками скачивания
         if PROJECTS_AVAILABLE:
             project_name = query.data.replace("proj_files_", "")
             user_id = update.effective_user.id
@@ -5920,44 +6200,114 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if project:
                 files = project.list_files()
 
-                keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
                 if not files:
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
                     await query.edit_message_text(
                         "📁 В проекте пока нет файлов\n\n"
-                        "Отправьте файл с подписью для добавления в проект",
+                        "Отправьте файл боту для добавления в проект",
                         reply_markup=reply_markup
                     )
                 else:
-                    response = f"📁 **ФАЙЛЫ ПРОЕКТА: {project_name}**\n\n"
+                    response = f"📁 ФАЙЛЫ ПРОЕКТА: {project_name}\n\n"
                     response += f"Всего файлов: {len(files)}\n\n"
 
+                    # Кнопки для каждого файла (скачать)
+                    keyboard = []
                     for i, file_info in enumerate(files, 1):
                         name = file_info["original_name"]
-                        size_mb = file_info["size_bytes"] / 1024 / 1024
-                        file_type = file_info["type"]
-                        response += f"{i}. {name}\n"
-                        response += f"   Тип: {file_type} | Размер: {size_mb:.2f} МБ\n\n"
+                        size_kb = file_info["size_bytes"] / 1024
+                        ftype = file_info["type"]
+                        file_id = file_info["id"]
+
+                        # Иконки по типу
+                        if 'pdf' in ftype.lower():
+                            icon = "📄"
+                        elif 'image' in ftype.lower() or ftype.lower().startswith('image'):
+                            icon = "🖼️"
+                        elif 'spreadsheet' in ftype.lower() or 'excel' in ftype.lower() or ftype.lower().endswith(('xlsx', 'xls')):
+                            icon = "📊"
+                        elif 'word' in ftype.lower() or ftype.lower().endswith(('docx', 'doc')):
+                            icon = "📝"
+                        elif 'zip' in ftype.lower():
+                            icon = "📦"
+                        else:
+                            icon = "📎"
+
+                        if size_kb >= 1024:
+                            size_str = f"{size_kb/1024:.1f} МБ"
+                        else:
+                            size_str = f"{size_kb:.0f} КБ"
+
+                        response += f"{i}. {icon} {name} ({size_str})\n"
+
+                        # Кнопка скачивания для файла
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                f"📥 {name[:30]}{'...' if len(name) > 30 else ''}",
+                                callback_data=f"file_dl_{project_name}_{file_id}"
+                            )
+                        ])
+
+                    keyboard.append([InlineKeyboardButton("« Назад", callback_data=f"proj_open_{project_name}")])
+                    reply_markup = InlineKeyboardMarkup(keyboard)
 
                     await query.edit_message_text(
                         response,
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
+                        reply_markup=reply_markup
                     )
             else:
                 await query.edit_message_text("❌ Ошибка загрузки проекта")
         else:
             await query.edit_message_text("⚠️ Модуль проектов недоступен.")
+
+    elif query.data.startswith("file_dl_"):
+        # Скачивание файла из проекта
+        if PROJECTS_AVAILABLE:
+            # Парсим: file_dl_{project_name}_{file_id}
+            parts = query.data[len("file_dl_"):].rsplit("_", 1)
+            if len(parts) == 2:
+                project_name, file_id = parts
+                user_id = update.effective_user.id
+                project = load_project(user_id, project_name)
+
+                if project:
+                    file_path = project.get_file_path(file_id)
+                    if file_path and os.path.exists(file_path):
+                        # Находим оригинальное имя
+                        original_name = None
+                        for f in project.list_files():
+                            if f["id"] == file_id:
+                                original_name = f["original_name"]
+                                break
+
+                        try:
+                            await query.answer("📥 Отправляю файл...")
+                            with open(file_path, 'rb') as f:
+                                await query.message.reply_document(
+                                    document=f,
+                                    filename=original_name or os.path.basename(file_path),
+                                    caption=f"📁 Из проекта: {project_name}"
+                                )
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки файла: {e}")
+                            await query.answer("❌ Не удалось отправить файл", show_alert=True)
+                    else:
+                        await query.answer("❌ Файл не найден на диске", show_alert=True)
+                else:
+                    await query.answer("❌ Проект не найден", show_alert=True)
+            else:
+                await query.answer("❌ Ошибка данных", show_alert=True)
+        else:
+            await query.answer("⚠️ Модуль проектов недоступен", show_alert=True)
     elif query.data.startswith("proj_note_"):
         # Добавление заметки
         if PROJECTS_AVAILABLE:
             project_name = query.data.replace("proj_note_", "")
             await query.edit_message_text(
-                f"📝 **ДОБАВЛЕНИЕ ЗАМЕТКИ**\n\n"
+                f"📝 ДОБАВЛЕНИЕ ЗАМЕТКИ\n\n"
                 f"Проект: {project_name}\n\n"
-                "Введите текст заметки:",
-                parse_mode="Markdown"
+                "Введите текст заметки:"
             )
             context.user_data["waiting_for_note"] = project_name
         else:

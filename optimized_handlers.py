@@ -51,18 +51,18 @@ async def handle_with_grok(
 
         messages.append({"role": "user", "content": question})
 
-        # Параметры поиска
-        search_parameters = None
+        # Инструменты поиска (Responses API с tools, search_parameters устарел с 12.01.2026)
+        search_tools = None
         if needs_web_search:
-            search_parameters = [{"type": "web_search"}]
+            search_tools = [{"type": "web_search"}]
 
         # Вызываем Grok
         response = await xai_client.chat_completions_create_async(
-            model="grok-2-latest",
+            model="grok-4-1-fast-non-reasoning",
             messages=messages,
             max_tokens=2000,
             temperature=0.7,
-            search_parameters=search_parameters
+            tools=search_tools
         )
 
         answer = response["choices"][0]["message"]["content"]

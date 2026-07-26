@@ -49,8 +49,17 @@ async def init_db():
                     content TEXT NOT NULL,
                     timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
                     image_analyzed BOOLEAN DEFAULT FALSE,
-                    tags TEXT[] DEFAULT '{}'
+                    tags TEXT[] DEFAULT '{}',
+                    project TEXT DEFAULT ''
                 )
+            ''')
+
+            # Миграция: добавляем колонку project если её нет
+            await conn.execute('''
+                DO $$ BEGIN
+                    ALTER TABLE messages ADD COLUMN project TEXT DEFAULT '';
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
             ''')
 
             # Индексы для быстрого поиска
@@ -58,6 +67,7 @@ async def init_db():
                 CREATE INDEX IF NOT EXISTS idx_user_id ON messages(user_id);
                 CREATE INDEX IF NOT EXISTS idx_timestamp ON messages(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_tags ON messages USING GIN(tags);
+                CREATE INDEX IF NOT EXISTS idx_project ON messages(project);
             ''')
 
         logger.info("✅ PostgreSQL база данных инициализирована")
@@ -73,7 +83,8 @@ async def save_message(
     role: str,
     content: str,
     image_analyzed: bool = False,
-    tags: List[str] = None
+    tags: List[str] = None,
+    project: str = ""
 ):
     """
     Сохранить сообщение в БД
@@ -84,9 +95,9 @@ async def save_message(
     try:
         async with pool.acquire() as conn:
             await conn.execute(
-                '''INSERT INTO messages (user_id, role, content, image_analyzed, tags)
-                   VALUES ($1, $2, $3, $4, $5)''',
-                user_id, role, content, image_analyzed, tags or []
+                '''INSERT INTO messages (user_id, role, content, image_analyzed, tags, project)
+                   VALUES ($1, $2, $3, $4, $5, $6)''',
+                user_id, role, content, image_analyzed, tags or [], project
             )
         return True
     except Exception as e:
