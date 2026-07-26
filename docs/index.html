@@ -1,730 +1,1595 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>СтройНадзорAI — AI-ассистент по строительным нормативам</title>
-    <meta name="description" content="Telegram-бот с искусственным интеллектом для консультаций по строительным нормативам, анализа дефектов и технического надзора.">
-    <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>СтройНадзорAI — калькуляторы, нормативы, чек-листы</title>
+<meta name="description" content="Профессиональная платформа технического надзора: строительные калькуляторы, справочник СП/ГОСТ/СНиП, чек-листы проверки работ и AI-бот в Telegram.">
+<meta name="theme-color" content="#1B3557">
+<style>
+/* =========================================================
+   DESIGN TOKENS
+   ========================================================= */
+:root {
+  --primary: #1B3557;
+  --primary-mid: #254876;
+  --accent: #E86A2E;
+  --accent-hover: #D45A1F;
+  --cyan: #2B7A9E;
+  --cyan-light: #3A9BC2;
+  --patina: #4A8B6E;
+  --warning: #C98A1F;
+  --danger: #C1443A;
+  --ground: #F5F2EE;
+  --ground-alt: #EBE7E1;
+  --card: #FFFFFF;
+  --card-border: #D8D3CC;
+  --input-bg: #FFFFFF;
+  --text: #2D3640;
+  --text-secondary: #5E6B78;
+  --text-inv: #F0EDE9;
+  --hero-start: #142840;
+  --hero-end: #1B3557;
+  --footer-bg: #111B27;
+  --shadow-card: 0 2px 8px rgba(27,53,87,0.07);
+  --shadow-card-hover: 0 8px 24px rgba(27,53,87,0.12);
+  --radius: 6px;
+  --radius-lg: 10px;
+  --max-w: 1180px;
+  --font: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
   :root {
-    --primary: #1B3557;
-    --primary-mid: #254876;
-    --accent: #E86A2E;
-    --accent-hover: #D45A1F;
-    --cyan: #2B7A9E;
-    --cyan-light: #3A9BC2;
-    --patina: #4A8B6E;
-    --ground: #F5F2EE;
-    --ground-alt: #EBE7E1;
-    --card: #FFFFFF;
-    --card-border: #D8D3CC;
-    --text: #2D3640;
-    --text-secondary: #5E6B78;
-    --text-inv: #F0EDE9;
-    --hero-start: #142840;
-    --hero-end: #1B3557;
-    --footer-bg: #111B27;
-    --shadow-card: 0 2px 8px rgba(27,53,87,0.07);
-    --shadow-card-hover: 0 8px 24px rgba(27,53,87,0.12);
-    --radius: 6px;
-    --radius-lg: 10px;
-    --max-w: 1080px;
-    --font: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --ground: #16202C; --ground-alt: #1C2836; --card: #1E2A38; --card-border: #2E3E50;
+    --input-bg: #16202C; --text: #D4DBE3; --text-secondary: #8B99A8; --text-inv: #D4DBE3;
+    --hero-start: #0C1520; --hero-end: #142840; --footer-bg: #0A1018;
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.25); --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.35);
+    --warning: #D9A441;
   }
+}
+:root[data-theme="dark"] {
+  --ground: #16202C; --ground-alt: #1C2836; --card: #1E2A38; --card-border: #2E3E50;
+  --input-bg: #16202C; --text: #D4DBE3; --text-secondary: #8B99A8; --text-inv: #D4DBE3;
+  --hero-start: #0C1520; --hero-end: #142840; --footer-bg: #0A1018;
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.25); --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.35);
+  --warning: #D9A441;
+}
+:root[data-theme="light"] {
+  --ground: #F5F2EE; --ground-alt: #EBE7E1; --card: #FFFFFF; --card-border: #D8D3CC;
+  --input-bg: #FFFFFF; --text: #2D3640; --text-secondary: #5E6B78; --text-inv: #F0EDE9;
+  --hero-start: #142840; --hero-end: #1B3557; --footer-bg: #111B27;
+  --shadow-card: 0 2px 8px rgba(27,53,87,0.07); --shadow-card-hover: 0 8px 24px rgba(27,53,87,0.12);
+  --warning: #C98A1F;
+}
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ground: #16202C;
-      --ground-alt: #1C2836;
-      --card: #1E2A38;
-      --card-border: #2E3E50;
-      --text: #D4DBE3;
-      --text-secondary: #8B99A8;
-      --text-inv: #D4DBE3;
-      --hero-start: #0C1520;
-      --hero-end: #142840;
-      --footer-bg: #0A1018;
-      --shadow-card: 0 2px 8px rgba(0,0,0,0.25);
-      --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.35);
-    }
-  }
-  :root[data-theme="dark"] {
-    --ground: #16202C;
-    --ground-alt: #1C2836;
-    --card: #1E2A38;
-    --card-border: #2E3E50;
-    --text: #D4DBE3;
-    --text-secondary: #8B99A8;
-    --text-inv: #D4DBE3;
-    --hero-start: #0C1520;
-    --hero-end: #142840;
-    --footer-bg: #0A1018;
-    --shadow-card: 0 2px 8px rgba(0,0,0,0.25);
-    --shadow-card-hover: 0 8px 24px rgba(0,0,0,0.35);
-  }
-  :root[data-theme="light"] {
-    --ground: #F5F2EE;
-    --ground-alt: #EBE7E1;
-    --card: #FFFFFF;
-    --card-border: #D8D3CC;
-    --text: #2D3640;
-    --text-secondary: #5E6B78;
-    --text-inv: #F0EDE9;
-    --hero-start: #142840;
-    --hero-end: #1B3557;
-    --footer-bg: #111B27;
-    --shadow-card: 0 2px 8px rgba(27,53,87,0.07);
-    --shadow-card-hover: 0 8px 24px rgba(27,53,87,0.12);
-  }
+/* =========================================================
+   BASE / RESET
+   ========================================================= */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--ground);
+  color: var(--text);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+button { font-family: inherit; }
+::selection { background: rgba(232,106,46,0.25); }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  body {
-    font-family: var(--font);
-    background: var(--ground);
-    color: var(--text);
-    line-height: 1.65;
-    -webkit-font-smoothing: antialiased;
-  }
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--hero-start);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+}
+.nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
+.nav-brand {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--text-inv);
+  font-weight: 700; font-size: 1.02rem; letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+.nav-mark {
+  width: 32px; height: 32px; background: var(--accent); border-radius: 7px;
+  display: grid; place-items: center; font-size: 0.9rem; line-height: 1; color: #fff; font-weight: 800;
+}
+.nav-links { display: flex; gap: 4px; list-style: none; align-items: center; }
+.nav-links a {
+  color: rgba(240,237,233,0.65); text-decoration: none; font-size: 0.82rem; font-weight: 600;
+  letter-spacing: 0.02em; text-transform: uppercase; padding: 8px 13px; border-radius: var(--radius);
+  transition: color 0.2s, background 0.2s; display: inline-block; position: relative; white-space: nowrap;
+}
+.nav-links a:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.nav-links a[aria-current="page"] { color: #fff; background: rgba(232,106,46,0.18); }
+.nav-links a[aria-current="page"]::after {
+  content: ''; position: absolute; left: 13px; right: 13px; bottom: 3px; height: 2px; background: var(--accent); border-radius: 2px;
+}
+.nav-actions { display: flex; align-items: center; gap: 8px; }
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06); color: var(--text-inv); cursor: pointer;
+  display: grid; place-items: center; font-size: 1rem; transition: background 0.2s, transform 0.15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.14); transform: translateY(-1px); }
+.hamburger {
+  display: none; width: 36px; height: 36px; border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06); cursor: pointer; flex-shrink: 0;
+  flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.hamburger span { width: 18px; height: 2px; background: var(--text-inv); border-radius: 2px; transition: transform 0.2s, opacity 0.2s; }
+.hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-  .wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 28px; }
-
-  nav {
-    position: sticky; top: 0; z-index: 50;
-    background: var(--hero-start);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    backdrop-filter: blur(12px);
-  }
-  .nav-inner {
-    display: flex; align-items: center; justify-content: space-between;
-    height: 58px;
-  }
-  .nav-brand {
-    display: flex; align-items: center; gap: 10px;
-    text-decoration: none; color: var(--text-inv);
-    font-weight: 700; font-size: 1.05rem; letter-spacing: 0.01em;
-  }
-  .nav-mark {
-    width: 32px; height: 32px;
-    background: var(--accent);
-    border-radius: 6px;
-    display: grid; place-items: center;
-    font-size: 0.95rem; line-height: 1;
-    color: #fff;
-    font-weight: 800;
-  }
+@media (max-width: 780px) {
   .nav-links {
-    display: flex; gap: 6px; list-style: none;
+    position: absolute; top: 60px; left: 0; right: 0; flex-direction: column; align-items: stretch;
+    background: var(--hero-start); border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 8px; gap: 2px; display: none; box-shadow: 0 12px 24px rgba(0,0,0,0.25);
   }
-  .nav-links a {
-    color: rgba(240,237,233,0.65);
-    text-decoration: none;
-    font-size: 0.82rem;
-    font-weight: 500;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    padding: 6px 12px;
-    border-radius: var(--radius);
-    transition: color 0.2s, background 0.2s;
-  }
-  .nav-links a:hover, .nav-links a:focus-visible {
-    color: #fff;
-    background: rgba(255,255,255,0.08);
-  }
-  @media (max-width: 700px) {
-    .nav-links { display: none; }
-  }
+  .nav-links.open { display: flex; }
+  .nav-links a { text-align: center; padding: 12px; }
+  .hamburger { display: flex; }
+}
 
-  .hero {
-    background: linear-gradient(165deg, var(--hero-start) 0%, var(--hero-end) 60%, var(--cyan) 100%);
-    color: var(--text-inv);
-    padding: 90px 0 110px;
-    position: relative;
-    overflow: hidden;
-  }
-  .hero::before {
-    content: '';
-    position: absolute; inset: 0;
-    background:
-      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.02) 39px, rgba(255,255,255,0.02) 40px),
-      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.02) 39px, rgba(255,255,255,0.02) 40px);
-    pointer-events: none;
-  }
-  .hero::after {
-    content: '';
-    position: absolute; bottom: -1px; left: 0; right: 0;
-    height: 50px;
-    background: var(--ground);
-    clip-path: polygon(0 100%, 100% 100%, 100% 0, 0 60%);
-  }
-  .hero-content {
-    position: relative; z-index: 1;
-    max-width: 680px;
-  }
-  .hero-eyebrow {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 20px;
-  }
-  .hero-eyebrow::before {
-    content: '';
-    width: 24px; height: 2px;
-    background: var(--accent);
-  }
-  .hero h1 {
-    font-size: clamp(2rem, 5vw, 3rem);
-    font-weight: 800;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    text-wrap: balance;
-    margin-bottom: 18px;
-  }
-  .hero h1 em {
-    font-style: normal;
-    color: var(--accent);
-  }
-  .hero-desc {
-    font-size: 1.05rem;
-    line-height: 1.7;
-    opacity: 0.82;
-    max-width: 560px;
-    margin-bottom: 36px;
-  }
-  .hero-actions {
-    display: flex; gap: 14px; flex-wrap: wrap;
-  }
+/* =========================================================
+   PAGE / ROUTER
+   ========================================================= */
+.page { display: none; }
+.page.active { display: block; animation: pageIn 0.35s ease; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
 
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 13px 28px;
-    border-radius: var(--radius);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 0.92rem;
-    letter-spacing: 0.01em;
-    border: none; cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
-  }
-  .btn:hover { transform: translateY(-1px); }
-  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .btn-accent {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 4px 14px rgba(232,106,46,0.35);
-  }
-  .btn-accent:hover {
-    background: var(--accent-hover);
-    box-shadow: 0 6px 20px rgba(232,106,46,0.45);
-  }
-  .btn-ghost {
-    background: rgba(255,255,255,0.08);
-    color: var(--text-inv);
-    border: 1px solid rgba(255,255,255,0.18);
-  }
-  .btn-ghost:hover { background: rgba(255,255,255,0.14); }
+section { padding: 64px 0; }
+.section-alt { background: var(--ground-alt); }
+.sec-header { margin-bottom: 40px; }
+.sec-eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.sec-title { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.015em; text-wrap: balance; color: var(--text); }
+.sec-desc { color: var(--text-secondary); font-size: 0.95rem; max-width: 560px; margin-top: 10px; }
 
-  .stats {
-    position: relative; z-index: 2;
-    margin-top: -52px;
-    margin-bottom: 60px;
-  }
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    background: var(--card);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    overflow: hidden;
-  }
-  .stat {
-    text-align: center;
-    padding: 28px 16px;
-    position: relative;
-  }
-  .stat + .stat::before {
-    content: '';
-    position: absolute; left: 0; top: 20%; height: 60%;
-    width: 1px;
-    background: var(--card-border);
-  }
-  .stat-val {
-    font-size: 1.8rem;
-    font-weight: 800;
-    color: var(--primary);
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-  }
-  @media (prefers-color-scheme: dark) { .stat-val { color: var(--cyan-light); } }
-  :root[data-theme="dark"] .stat-val { color: var(--cyan-light); }
-  :root[data-theme="light"] .stat-val { color: var(--primary); }
-  .stat-label {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 500;
-    margin-top: 4px;
-  }
-  @media (max-width: 600px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .stat:nth-child(3)::before { display: none; }
-    .stat:nth-child(n+3) { border-top: 1px solid var(--card-border); }
-  }
+/* =========================================================
+   HERO
+   ========================================================= */
+.hero {
+  background: linear-gradient(165deg, var(--hero-start) 0%, var(--hero-end) 60%, var(--cyan) 100%);
+  color: var(--text-inv); padding: 84px 0 104px; position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px);
+  pointer-events: none;
+}
+.hero::after {
+  content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 48px; background: var(--ground);
+  clip-path: polygon(0 100%, 100% 100%, 100% 0, 0 60%);
+}
+.hero-content { position: relative; z-index: 1; max-width: 720px; }
+.hero-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 20px; }
+.hero-eyebrow::before { content: ''; width: 24px; height: 2px; background: var(--accent); }
+.hero h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; margin-bottom: 18px; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero-desc { font-size: 1.05rem; line-height: 1.7; opacity: 0.85; max-width: 580px; margin-bottom: 34px; }
+.hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.mini-hero {
+  background: linear-gradient(165deg, var(--hero-start) 0%, var(--hero-end) 60%, var(--cyan) 100%);
+  color: var(--text-inv); padding: 54px 0 40px; position: relative; overflow: hidden;
+}
+.mini-hero::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px);
+  pointer-events: none;
+}
+.mini-hero-content { position: relative; z-index: 1; }
+.mini-hero h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; }
+.mini-hero p { opacity: 0.82; font-size: 1rem; max-width: 620px; }
 
-  section { padding: 70px 0; }
-  .section-alt { background: var(--ground-alt); }
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 13px 26px; border-radius: var(--radius);
+  text-decoration: none; font-weight: 600; font-size: 0.9rem; letter-spacing: 0.01em; border: none; cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-accent { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(232,106,46,0.35); }
+.btn-accent:hover { background: var(--accent-hover); box-shadow: 0 6px 20px rgba(232,106,46,0.45); }
+.btn-ghost { background: rgba(255,255,255,0.08); color: var(--text-inv); border: 1px solid rgba(255,255,255,0.18); }
+.btn-ghost:hover { background: rgba(255,255,255,0.14); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-mid); }
+.btn-outline { background: transparent; color: var(--text); border: 1px solid var(--card-border); }
+.btn-outline:hover { background: var(--ground-alt); }
+.btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn-danger-outline:hover { background: rgba(193,68,58,0.1); }
+.btn-sm { padding: 8px 14px; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-  .sec-header { margin-bottom: 44px; }
-  .sec-eyebrow {
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 8px;
-  }
-  .sec-title {
-    font-size: 1.65rem;
-    font-weight: 800;
-    letter-spacing: -0.015em;
-    text-wrap: balance;
-    color: var(--text);
-  }
-  .sec-desc {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    max-width: 540px;
-    margin-top: 10px;
-  }
+/* =========================================================
+   STATS BAR
+   ========================================================= */
+.stats { position: relative; z-index: 2; margin-top: -50px; margin-bottom: 56px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; }
+.stat { text-align: center; padding: 26px 14px; position: relative; }
+.stat + .stat::before { content: ''; position: absolute; left: 0; top: 20%; height: 60%; width: 1px; background: var(--card-border); }
+.stat-val { font-size: 1.7rem; font-weight: 800; color: var(--cyan-light); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root[data-theme="light"] .stat-val, :root:not([data-theme]) .stat-val { color: var(--primary); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .stat-val { color: var(--cyan-light); } }
+:root[data-theme="dark"] .stat-val { color: var(--cyan-light); }
+.stat-label { font-size: 0.76rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-top: 4px; }
+@media (max-width: 600px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat:nth-child(3)::before { display: none; }
+  .stat:nth-child(n+3) { border-top: 1px solid var(--card-border); }
+}
 
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 18px;
-  }
-  .f-card {
-    background: var(--card);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-lg);
-    padding: 28px 26px;
-    position: relative;
-    transition: box-shadow 0.2s, transform 0.2s;
-    overflow: hidden;
-  }
-  .f-card::before {
-    content: '';
-    position: absolute; left: 0; top: 0; bottom: 0;
-    width: 3px;
-    background: var(--cyan);
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-  .f-card:hover {
-    box-shadow: var(--shadow-card-hover);
-    transform: translateY(-2px);
-  }
-  .f-card:hover::before { opacity: 1; }
-  .f-icon {
-    width: 40px; height: 40px;
-    border-radius: 8px;
-    background: var(--ground-alt);
-    display: grid; place-items: center;
-    font-size: 1.15rem;
-    margin-bottom: 16px;
-  }
-  @media (prefers-color-scheme: dark) { .f-icon { background: rgba(43,122,158,0.12); } }
-  :root[data-theme="dark"] .f-icon { background: rgba(43,122,158,0.12); }
-  :root[data-theme="light"] .f-icon { background: var(--ground-alt); }
-  .f-card h3 {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: var(--text);
-  }
-  .f-card p {
-    font-size: 0.88rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-  }
+/* =========================================================
+   CARDS (generic)
+   ========================================================= */
+.card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+  padding: 26px 24px; transition: box-shadow 0.2s, transform 0.2s;
+}
+.features-grid, .qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.f-card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+  padding: 28px 26px; position: relative; transition: box-shadow 0.2s, transform 0.2s; overflow: hidden;
+}
+.f-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--cyan); opacity: 0; transition: opacity 0.2s; }
+.f-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
+.f-card:hover::before { opacity: 1; }
+.f-icon { width: 42px; height: 42px; border-radius: 9px; background: var(--ground-alt); display: grid; place-items: center; font-size: 1.2rem; margin-bottom: 16px; }
+:root[data-theme="dark"] .f-icon { background: rgba(43,122,158,0.12); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .f-icon { background: rgba(43,122,158,0.12); } }
+.f-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+.f-card p { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
 
-  .models-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-  }
-  @media (max-width: 820px) { .models-grid { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 500px) { .models-grid { grid-template-columns: 1fr; } }
-  .m-card {
-    background: var(--card);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-lg);
-    padding: 24px 20px;
-    text-align: center;
-    transition: box-shadow 0.2s, transform 0.2s;
-  }
-  .m-card:hover {
-    box-shadow: var(--shadow-card-hover);
-    transform: translateY(-2px);
-  }
-  .m-logo {
-    font-size: 1.6rem;
-    margin-bottom: 10px;
-    opacity: 0.85;
-  }
-  .m-card h3 {
-    font-size: 0.92rem;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .m-card p {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.55;
-    margin-bottom: 12px;
-  }
-  .m-tag {
-    display: inline-block;
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    padding: 3px 10px;
-    border-radius: 20px;
-  }
-  .tag-orange { background: rgba(232,106,46,0.12); color: var(--accent); }
-  .tag-blue { background: rgba(27,53,87,0.1); color: var(--primary-mid); }
-  .tag-purple { background: rgba(124,78,182,0.1); color: #7C4EB6; }
-  .tag-green { background: rgba(74,139,110,0.1); color: var(--patina); }
-  @media (prefers-color-scheme: dark) {
-    .tag-blue { background: rgba(43,122,158,0.15); color: var(--cyan-light); }
-  }
-  :root[data-theme="dark"] .tag-blue { background: rgba(43,122,158,0.15); color: var(--cyan-light); }
-  :root[data-theme="light"] .tag-blue { background: rgba(27,53,87,0.1); color: var(--primary-mid); }
+.qa-card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+  padding: 26px; text-decoration: none; color: var(--text); display: block; position: relative;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s; overflow: hidden;
+}
+.qa-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-3px); border-color: var(--accent); }
+.qa-icon { width: 46px; height: 46px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 1.3rem; margin-bottom: 16px; }
+.qa-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; }
+.qa-card p { font-size: 0.87rem; color: var(--text-secondary); line-height: 1.55; margin-bottom: 14px; }
+.qa-arrow { font-size: 0.82rem; font-weight: 700; color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }
 
-  .steps-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 32px;
-  }
-  @media (max-width: 650px) { .steps-row { grid-template-columns: 1fr; gap: 24px; } }
-  .step {
-    display: flex; gap: 16px; align-items: flex-start;
-  }
-  .step-num {
-    flex-shrink: 0;
-    width: 36px; height: 36px;
-    background: var(--primary);
-    color: #fff;
-    border-radius: 50%;
-    display: grid; place-items: center;
-    font-size: 0.85rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
-  @media (prefers-color-scheme: dark) { .step-num { background: var(--cyan); } }
-  :root[data-theme="dark"] .step-num { background: var(--cyan); }
-  :root[data-theme="light"] .step-num { background: var(--primary); }
-  .step h3 {
-    font-size: 0.95rem;
-    font-weight: 700;
-    margin-bottom: 4px;
-  }
-  .step p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.55;
-  }
+.models-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 820px) { .models-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .models-grid { grid-template-columns: 1fr; } }
+.m-card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); padding: 24px 20px; text-align: center; transition: box-shadow 0.2s, transform 0.2s; }
+.m-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-2px); }
+.m-logo { font-size: 1.6rem; margin-bottom: 10px; opacity: 0.85; }
+.m-card h3 { font-size: 0.92rem; font-weight: 700; margin-bottom: 6px; }
+.m-card p { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.55; margin-bottom: 12px; }
+.m-tag { display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 20px; }
+.tag-orange { background: rgba(232,106,46,0.12); color: var(--accent); }
+.tag-blue { background: rgba(27,53,87,0.1); color: var(--primary-mid); }
+.tag-purple { background: rgba(124,78,182,0.1); color: #7C4EB6; }
+.tag-green { background: rgba(74,139,110,0.12); color: var(--patina); }
+:root[data-theme="dark"] .tag-blue { background: rgba(43,122,158,0.15); color: var(--cyan-light); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .tag-blue { background: rgba(43,122,158,0.15); color: var(--cyan-light); } }
 
-  .cases-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-  @media (max-width: 650px) { .cases-grid { grid-template-columns: 1fr; } }
-  .case-card {
-    background: var(--card);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    display: flex; gap: 14px; align-items: flex-start;
-  }
-  .case-icon {
-    flex-shrink: 0;
-    font-size: 1.2rem;
-    margin-top: 2px;
-  }
-  .case-card h3 {
-    font-size: 0.95rem;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .case-card p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.55;
-  }
+.steps-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+@media (max-width: 650px) { .steps-row { grid-template-columns: 1fr; gap: 24px; } }
+.step { display: flex; gap: 16px; align-items: flex-start; }
+.step-num { flex-shrink: 0; width: 36px; height: 36px; background: var(--primary); color: #fff; border-radius: 50%; display: grid; place-items: center; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+:root[data-theme="dark"] .step-num { background: var(--cyan); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .step-num { background: var(--cyan); } }
+.step h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+.step p { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55; }
 
-  .cta-section {
-    background: linear-gradient(165deg, var(--hero-start) 0%, var(--hero-end) 60%, var(--cyan) 100%);
-    color: var(--text-inv);
-    text-align: center;
-    padding: 80px 28px;
-    position: relative;
-    overflow: hidden;
-  }
-  .cta-section::before {
-    content: '';
-    position: absolute; inset: 0;
-    background:
-      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
-      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
-    pointer-events: none;
-  }
-  .cta-inner { position: relative; z-index: 1; }
-  .cta-section h2 {
-    font-size: 1.8rem;
-    font-weight: 800;
-    margin-bottom: 12px;
-    text-wrap: balance;
-  }
-  .cta-section p {
-    opacity: 0.8;
-    font-size: 1rem;
-    margin-bottom: 28px;
-  }
+/* =========================================================
+   TABS
+   ========================================================= */
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+.tab-btn {
+  background: var(--card); border: 1px solid var(--card-border); color: var(--text-secondary);
+  padding: 10px 18px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.tab-btn:hover { border-color: var(--accent); color: var(--text); }
+.tab-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+:root[data-theme="dark"] .tab-btn.active { background: var(--cyan); border-color: var(--cyan); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .tab-btn.active { background: var(--cyan); border-color: var(--cyan); } }
 
-  footer {
-    background: var(--footer-bg);
-    color: rgba(240,237,233,0.5);
-    padding: 32px 0;
-    text-align: center;
-    font-size: 0.82rem;
-  }
-  .footer-links {
-    display: flex; justify-content: center; gap: 28px;
-    margin-bottom: 14px; flex-wrap: wrap; list-style: none;
-  }
-  .footer-links a {
-    color: rgba(240,237,233,0.6);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .footer-links a:hover { color: var(--accent); }
+.calc-panel { display: none; }
+.calc-panel.active { display: block; animation: pageIn 0.3s ease; }
 
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { transition: none !important; animation: none !important; }
-  }
-    </style>
+/* =========================================================
+   FORMS
+   ========================================================= */
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.field .hint { font-size: 0.74rem; color: var(--text-secondary); opacity: 0.8; margin-top: 4px; }
+input[type="text"], input[type="number"], select {
+  width: 100%; padding: 11px 13px; border-radius: var(--radius); border: 1px solid var(--card-border);
+  background: var(--input-bg); color: var(--text); font-size: 0.92rem; font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+input[type="text"]:focus, input[type="number"]:focus, select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,106,46,0.15);
+}
+input.invalid { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(193,68,58,0.15); }
+.field-error { color: var(--danger); font-size: 0.76rem; margin-top: 4px; display: none; }
+.field-error.show { display: block; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 600px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+.calc-layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr); gap: 28px; align-items: start; }
+@media (max-width: 860px) { .calc-layout { grid-template-columns: 1fr; } }
+
+.result-box {
+  background: var(--ground-alt); border: 1px solid var(--card-border); border-left: 4px solid var(--accent);
+  border-radius: var(--radius); padding: 22px; min-height: 120px;
+}
+.result-box.empty { display: flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: 0.88rem; text-align: center; }
+.result-row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--card-border); gap: 12px; }
+.result-row:last-child { border-bottom: none; }
+.result-row .r-label { font-size: 0.85rem; color: var(--text-secondary); }
+.result-row .r-val { font-size: 1rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+.result-row .r-val.big { font-size: 1.35rem; color: var(--accent); }
+.result-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 12px; }
+
+.mix-table-wrap { overflow-x: auto; margin-top: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+thead th {
+  text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary);
+  padding: 10px 12px; border-bottom: 2px solid var(--card-border); white-space: nowrap;
+}
+tbody td { padding: 11px 12px; border-bottom: 1px solid var(--card-border); vertical-align: middle; }
+tbody tr:hover { background: var(--ground-alt); }
+tbody tr:last-child td { border-bottom: none; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge-ok { background: rgba(74,139,110,0.14); color: var(--patina); }
+.badge-upd { background: rgba(201,138,31,0.14); color: var(--warning); }
+.badge-replaced { background: rgba(193,68,58,0.14); color: var(--danger); }
+
+/* =========================================================
+   REFERENCE PAGE
+   ========================================================= */
+.search-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.search-box { position: relative; flex: 1; min-width: 240px; }
+.search-box input { padding-left: 40px; }
+.search-box .icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); opacity: 0.5; pointer-events: none; }
+.ref-count { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; }
+.table-card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+.table-card .table-scroll { overflow-x: auto; }
+.no-results { padding: 40px 20px; text-align: center; color: var(--text-secondary); font-size: 0.9rem; }
+.doc-num { font-weight: 700; color: var(--primary); white-space: nowrap; }
+:root[data-theme="dark"] .doc-num { color: var(--cyan-light); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .doc-num { color: var(--cyan-light); } }
+
+/* =========================================================
+   CHECKLIST PAGE
+   ========================================================= */
+.progress-overall { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); padding: 22px 24px; margin-bottom: 28px; box-shadow: var(--shadow-card); }
+.progress-overall-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
+.progress-overall-head h3 { font-size: 1rem; font-weight: 700; }
+.progress-overall-actions { display: flex; gap: 10px; }
+.progress-track { width: 100%; height: 10px; border-radius: 6px; background: var(--ground-alt); overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--cyan), var(--patina)); transition: width 0.3s ease; }
+.progress-pct { font-size: 0.85rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.accordion { display: flex; flex-direction: column; gap: 12px; }
+.accordion-item { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); overflow: hidden; }
+.accordion-header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 18px 22px; background: transparent; border: none; cursor: pointer; text-align: left; color: var(--text);
+}
+.accordion-header:hover { background: var(--ground-alt); }
+.accordion-header-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.accordion-title { font-size: 0.98rem; font-weight: 700; }
+.accordion-sub { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+.accordion-mini-track { width: 90px; height: 6px; border-radius: 4px; background: var(--ground-alt); overflow: hidden; flex-shrink: 0; }
+.accordion-mini-fill { height: 100%; background: var(--cyan); border-radius: 4px; transition: width 0.3s ease; }
+.accordion-chevron { flex-shrink: 0; transition: transform 0.25s ease; color: var(--text-secondary); }
+.accordion-item.open .accordion-chevron { transform: rotate(180deg); }
+.accordion-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.accordion-item.open .accordion-body { max-height: 1200px; }
+.accordion-list { padding: 4px 22px 20px; display: flex; flex-direction: column; gap: 2px; }
+
+.chk-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px; border-radius: var(--radius); cursor: pointer; }
+.chk-item:hover { background: var(--ground-alt); }
+.chk-item input[type="checkbox"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chk-box {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 5px; border: 2px solid var(--card-border);
+  display: grid; place-items: center; margin-top: 1px; transition: background 0.15s, border-color 0.15s;
+}
+.chk-item input:checked ~ .chk-box { background: var(--patina); border-color: var(--patina); }
+.chk-box svg { opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.15s; }
+.chk-item input:checked ~ .chk-box svg { opacity: 1; transform: scale(1); }
+.chk-item input:focus-visible ~ .chk-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chk-text { font-size: 0.9rem; line-height: 1.5; }
+.chk-item input:checked ~ .chk-text { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: var(--patina); }
+
+/* =========================================================
+   COST TABLE (materials calculator)
+   ========================================================= */
+.cost-table input { padding: 8px 10px; font-size: 0.86rem; }
+.cost-table td { padding: 8px 8px; }
+.cost-table .row-total { font-weight: 700; white-space: nowrap; }
+.cost-table .row-del { background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; }
+.cost-table .row-del:hover { background: rgba(193,68,58,0.1); }
+.cost-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; flex-wrap: wrap; gap: 10px; }
+.cost-grand { text-align: right; font-size: 1.1rem; font-weight: 800; padding: 18px 22px; background: var(--ground-alt); border-radius: var(--radius); margin-top: 4px; }
+.cost-grand span { color: var(--accent); font-size: 1.3rem; margin-left: 8px; }
+
+/* =========================================================
+   BOT PAGE
+   ========================================================= */
+.bot-hero { text-align: center; padding-bottom: 30px; }
+.bot-avatar {
+  width: 88px; height: 88px; border-radius: 22px; background: var(--accent); color: #fff; font-size: 2.2rem; font-weight: 800;
+  display: grid; place-items: center; margin: 0 auto 22px; box-shadow: 0 8px 26px rgba(232,106,46,0.4);
+}
+.bot-hero h1 { text-align: center; }
+.bot-hero .hero-desc { margin-left: auto; margin-right: auto; text-align: center; }
+.bot-hero .hero-actions { justify-content: center; }
+
+/* =========================================================
+   CTA / FOOTER
+   ========================================================= */
+.cta-section {
+  background: linear-gradient(165deg, var(--hero-start) 0%, var(--hero-end) 60%, var(--cyan) 100%);
+  color: var(--text-inv); text-align: center; padding: 76px 28px; position: relative; overflow: hidden;
+}
+.cta-section::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
+  pointer-events: none;
+}
+.cta-inner { position: relative; z-index: 1; }
+.cta-section h2 { font-size: 1.8rem; font-weight: 800; margin-bottom: 12px; text-wrap: balance; }
+.cta-section p { opacity: 0.8; font-size: 1rem; margin-bottom: 28px; }
+
+footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32px 0; text-align: center; font-size: 0.82rem; }
+.footer-links { display: flex; justify-content: center; gap: 28px; margin-bottom: 14px; flex-wrap: wrap; list-style: none; }
+.footer-links a { color: rgba(240,237,233,0.6); text-decoration: none; transition: color 0.2s; }
+.footer-links a:hover { color: var(--accent); }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--primary); color: #fff; padding: 12px 22px; border-radius: var(--radius); font-size: 0.86rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 200;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
 </head>
 <body>
 
 <nav>
   <div class="wrap nav-inner">
-    <a href="#" class="nav-brand">
-      <span class="nav-mark">CH</span>
+    <a href="#home" class="nav-brand">
+      <span class="nav-mark">СН</span>
       <span>СтройНадзорAI</span>
     </a>
-    <ul class="nav-links">
-      <li><a href="#features">Возможности</a></li>
-      <li><a href="#models">AI модели</a></li>
-      <li><a href="#start">Начать</a></li>
-      <li><a href="https://github.com/AntonKuznetsov1911/StroiNadzorAI">GitHub</a></li>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#home" data-route="home">Главная</a></li>
+      <li><a href="#calc" data-route="calc">Калькуляторы</a></li>
+      <li><a href="#reference" data-route="reference">Справочник</a></li>
+      <li><a href="#checklist" data-route="checklist">Чек-листы</a></li>
+      <li><a href="#bot" data-route="bot">Telegram-бот</a></li>
     </ul>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему">
+        <span id="themeIcon" aria-hidden="true">&#9789;</span>
+      </button>
+      <button class="hamburger" id="hamburger" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="navLinks">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
 
-<section class="hero">
-  <div class="wrap hero-content">
-    <div class="hero-eyebrow">Telegram-бот</div>
-    <h1>Технический надзор<br>с <em>искусственным интеллектом</em></h1>
-    <p class="hero-desc">Консультации по СП, ГОСТ, СНиП. Анализ дефектов по фото. Генерация чертежей. Работа с документами. Четыре AI-модели, подобранные под каждую задачу.</p>
-    <div class="hero-actions">
-      <a href="https://t.me/stroinadzor_ai_bot" class="btn btn-accent">Открыть в Telegram</a>
-      <a href="https://github.com/AntonKuznetsov1911/StroiNadzorAI" class="btn btn-ghost">Исходный код</a>
+<!-- =========================================================
+     PAGE: HOME
+     ========================================================= -->
+<main id="page-home" class="page">
+  <section class="hero">
+    <div class="wrap hero-content">
+      <div class="hero-eyebrow">Технический надзор</div>
+      <h1>Инструменты стройконтроля <em>с искусственным интеллектом</em></h1>
+      <p class="hero-desc">Калькуляторы материалов, актуальный справочник нормативов, чек-листы приёмки работ и AI-консультант в Telegram — всё в одной платформе для инженеров, прорабов и проектировщиков.</p>
+      <div class="hero-actions">
+        <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть Telegram-бота</a>
+        <a href="#calc" class="btn btn-ghost">Перейти к калькуляторам</a>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<div class="wrap stats">
-  <div class="stats-grid">
-    <div class="stat"><div class="stat-val">4</div><div class="stat-label">AI модели</div></div>
-    <div class="stat"><div class="stat-val">15+</div><div class="stat-label">форматов файлов</div></div>
-    <div class="stat"><div class="stat-val">6 400+</div><div class="stat-label">строк кода</div></div>
-    <div class="stat"><div class="stat-val">24/7</div><div class="stat-label">доступность</div></div>
+  <div class="wrap stats">
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-val">4</div><div class="stat-label">AI модели</div></div>
+      <div class="stat"><div class="stat-val">15+</div><div class="stat-label">форматов файлов</div></div>
+      <div class="stat"><div class="stat-val">6 400+</div><div class="stat-label">строк кода</div></div>
+      <div class="stat"><div class="stat-val">24/7</div><div class="stat-label">доступность</div></div>
+    </div>
   </div>
-</div>
 
-<section id="features">
-  <div class="wrap">
-    <div class="sec-header">
-      <div class="sec-eyebrow">Возможности</div>
-      <h2 class="sec-title">Полный набор инструментов для стройки</h2>
-      <p class="sec-desc">От консультации по нормативу до генерации чертежа — всё в одном боте.</p>
-    </div>
-    <div class="features-grid">
-      <div class="f-card">
-        <div class="f-icon">&#128218;</div>
-        <h3>Консультации по нормативам</h3>
-        <p>Ответы по СП, ГОСТ, СНиП, ФЗ и другим нормативным документам. Поиск актуальных редакций через интернет в реальном времени.</p>
+  <section>
+    <div class="wrap">
+      <div class="sec-header">
+        <div class="sec-eyebrow">Быстрый доступ</div>
+        <h2 class="sec-title">Что внутри платформы</h2>
+        <p class="sec-desc">Четыре раздела для повседневных задач технадзора — без установки приложений и регистрации.</p>
       </div>
-      <div class="f-card">
-        <div class="f-icon">&#128247;</div>
-        <h3>Анализ дефектов по фото</h3>
-        <p>Отправьте фотографию дефекта — AI определит тип, критичность, ссылки на нормативы и рекомендации по устранению.</p>
-      </div>
-      <div class="f-card">
-        <div class="f-icon">&#128196;</div>
-        <h3>Работа с документами</h3>
-        <p>Анализ PDF, DOCX, XLSX, изображений, ZIP-архивов, CAD-файлов и других форматов. Извлечение и структурирование данных.</p>
-      </div>
-      <div class="f-card">
-        <div class="f-icon">&#128736;</div>
-        <h3>Управление проектами</h3>
-        <p>Создание проектов, хранение файлов, чек-листы, отслеживание замечаний и формирование отчётов.</p>
-      </div>
-      <div class="f-card">
-        <div class="f-icon">&#128295;</div>
-        <h3>Строительные калькуляторы</h3>
-        <p>Расчёт бетона, арматуры, кирпичной кладки, стоимости материалов и другие инженерные вычисления.</p>
-      </div>
-      <div class="f-card">
-        <div class="f-icon">&#127912;</div>
-        <h3>Генерация чертежей</h3>
-        <p>Технические чертежи и схемы через Gemini Vision AI с соблюдением ГОСТ и указанием размеров.</p>
+      <div class="qa-grid">
+        <a href="#calc" class="qa-card">
+          <div class="qa-icon">&#128207;</div>
+          <h3>Калькуляторы</h3>
+          <p>Бетон, арматура, кирпичная кладка и смета материалов — точные расчёты по строительным формулам.</p>
+          <span class="qa-arrow">Рассчитать &rarr;</span>
+        </a>
+        <a href="#reference" class="qa-card">
+          <div class="qa-icon">&#128218;</div>
+          <h3>Справочник норм</h3>
+          <p>СП, ГОСТ, СНиП и федеральные законы с поиском и фильтрацией по статусу актуальности.</p>
+          <span class="qa-arrow">Найти норматив &rarr;</span>
+        </a>
+        <a href="#checklist" class="qa-card">
+          <div class="qa-icon">&#9989;</div>
+          <h3>Чек-листы</h3>
+          <p>Пошаговые проверки по этапам строительства с отслеживанием прогресса и экспортом отчёта.</p>
+          <span class="qa-arrow">Открыть чек-лист &rarr;</span>
+        </a>
+        <a href="#bot" class="qa-card">
+          <div class="qa-icon">&#9993;</div>
+          <h3>Telegram-бот</h3>
+          <p>AINadzorBot — AI-консультации по нормативам, анализ дефектов по фото и работа с документами.</p>
+          <span class="qa-arrow">Открыть бота &rarr;</span>
+        </a>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section id="models" class="section-alt">
-  <div class="wrap">
-    <div class="sec-header">
-      <div class="sec-eyebrow">AI модели</div>
-      <h2 class="sec-title">Мультимодельная архитектура</h2>
-      <p class="sec-desc">Каждый запрос направляется к модели, которая решит его лучше остальных.</p>
+  <section class="section-alt">
+    <div class="wrap">
+      <div class="sec-header">
+        <div class="sec-eyebrow">Возможности</div>
+        <h2 class="sec-title">Полный набор инструментов для стройки</h2>
+        <p class="sec-desc">От расчёта материалов до консультации по нормативу — всё в одном месте.</p>
+      </div>
+      <div class="features-grid">
+        <div class="f-card">
+          <div class="f-icon">&#128736;</div>
+          <h3>Строительные калькуляторы</h3>
+          <p>Расчёт бетона, арматуры, кирпичной кладки и стоимости материалов с готовыми формулами и пропорциями.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128218;</div>
+          <h3>Актуальные нормативы</h3>
+          <p>Поиск по СП, ГОСТ, СНиП и ФЗ с указанием статуса документа: действующий, актуализирован или заменён.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#9989;</div>
+          <h3>Чек-листы приёмки</h3>
+          <p>Контрольные списки по этапам работ с сохранением прогресса локально и экспортом в текстовый отчёт.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128247;</div>
+          <h3>Анализ дефектов по фото</h3>
+          <p>Отправьте фото дефекта в Telegram-боте — AI определит тип, критичность и ссылки на нормативы.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128196;</div>
+          <h3>Работа с документами</h3>
+          <p>Бот анализирует PDF, DOCX, XLSX, изображения, CAD-файлы и другие форматы — более 15 типов.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#127908;</div>
+          <h3>Голосовой ввод</h3>
+          <p>Распознавание голосовых сообщений на русском языке через Whisper и Vosk прямо в чате.</p>
+        </div>
+      </div>
     </div>
-    <div class="models-grid">
-      <div class="m-card">
-        <div class="m-logo">&#9889;</div>
-        <h3>xAI Grok 4.1</h3>
-        <p>Быстрые ответы, веб-поиск, классификация запросов</p>
-        <span class="m-tag tag-orange">Web + X Search</span>
-      </div>
-      <div class="m-card">
-        <div class="m-logo">&#129302;</div>
-        <h3>Claude Sonnet</h3>
-        <p>Глубокий технический анализ, экспертные консультации</p>
-        <span class="m-tag tag-blue">Тех. анализ</span>
-      </div>
-      <div class="m-card">
-        <div class="m-logo">&#128142;</div>
-        <h3>Gemini 2.5 Flash</h3>
-        <p>Анализ фото дефектов, генерация технических изображений</p>
-        <span class="m-tag tag-purple">Vision + Image</span>
-      </div>
-      <div class="m-card">
-        <div class="m-logo">&#127908;</div>
-        <h3>Whisper / Vosk</h3>
-        <p>Распознавание голосовых на русском языке</p>
-        <span class="m-tag tag-green">Голос</span>
-      </div>
-    </div>
-  </div>
-</section>
+  </section>
 
-<section id="start">
-  <div class="wrap">
-    <div class="sec-header">
-      <div class="sec-eyebrow">Быстрый старт</div>
-      <h2 class="sec-title">Как начать</h2>
+  <section class="cta-section">
+    <div class="cta-inner">
+      <h2>Попробуйте прямо сейчас</h2>
+      <p>Бесплатный AI-бот, доступен круглосуточно в Telegram</p>
+      <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Начать в Telegram</a>
     </div>
-    <div class="steps-row">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div>
-          <h3>Откройте бота</h3>
-          <p>Найдите @stroinadzor_ai_bot в Telegram или нажмите кнопку выше.</p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div>
-          <h3>Задайте вопрос</h3>
-          <p>Текст, фото дефекта, документ или голосовое сообщение.</p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div>
-          <h3>Получите ответ</h3>
-          <p>AI подберёт модель и даст экспертный ответ со ссылками на нормативы.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+  </section>
+</main>
 
-<section class="section-alt">
-  <div class="wrap">
-    <div class="sec-header">
-      <div class="sec-eyebrow">Применение</div>
-      <h2 class="sec-title">Для кого</h2>
+<!-- =========================================================
+     PAGE: CALCULATORS
+     ========================================================= -->
+<main id="page-calc" class="page">
+  <section class="mini-hero">
+    <div class="wrap mini-hero-content">
+      <h1>Строительные калькуляторы</h1>
+      <p>Точные расчёты материалов по стандартным строительным формулам. Введите параметры и получите готовый результат.</p>
     </div>
-    <div class="cases-grid">
-      <div class="case-card">
-        <div class="case-icon">&#128119;</div>
-        <div>
-          <h3>Инженеры строительного надзора</h3>
-          <p>Консультации по нормативам на площадке. Фиксация дефектов с AI-анализом и формирование предписаний.</p>
-        </div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="tabs" role="tablist" aria-label="Калькуляторы">
+        <button class="tab-btn active" data-calc="concrete" role="tab" aria-selected="true">Бетон</button>
+        <button class="tab-btn" data-calc="rebar" role="tab" aria-selected="false">Арматура</button>
+        <button class="tab-btn" data-calc="brick" role="tab" aria-selected="false">Кирпичная кладка</button>
+        <button class="tab-btn" data-calc="cost" role="tab" aria-selected="false">Стоимость материалов</button>
       </div>
-      <div class="case-card">
-        <div class="case-icon">&#128209;</div>
-        <div>
-          <h3>Проектировщики</h3>
-          <p>Проверка решений на соответствие актуальным СП и ГОСТ. Генерация эскизных чертежей и расчёт конструкций.</p>
-        </div>
-      </div>
-      <div class="case-card">
-        <div class="case-icon">&#127959;</div>
-        <div>
-          <h3>Прорабы и мастера</h3>
-          <p>Быстрые ответы по технологии работ, расчёт материалов, ведение проектной документации.</p>
-        </div>
-      </div>
-      <div class="case-card">
-        <div class="case-icon">&#127891;</div>
-        <div>
-          <h3>Студенты строительных вузов</h3>
-          <p>Изучение нормативной базы, помощь с курсовыми и дипломными, разбор типовых решений.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
 
-<section class="cta-section">
-  <div class="cta-inner">
-    <h2>Попробуйте прямо сейчас</h2>
-    <p>Бесплатный бот, доступен круглосуточно в Telegram</p>
-    <a href="https://t.me/stroinadzor_ai_bot" class="btn btn-accent">Начать в Telegram</a>
-  </div>
-</section>
+      <!-- ---------- CONCRETE ---------- -->
+      <div class="calc-panel active" id="calc-concrete">
+        <div class="calc-layout">
+          <div class="card">
+            <h3 style="margin-bottom:16px;">Параметры конструкции</h3>
+            <div class="field">
+              <label for="cLen">Длина, м</label>
+              <input type="number" id="cLen" min="0" step="0.01" placeholder="напр. 6.0">
+              <div class="field-error" id="cLenErr">Введите положительное число</div>
+            </div>
+            <div class="field">
+              <label for="cWid">Ширина, м</label>
+              <input type="number" id="cWid" min="0" step="0.01" placeholder="напр. 3.0">
+              <div class="field-error" id="cWidErr">Введите положительное число</div>
+            </div>
+            <div class="field">
+              <label for="cHei">Высота / толщина, м</label>
+              <input type="number" id="cHei" min="0" step="0.01" placeholder="напр. 0.2">
+              <div class="field-error" id="cHeiErr">Введите положительное число</div>
+            </div>
+            <button class="btn btn-accent" id="cBtn" style="width:100%;justify-content:center;">Рассчитать</button>
+          </div>
+          <div>
+            <div class="result-box empty" id="cResult">Заполните параметры и нажмите «Рассчитать»</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- REBAR ---------- -->
+      <div class="calc-panel" id="calc-rebar">
+        <div class="calc-layout">
+          <div class="card">
+            <h3 style="margin-bottom:16px;">Параметры армирования</h3>
+            <div class="grid-2">
+              <div class="field">
+                <label for="rLen">Длина участка, м</label>
+                <input type="number" id="rLen" min="0" step="0.01" placeholder="напр. 6.0">
+                <div class="field-error" id="rLenErr">Введите положительное число</div>
+              </div>
+              <div class="field">
+                <label for="rWid">Ширина участка, м</label>
+                <input type="number" id="rWid" min="0" step="0.01" placeholder="напр. 4.0">
+                <div class="field-error" id="rWidErr">Введите положительное число</div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="rStep">Шаг арматуры, мм</label>
+              <input type="number" id="rStep" min="1" step="1" value="200">
+              <div class="field-error" id="rStepErr">Введите положительное число</div>
+            </div>
+            <div class="field">
+              <label for="rDia">Диаметр арматуры, мм</label>
+              <select id="rDia">
+                <option value="8">8 мм</option>
+                <option value="10">10 мм</option>
+                <option value="12" selected>12 мм</option>
+                <option value="14">14 мм</option>
+                <option value="16">16 мм</option>
+                <option value="20">20 мм</option>
+              </select>
+            </div>
+            <button class="btn btn-accent" id="rBtn" style="width:100%;justify-content:center;">Рассчитать</button>
+          </div>
+          <div>
+            <div class="result-box empty" id="rResult">Заполните параметры и нажмите «Рассчитать»</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- BRICK ---------- -->
+      <div class="calc-panel" id="calc-brick">
+        <div class="calc-layout">
+          <div class="card">
+            <h3 style="margin-bottom:16px;">Параметры кладки</h3>
+            <div class="grid-2">
+              <div class="field">
+                <label for="bLen">Длина стены, м</label>
+                <input type="number" id="bLen" min="0" step="0.01" placeholder="напр. 10.0">
+                <div class="field-error" id="bLenErr">Введите положительное число</div>
+              </div>
+              <div class="field">
+                <label for="bHei">Высота стены, м</label>
+                <input type="number" id="bHei" min="0" step="0.01" placeholder="напр. 3.0">
+                <div class="field-error" id="bHeiErr">Введите положительное число</div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="bOpen">Площадь проёмов, м² <span style="font-weight:400;">(опционально)</span></label>
+              <input type="number" id="bOpen" min="0" step="0.01" placeholder="напр. 4.5" value="0">
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="bThick">Толщина стены</label>
+                <select id="bThick">
+                  <option value="0.25">В 1 кирпич (250 мм)</option>
+                  <option value="0.38">В 1.5 кирпича (380 мм)</option>
+                  <option value="0.51">В 2 кирпича (510 мм)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bType">Тип кирпича</label>
+                <select id="bType">
+                  <option value="single">Одинарный 250×120×65</option>
+                  <option value="onehalf">Полуторный 250×120×88</option>
+                  <option value="double">Двойной 250×120×138</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="bPrice">Цена кирпича, ₽/шт</label>
+                <input type="number" id="bPrice" min="0" step="0.5" value="15">
+              </div>
+              <div class="field">
+                <label for="bMortarPrice">Цена раствора, ₽/м³</label>
+                <input type="number" id="bMortarPrice" min="0" step="10" value="4500">
+              </div>
+            </div>
+            <button class="btn btn-accent" id="bBtn" style="width:100%;justify-content:center;">Рассчитать</button>
+          </div>
+          <div>
+            <div class="result-box empty" id="bResult">Заполните параметры и нажмите «Рассчитать»</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- COST TABLE ---------- -->
+      <div class="calc-panel" id="calc-cost">
+        <div class="card">
+          <h3 style="margin-bottom:6px;">Смета материалов</h3>
+          <p class="sec-desc" style="margin-top:0;margin-bottom:16px;">Добавляйте строки, указывайте количество и цену — итог считается автоматически.</p>
+          <div class="table-scroll" style="overflow-x:auto;">
+            <table class="cost-table">
+              <thead>
+                <tr>
+                  <th style="min-width:160px;">Материал</th>
+                  <th style="min-width:80px;">Ед. изм.</th>
+                  <th style="min-width:100px;">Кол-во</th>
+                  <th style="min-width:120px;">Цена, ₽</th>
+                  <th style="min-width:110px;">Сумма, ₽</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="costBody"></tbody>
+            </table>
+          </div>
+          <div class="cost-toolbar">
+            <button class="btn btn-outline btn-sm" id="costAddRow" type="button">+ Добавить строку</button>
+            <button class="btn btn-danger-outline btn-sm" id="costClear" type="button">Очистить всё</button>
+          </div>
+          <div class="cost-grand">Итого: <span id="costGrandTotal">0 ₽</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- =========================================================
+     PAGE: REFERENCE
+     ========================================================= -->
+<main id="page-reference" class="page">
+  <section class="mini-hero">
+    <div class="wrap mini-hero-content">
+      <h1>Справочник нормативов</h1>
+      <p>СП, ГОСТ, СНиП и федеральные законы, применяемые в строительном контроле. Используйте поиск и фильтры.</p>
+    </div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="search-row">
+        <div class="search-box">
+          <span class="icon" aria-hidden="true">&#128269;</span>
+          <input type="text" id="refSearch" placeholder="Поиск по номеру или названию документа...">
+        </div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Фильтр по категории">
+        <button class="tab-btn active" data-cat="Все">Все</button>
+        <button class="tab-btn" data-cat="СП">СП</button>
+        <button class="tab-btn" data-cat="ГОСТ">ГОСТ</button>
+        <button class="tab-btn" data-cat="СНиП">СНиП</button>
+        <button class="tab-btn" data-cat="ФЗ">ФЗ</button>
+      </div>
+      <div class="ref-count" id="refCount"></div>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Номер документа</th>
+                <th>Название</th>
+                <th>Категория</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody id="refBody"></tbody>
+          </table>
+        </div>
+        <div class="no-results" id="refNoResults" style="display:none;">Ничего не найдено. Попробуйте изменить запрос.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- =========================================================
+     PAGE: CHECKLIST
+     ========================================================= -->
+<main id="page-checklist" class="page">
+  <section class="mini-hero">
+    <div class="wrap mini-hero-content">
+      <h1>Чек-листы контроля работ</h1>
+      <p>Проверяйте этапы строительства по пунктам. Прогресс сохраняется автоматически на этом устройстве.</p>
+    </div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="progress-overall">
+        <div class="progress-overall-head">
+          <h3>Общий прогресс</h3>
+          <div class="progress-overall-actions">
+            <span class="progress-pct" id="overallPct">0%</span>
+            <button class="btn btn-outline btn-sm" id="exportBtn" type="button">Экспорт</button>
+            <button class="btn btn-danger-outline btn-sm" id="resetBtn" type="button">Сбросить все</button>
+          </div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="overallFill" style="width:0%;"></div></div>
+      </div>
+      <div class="accordion" id="accordion"></div>
+    </div>
+  </section>
+</main>
+
+<!-- =========================================================
+     PAGE: TELEGRAM BOT
+     ========================================================= -->
+<main id="page-bot" class="page">
+  <section class="hero bot-hero">
+    <div class="wrap hero-content" style="max-width:680px;margin:0 auto;">
+      <div class="bot-avatar">СН</div>
+      <div class="hero-eyebrow" style="justify-content:center;display:flex;">Telegram-бот</div>
+      <h1>AINadzorBot</h1>
+      <p class="hero-desc">AI-ассистент технического надзора: консультации по нормативам, анализ дефектов по фото, работа с документами и голосом — прямо в Telegram, круглосуточно.</p>
+      <div class="hero-actions">
+        <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть в Telegram</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-header">
+        <div class="sec-eyebrow">Возможности бота</div>
+        <h2 class="sec-title">Что умеет AINadzorBot</h2>
+      </div>
+      <div class="features-grid">
+        <div class="f-card">
+          <div class="f-icon">&#128218;</div>
+          <h3>AI-консультации по нормативам</h3>
+          <p>Ответы по СП, ГОСТ, СНиП и ФЗ на основе 4 AI-моделей, подобранных под тип запроса.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128247;</div>
+          <h3>Анализ дефектов по фото</h3>
+          <p>Отправьте фотографию — бот определит тип дефекта, критичность и нормативные ссылки.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128196;</div>
+          <h3>Работа с документами</h3>
+          <p>Поддержка более 15 форматов: PDF, DOCX, XLSX, изображения, CAD-файлы, архивы.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#127908;</div>
+          <h3>Голосовой ввод</h3>
+          <p>Распознавание голосовых сообщений на русском языке через Whisper и Vosk.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128736;</div>
+          <h3>Управление проектами</h3>
+          <p>Создание проектов, хранение файлов, чек-листы и отслеживание замечаний.</p>
+        </div>
+        <div class="f-card">
+          <div class="f-icon">&#128736;</div>
+          <h3>Строительные калькуляторы</h3>
+          <p>Расчёт бетона, арматуры, кладки и сметы прямо в чате без переключения приложений.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-alt">
+    <div class="wrap">
+      <div class="sec-header">
+        <div class="sec-eyebrow">AI модели</div>
+        <h2 class="sec-title">Мультимодельная архитектура</h2>
+        <p class="sec-desc">Каждый запрос направляется к модели, которая решит его лучше остальных.</p>
+      </div>
+      <div class="models-grid">
+        <div class="m-card">
+          <div class="m-logo">&#9889;</div>
+          <h3>xAI Grok</h3>
+          <p>Быстрые ответы, веб-поиск, классификация запросов</p>
+          <span class="m-tag tag-orange">Web + X Search</span>
+        </div>
+        <div class="m-card">
+          <div class="m-logo">&#129302;</div>
+          <h3>Claude</h3>
+          <p>Глубокий технический анализ, экспертные консультации</p>
+          <span class="m-tag tag-blue">Тех. анализ</span>
+        </div>
+        <div class="m-card">
+          <div class="m-logo">&#128142;</div>
+          <h3>Gemini</h3>
+          <p>Анализ фото дефектов, генерация технических изображений</p>
+          <span class="m-tag tag-purple">Vision + Image</span>
+        </div>
+        <div class="m-card">
+          <div class="m-logo">&#127908;</div>
+          <h3>Whisper / Vosk</h3>
+          <p>Распознавание голосовых на русском языке</p>
+          <span class="m-tag tag-green">Голос</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-header">
+        <div class="sec-eyebrow">Быстрый старт</div>
+        <h2 class="sec-title">Как начать</h2>
+      </div>
+      <div class="steps-row">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div>
+            <h3>Откройте бота</h3>
+            <p>Найдите @AINadzorBot в Telegram или нажмите кнопку выше.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div>
+            <h3>Задайте вопрос</h3>
+            <p>Текст, фото дефекта, документ или голосовое сообщение.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div>
+            <h3>Получите ответ</h3>
+            <p>AI подберёт модель и даст экспертный ответ со ссылками на нормативы.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="cta-inner">
+      <h2>Начните работу с ботом</h2>
+      <p>Бесплатно, без регистрации, доступен круглосуточно</p>
+      <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть @AINadzorBot</a>
+    </div>
+  </section>
+</main>
 
 <footer>
   <div class="wrap">
     <ul class="footer-links">
-      <li><a href="https://github.com/AntonKuznetsov1911/StroiNadzorAI">GitHub</a></li>
-      <li><a href="https://t.me/stroinadzor_ai_bot">Telegram</a></li>
-      <li><a href="https://github.com/AntonKuznetsov1911/StroiNadzorAI/issues">Баг-репорт</a></li>
+      <li><a href="#home">Главная</a></li>
+      <li><a href="#calc">Калькуляторы</a></li>
+      <li><a href="#reference">Справочник</a></li>
+      <li><a href="#checklist">Чек-листы</a></li>
+      <li><a href="https://t.me/AINadzorBot" target="_blank" rel="noopener">Telegram-бот</a></li>
     </ul>
     <p>&copy; 2025&ndash;2026 СтройНадзорAI. Open Source.</p>
   </div>
 </footer>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function() {
+  "use strict";
+
+  /* =========================================================
+     TOAST
+     ========================================================= */
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toastEl.classList.remove('show'); }, 2600);
+  }
+
+  /* =========================================================
+     THEME
+     ========================================================= */
+  var root = document.documentElement;
+  var themeIcon = document.getElementById('themeIcon');
+  function applyTheme(t) {
+    if (t === 'light' || t === 'dark') {
+      root.setAttribute('data-theme', t);
+    } else {
+      root.removeAttribute('data-theme');
+    }
+    var effectiveDark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    themeIcon.innerHTML = effectiveDark ? '&#9788;' : '&#9789;';
+  }
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem('sn_theme'); } catch (e) {}
+  applyTheme(savedTheme);
+  document.getElementById('themeToggle').addEventListener('click', function() {
+    var current = root.getAttribute('data-theme');
+    var isDarkNow = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = isDarkNow ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem('sn_theme', next); } catch (e) {}
+  });
+
+  /* =========================================================
+     MOBILE MENU
+     ========================================================= */
+  var hamburger = document.getElementById('hamburger');
+  var navLinks = document.getElementById('navLinks');
+  hamburger.addEventListener('click', function() {
+    var open = navLinks.classList.toggle('open');
+    hamburger.classList.toggle('open', open);
+    hamburger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  navLinks.addEventListener('click', function(e) {
+    if (e.target.tagName === 'A') {
+      navLinks.classList.remove('open');
+      hamburger.classList.remove('open');
+      hamburger.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  /* =========================================================
+     ROUTER
+     ========================================================= */
+  var pages = ['home', 'calc', 'reference', 'checklist', 'bot'];
+  function route() {
+    var hash = (location.hash || '#home').replace('#', '');
+    if (pages.indexOf(hash) === -1) hash = 'home';
+    pages.forEach(function(p) {
+      var el = document.getElementById('page-' + p);
+      if (el) el.classList.toggle('active', p === hash);
+    });
+    var links = navLinks.querySelectorAll('a[data-route]');
+    links.forEach(function(a) {
+      if (a.getAttribute('data-route') === hash) {
+        a.setAttribute('aria-current', 'page');
+      } else {
+        a.removeAttribute('aria-current');
+      }
+    });
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+
+  /* =========================================================
+     VALIDATION HELPERS
+     ========================================================= */
+  function getPositiveNumber(inputEl, errEl) {
+    var val = parseFloat(inputEl.value);
+    var valid = !isNaN(val) && isFinite(val) && val > 0;
+    if (inputEl) inputEl.classList.toggle('invalid', !valid);
+    if (errEl) errEl.classList.toggle('show', !valid);
+    return valid ? val : null;
+  }
+  function fmt(n, digits) {
+    if (digits === undefined) digits = 2;
+    return Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  }
+
+  /* =========================================================
+     CALCULATOR TABS
+     ========================================================= */
+  var calcTabs = document.querySelectorAll('.tabs [data-calc]');
+  calcTabs.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      calcTabs.forEach(function(b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      document.querySelectorAll('.calc-panel').forEach(function(p) { p.classList.remove('active'); });
+      document.getElementById('calc-' + btn.getAttribute('data-calc')).classList.add('active');
+    });
+  });
+
+  /* =========================================================
+     CALCULATOR A: CONCRETE
+     ========================================================= */
+  var concreteGrades = {
+    M200: { cement: 260, sand: 730, gravel: 1100 },
+    M300: { cement: 330, sand: 670, gravel: 1080 },
+    M400: { cement: 410, sand: 590, gravel: 1050 }
+  };
+  document.getElementById('cBtn').addEventListener('click', function() {
+    var L = getPositiveNumber(document.getElementById('cLen'), document.getElementById('cLenErr'));
+    var W = getPositiveNumber(document.getElementById('cWid'), document.getElementById('cWidErr'));
+    var H = getPositiveNumber(document.getElementById('cHei'), document.getElementById('cHeiErr'));
+    var box = document.getElementById('cResult');
+    if (L === null || W === null || H === null) {
+      box.className = 'result-box empty';
+      box.textContent = 'Проверьте введённые значения — все поля должны быть положительными числами.';
+      return;
+    }
+    var volume = L * W * H;
+    var weightTons = (volume * 2400) / 1000;
+    var rows = '';
+    rows += '<div class="result-title">Объём и масса</div>';
+    rows += '<div class="result-row"><span class="r-label">Объём бетона</span><span class="r-val big">' + fmt(volume, 3) + ' м&sup3;</span></div>';
+    rows += '<div class="result-row"><span class="r-label">Масса бетона (плотность 2400 кг/м&sup3;)</span><span class="r-val">' + fmt(weightTons, 2) + ' т</span></div>';
+    var tableHtml = '<div class="mix-table-wrap"><table><thead><tr><th>Компонент</th><th>M200</th><th>M300</th><th>M400</th></tr></thead><tbody>';
+    ['cement', 'sand', 'gravel'].forEach(function(key) {
+      var label = key === 'cement' ? 'Цемент, кг' : key === 'sand' ? 'Песок, кг' : 'Щебень, кг';
+      tableHtml += '<tr><td>' + label + '</td>';
+      ['M200', 'M300', 'M400'].forEach(function(grade) {
+        tableHtml += '<td>' + fmt(concreteGrades[grade][key] * volume, 0) + '</td>';
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '<tr><td>Цемент, мешков по 50 кг</td>';
+    ['M200', 'M300', 'M400'].forEach(function(grade) {
+      tableHtml += '<td>' + Math.ceil((concreteGrades[grade].cement * volume) / 50) + '</td>';
+    });
+    tableHtml += '</tr></tbody></table></div>';
+    box.className = 'result-box';
+    box.innerHTML = rows + '<div class="result-title" style="margin-top:18px;">Пропорции по маркам бетона (ориентировочно, на весь объём)</div>' + tableHtml;
+  });
+
+  /* =========================================================
+     CALCULATOR B: REBAR
+     ========================================================= */
+  var rebarWeights = { 8: 0.395, 10: 0.617, 12: 0.888, 14: 1.21, 16: 1.58, 20: 2.47 };
+  document.getElementById('rBtn').addEventListener('click', function() {
+    var L = getPositiveNumber(document.getElementById('rLen'), document.getElementById('rLenErr'));
+    var W = getPositiveNumber(document.getElementById('rWid'), document.getElementById('rWidErr'));
+    var S = getPositiveNumber(document.getElementById('rStep'), document.getElementById('rStepErr'));
+    var dia = parseInt(document.getElementById('rDia').value, 10);
+    var box = document.getElementById('rResult');
+    if (L === null || W === null || S === null) {
+      box.className = 'result-box empty';
+      box.textContent = 'Проверьте введённые значения — все поля должны быть положительными числами.';
+      return;
+    }
+    var stepM = S / 1000;
+    var barsAlongWidth = Math.floor(W / stepM) + 1;
+    var barsAlongLength = Math.floor(L / stepM) + 1;
+    var totalLength = barsAlongWidth * L + barsAlongLength * W;
+    var weightPerM = rebarWeights[dia];
+    var totalWeight = totalLength * weightPerM;
+    var box_ = box;
+    box_.className = 'result-box';
+    box_.innerHTML =
+      '<div class="result-title">Расчёт армирования сетки Ø' + dia + ' мм</div>' +
+      '<div class="result-row"><span class="r-label">Стержней вдоль длины (шаг ' + S + ' мм по ширине)</span><span class="r-val">' + barsAlongWidth + ' шт</span></div>' +
+      '<div class="result-row"><span class="r-label">Стержней вдоль ширины (шаг ' + S + ' мм по длине)</span><span class="r-val">' + barsAlongLength + ' шт</span></div>' +
+      '<div class="result-row"><span class="r-label">Общая длина арматуры</span><span class="r-val big">' + fmt(totalLength, 1) + ' м</span></div>' +
+      '<div class="result-row"><span class="r-label">Вес пог. метра Ø' + dia + ' мм</span><span class="r-val">' + weightPerM + ' кг/м</span></div>' +
+      '<div class="result-row"><span class="r-label">Общая масса арматуры</span><span class="r-val big">' + fmt(totalWeight, 1) + ' кг</span></div>';
+  });
+
+  /* =========================================================
+     CALCULATOR C: BRICK
+     ========================================================= */
+  var brickTypes = {
+    single:  { name: 'Одинарный 250×120×65', dims: [0.250, 0.120, 0.065], perM3: 394 },
+    onehalf: { name: 'Полуторный 250×120×88', dims: [0.250, 0.120, 0.088], perM3: 302 },
+    double:  { name: 'Двойной 250×120×138', dims: [0.250, 0.120, 0.138], perM3: 200 }
+  };
+  document.getElementById('bBtn').addEventListener('click', function() {
+    var Lw = getPositiveNumber(document.getElementById('bLen'), document.getElementById('bLenErr'));
+    var Hw = getPositiveNumber(document.getElementById('bHei'), document.getElementById('bHeiErr'));
+    var openRaw = parseFloat(document.getElementById('bOpen').value);
+    var openings = isNaN(openRaw) || openRaw < 0 ? 0 : openRaw;
+    var thickness = parseFloat(document.getElementById('bThick').value);
+    var typeKey = document.getElementById('bType').value;
+    var pricePerBrick = parseFloat(document.getElementById('bPrice').value) || 0;
+    var priceMortar = parseFloat(document.getElementById('bMortarPrice').value) || 0;
+    var box = document.getElementById('bResult');
+    if (Lw === null || Hw === null) {
+      box.className = 'result-box empty';
+      box.textContent = 'Проверьте введённые значения — длина и высота должны быть положительными числами.';
+      return;
+    }
+    var grossArea = Lw * Hw;
+    var netArea = Math.max(grossArea - openings, 0);
+    var volume = netArea * thickness;
+    var brick = brickTypes[typeKey];
+    var brickCount = Math.ceil(volume * brick.perM3);
+    var brickUnitVolume = brick.dims[0] * brick.dims[1] * brick.dims[2];
+    var solidBrickVolume = brickCount * brickUnitVolume;
+    var mortarVolume = Math.max(volume - solidBrickVolume, 0);
+    var brickCost = brickCount * pricePerBrick;
+    var mortarCost = mortarVolume * priceMortar;
+    var totalCost = brickCost + mortarCost;
+    box.className = 'result-box';
+    box.innerHTML =
+      '<div class="result-title">Расчёт кладки — ' + brick.name + '</div>' +
+      '<div class="result-row"><span class="r-label">Площадь стены (за вычетом проёмов)</span><span class="r-val">' + fmt(netArea, 2) + ' м&sup2;</span></div>' +
+      '<div class="result-row"><span class="r-label">Объём кладки</span><span class="r-val">' + fmt(volume, 3) + ' м&sup3;</span></div>' +
+      '<div class="result-row"><span class="r-label">Количество кирпича</span><span class="r-val big">' + fmt(brickCount, 0) + ' шт</span></div>' +
+      '<div class="result-row"><span class="r-label">Объём раствора (кладочного шва)</span><span class="r-val">' + fmt(mortarVolume, 3) + ' м&sup3;</span></div>' +
+      '<div class="result-row"><span class="r-label">Стоимость кирпича</span><span class="r-val">' + fmt(brickCost, 0) + ' &#8381;</span></div>' +
+      '<div class="result-row"><span class="r-label">Стоимость раствора</span><span class="r-val">' + fmt(mortarCost, 0) + ' &#8381;</span></div>' +
+      '<div class="result-row"><span class="r-label">Итого ориентировочно</span><span class="r-val big">' + fmt(totalCost, 0) + ' &#8381;</span></div>';
+  });
+
+  /* =========================================================
+     CALCULATOR D: COST TABLE
+     ========================================================= */
+  var costBody = document.getElementById('costBody');
+  var costRowId = 0;
+  function costRowTemplate(id) {
+    var tr = document.createElement('tr');
+    tr.dataset.id = id;
+    tr.innerHTML =
+      '<td><input type="text" class="c-name" placeholder="напр. Цемент М400"></td>' +
+      '<td><input type="text" class="c-unit" placeholder="кг / м3 / шт"></td>' +
+      '<td><input type="number" class="c-qty" min="0" step="0.01" value="0"></td>' +
+      '<td><input type="number" class="c-price" min="0" step="0.01" value="0"></td>' +
+      '<td class="row-total">0 &#8381;</td>' +
+      '<td><button type="button" class="row-del" aria-label="Удалить строку">&times;</button></td>';
+    return tr;
+  }
+  function recalcCostTotals() {
+    var grand = 0;
+    costBody.querySelectorAll('tr').forEach(function(tr) {
+      var qty = parseFloat(tr.querySelector('.c-qty').value) || 0;
+      var price = parseFloat(tr.querySelector('.c-price').value) || 0;
+      if (qty < 0) qty = 0;
+      if (price < 0) price = 0;
+      var total = qty * price;
+      tr.querySelector('.row-total').innerHTML = fmt(total, 2) + ' &#8381;';
+      grand += total;
+    });
+    document.getElementById('costGrandTotal').textContent = fmt(grand, 2) + ' ₽';
+  }
+  function addCostRow() {
+    costRowId++;
+    var tr = costRowTemplate(costRowId);
+    costBody.appendChild(tr);
+    recalcCostTotals();
+  }
+  costBody.addEventListener('input', function(e) {
+    if (e.target.classList.contains('c-qty') || e.target.classList.contains('c-price')) {
+      recalcCostTotals();
+    }
+  });
+  costBody.addEventListener('click', function(e) {
+    if (e.target.classList.contains('row-del')) {
+      var tr = e.target.closest('tr');
+      if (tr) tr.remove();
+      recalcCostTotals();
+    }
+  });
+  document.getElementById('costAddRow').addEventListener('click', addCostRow);
+  document.getElementById('costClear').addEventListener('click', function() {
+    costBody.innerHTML = '';
+    recalcCostTotals();
+    addCostRow();
+    showToast('Смета очищена');
+  });
+  // seed with 3 starter rows
+  addCostRow(); addCostRow(); addCostRow();
+
+  /* =========================================================
+     REFERENCE PAGE
+     ========================================================= */
+  var norms = [
+    { num: 'СП 63.13330.2018', name: 'Бетонные и железобетонные конструкции', cat: 'СП', status: 'ok' },
+    { num: 'СП 70.13330.2012', name: 'Несущие и ограждающие конструкции', cat: 'СП', status: 'ok' },
+    { num: 'СП 22.13330.2016', name: 'Основания зданий и сооружений', cat: 'СП', status: 'ok' },
+    { num: 'СП 20.13330.2016', name: 'Нагрузки и воздействия', cat: 'СП', status: 'ok' },
+    { num: 'СП 50.13330.2012', name: 'Тепловая защита зданий', cat: 'СП', status: 'ok' },
+    { num: 'СП 131.13330.2020', name: 'Строительная климатология', cat: 'СП', status: 'ok' },
+    { num: 'СП 45.13330.2017', name: 'Земляные сооружения, основания и фундаменты', cat: 'СП', status: 'ok' },
+    { num: 'СП 48.13330.2019', name: 'Организация строительства', cat: 'СП', status: 'ok' },
+    { num: 'СП 28.13330.2017', name: 'Защита строительных конструкций от коррозии', cat: 'СП', status: 'ok' },
+    { num: 'СП 17.13330.2017', name: 'Кровли', cat: 'СП', status: 'ok' },
+    { num: 'СП 29.13330.2011', name: 'Полы', cat: 'СП', status: 'upd' },
+    { num: 'СП 4.13130.2013', name: 'Ограничение распространения пожара на объектах защиты', cat: 'СП', status: 'ok' },
+    { num: 'СП 118.13330.2012', name: 'Общественные здания и сооружения', cat: 'СП', status: 'ok' },
+    { num: 'СП 54.13330.2016', name: 'Здания жилые многоквартирные', cat: 'СП', status: 'ok' },
+    { num: 'СП 30.13330.2020', name: 'Внутренний водопровод и канализация зданий', cat: 'СП', status: 'ok' },
+    { num: 'СП 60.13330.2020', name: 'Отопление, вентиляция и кондиционирование воздуха', cat: 'СП', status: 'ok' },
+    { num: 'СП 31.13330.2021', name: 'Водоснабжение. Наружные сети и сооружения', cat: 'СП', status: 'ok' },
+    { num: 'ГОСТ 7473-2010', name: 'Смеси бетонные. Технические условия', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 10180-2012', name: 'Бетоны. Методы определения прочности по контрольным образцам', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 5781-82', name: 'Сталь горячекатаная для армирования железобетонных конструкций', cat: 'ГОСТ', status: 'replaced' },
+    { num: 'ГОСТ 34028-2016', name: 'Прокат арматурный для железобетонных конструкций', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 530-2012', name: 'Кирпич и камень керамические. Общие технические условия', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 31108-2020', name: 'Цементы общестроительные. Технические условия', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 8736-2014', name: 'Песок для строительных работ. Технические условия', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 8267-93', name: 'Щебень и гравий из плотных горных пород для строительных работ', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 24211-2008', name: 'Добавки для бетонов и строительных растворов. Общие технические условия', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ 27751-2014', name: 'Надёжность строительных конструкций и оснований', cat: 'ГОСТ', status: 'ok' },
+    { num: 'ГОСТ Р 58941-2020', name: 'Информационное моделирование в строительстве', cat: 'ГОСТ', status: 'ok' },
+    { num: 'СНиП 12-03-2001', name: 'Безопасность труда в строительстве. Часть 1', cat: 'СНиП', status: 'replaced' },
+    { num: 'СНиП 12-04-2002', name: 'Безопасность труда в строительстве. Часть 2', cat: 'СНиП', status: 'replaced' },
+    { num: 'СНиП 2.01.07-85*', name: 'Нагрузки и воздействия', cat: 'СНиП', status: 'replaced' },
+    { num: 'СНиП 3.03.01-87', name: 'Несущие и ограждающие конструкции', cat: 'СНиП', status: 'replaced' },
+    { num: 'СНиП 2.03.01-84*', name: 'Бетонные и железобетонные конструкции', cat: 'СНиП', status: 'replaced' },
+    { num: 'ФЗ-384', name: 'Технический регламент о безопасности зданий и сооружений', cat: 'ФЗ', status: 'ok' },
+    { num: 'ФЗ-123', name: 'Технический регламент о требованиях пожарной безопасности', cat: 'ФЗ', status: 'ok' },
+    { num: 'ФЗ-44', name: 'О контрактной системе в сфере закупок товаров, работ, услуг', cat: 'ФЗ', status: 'ok' },
+    { num: 'ФЗ-214', name: 'Об участии в долевом строительстве многоквартирных домов', cat: 'ФЗ', status: 'ok' },
+    { num: 'ФЗ-190 (Градостроительный кодекс РФ)', name: 'Основы градостроительной деятельности', cat: 'ФЗ', status: 'ok' }
+  ];
+  var statusLabel = { ok: 'Действующий', upd: 'Актуализирован', replaced: 'Заменён' };
+  var statusClass = { ok: 'badge-ok', upd: 'badge-upd', replaced: 'badge-replaced' };
+  var refBody = document.getElementById('refBody');
+  var refCount = document.getElementById('refCount');
+  var refNoResults = document.getElementById('refNoResults');
+  var activeCat = 'Все';
+  function renderNorms() {
+    var query = document.getElementById('refSearch').value.trim().toLowerCase();
+    var filtered = norms.filter(function(n) {
+      var matchesCat = activeCat === 'Все' || n.cat === activeCat;
+      var matchesQuery = !query || n.num.toLowerCase().indexOf(query) !== -1 || n.name.toLowerCase().indexOf(query) !== -1;
+      return matchesCat && matchesQuery;
+    });
+    refBody.innerHTML = filtered.map(function(n) {
+      return '<tr><td class="doc-num">' + n.num + '</td><td>' + n.name + '</td><td>' + n.cat + '</td>' +
+        '<td><span class="badge ' + statusClass[n.status] + '">' + statusLabel[n.status] + '</span></td></tr>';
+    }).join('');
+    refCount.textContent = 'Найдено документов: ' + filtered.length + ' из ' + norms.length;
+    refNoResults.style.display = filtered.length === 0 ? 'block' : 'none';
+  }
+  document.getElementById('refSearch').addEventListener('input', renderNorms);
+  document.querySelectorAll('.tabs [data-cat]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tabs [data-cat]').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      activeCat = btn.getAttribute('data-cat');
+      renderNorms();
+    });
+  });
+  renderNorms();
+
+  /* =========================================================
+     CHECKLIST PAGE
+     ========================================================= */
+  var checklistData = [
+    { title: 'Подготовительные работы', items: [
+      'Разбивка и вынос осей здания в натуру',
+      'Устройство временных дорог и подъездных путей',
+      'Ограждение строительной площадки',
+      'Установка информационного щита объекта',
+      'Организация освещения площадки',
+      'Устройство временных бытовых городков',
+      'Подключение временного электроснабжения и водоснабжения',
+      'Создание геодезической разбивочной основы',
+      'Проверка проекта производства работ (ППР)',
+      'Инструктаж персонала по технике безопасности'
+    ]},
+    { title: 'Земляные работы и фундаменты', items: [
+      'Соответствие отметок дна котлована проекту',
+      'Проверка несущей способности основания',
+      'Уплотнение грунта основания',
+      'Устройство подстилающего слоя (щебень, песок)',
+      'Устройство бетонной подготовки',
+      'Гидроизоляция фундамента',
+      'Армирование фундамента по проекту',
+      'Контроль величины защитного слоя бетона',
+      'Бетонирование фундамента без технологических перерывов',
+      'Уход за бетоном (влажность, температурный режим)'
+    ]},
+    { title: 'Каркас и несущие конструкции', items: [
+      'Соответствие сечений колонн и балок проекту',
+      'Вертикальность и соосность колонн',
+      'Качество сварных и болтовых соединений',
+      'Армирование монолитных конструкций по проекту',
+      'Опалубка: геометрия, жёсткость, герметичность',
+      'Контроль подвижности бетонной смеси',
+      'Отбор контрольных проб бетона для испытаний',
+      'Устройство деформационных и температурных швов',
+      'Антикоррозийная защита металлоконструкций',
+      'Ведение исполнительной документации по каркасу'
+    ]},
+    { title: 'Кровля и гидроизоляция', items: [
+      'Соответствие уклонов кровли проекту',
+      'Пароизоляция уложена без повреждений и разрывов',
+      'Утеплитель уложен без зазоров и мостиков холода',
+      'Гидроизоляционный ковёр — нахлёсты и швы',
+      'Примыкания к парапетам, трубам и выходам на кровлю',
+      'Устройство водостоков и водоприёмных воронок',
+      'Проверка на отсутствие протечек (пробный пролив)',
+      'Молниезащита и заземление кровельного оборудования',
+      'Вентиляция кровельного пространства',
+      'Ограждение кровли и устройство путей обслуживания'
+    ]},
+    { title: 'Отделочные работы', items: [
+      'Штукатурные работы — ровность и толщина слоя',
+      'Устройство стяжки пола — толщина и прочность',
+      'Гидроизоляция мокрых зон (санузлы, балконы)',
+      'Облицовка плиткой — ширина швов и уровень',
+      'Малярные работы — количество и качество слоёв',
+      'Установка дверных и оконных блоков',
+      'Монтаж подвесных и натяжных потолков',
+      'Устройство напольных покрытий',
+      'Герметизация стыков и примыканий',
+      'Соответствие отделки проекту и дизайн-проекту'
+    ]},
+    { title: 'Инженерные системы', items: [
+      'Монтаж систем отопления по проекту',
+      'Испытание систем отопления на герметичность (опрессовка)',
+      'Электромонтажные работы — соответствие ПУЭ',
+      'Заземление и молниезащита электроустановок',
+      'Вентиляционные системы — проверка производительности',
+      'Водоснабжение и канализация — уклоны и испытания',
+      'Пожарная сигнализация и системы автоматики',
+      'Системы видеонаблюдения и контроля доступа',
+      'Слаботочные сети (интернет, телевидение, домофония)',
+      'Пусконаладочные работы инженерных систем'
+    ]}
+  ];
+  var CHK_KEY = 'sn_checklist_state';
+  function loadChecklistState() {
+    try {
+      var raw = localStorage.getItem(CHK_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+  function saveChecklistState(state) {
+    try { localStorage.setItem(CHK_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  var chkState = loadChecklistState();
+  var accordionEl = document.getElementById('accordion');
+
+  function checkIconSvg() {
+    return '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 5L4.2 8.2L11 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  function renderChecklist() {
+    accordionEl.innerHTML = checklistData.map(function(section, sIdx) {
+      var itemsHtml = section.items.map(function(text, iIdx) {
+        var key = sIdx + '-' + iIdx;
+        var checked = !!chkState[key];
+        return '<label class="chk-item">' +
+          '<input type="checkbox" data-key="' + key + '"' + (checked ? ' checked' : '') + '>' +
+          '<span class="chk-box">' + checkIconSvg() + '</span>' +
+          '<span class="chk-text">' + text + '</span>' +
+          '</label>';
+      }).join('');
+      return '<div class="accordion-item' + (sIdx === 0 ? ' open' : '') + '" data-section="' + sIdx + '">' +
+        '<button class="accordion-header" type="button" aria-expanded="' + (sIdx === 0 ? 'true' : 'false') + '">' +
+          '<span class="accordion-header-left">' +
+            '<span>' +
+              '<span class="accordion-title">' + section.title + '</span>' +
+              '<div class="accordion-sub" data-sub="' + sIdx + '"></div>' +
+            '</span>' +
+          '</span>' +
+          '<span style="display:flex;align-items:center;gap:14px;">' +
+            '<span class="accordion-mini-track"><span class="accordion-mini-fill" data-fill="' + sIdx + '"></span></span>' +
+            '<span class="accordion-chevron" aria-hidden="true">&#9660;</span>' +
+          '</span>' +
+        '</button>' +
+        '<div class="accordion-body"><div class="accordion-list">' + itemsHtml + '</div></div>' +
+      '</div>';
+    }).join('');
+
+    accordionEl.querySelectorAll('.accordion-header').forEach(function(header) {
+      header.addEventListener('click', function() {
+        var item = header.closest('.accordion-item');
+        var isOpen = item.classList.toggle('open');
+        header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+    });
+    accordionEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        chkState[cb.getAttribute('data-key')] = cb.checked;
+        saveChecklistState(chkState);
+        updateProgress();
+      });
+    });
+    updateProgress();
+  }
+
+  function updateProgress() {
+    var totalItems = 0, totalChecked = 0;
+    checklistData.forEach(function(section, sIdx) {
+      var checked = 0;
+      section.items.forEach(function(_, iIdx) {
+        if (chkState[sIdx + '-' + iIdx]) checked++;
+      });
+      totalItems += section.items.length;
+      totalChecked += checked;
+      var pct = section.items.length ? Math.round((checked / section.items.length) * 100) : 0;
+      var fillEl = accordionEl.querySelector('[data-fill="' + sIdx + '"]');
+      var subEl = accordionEl.querySelector('[data-sub="' + sIdx + '"]');
+      if (fillEl) fillEl.style.width = pct + '%';
+      if (subEl) subEl.textContent = checked + ' из ' + section.items.length + ' выполнено (' + pct + '%)';
+    });
+    var overallPct = totalItems ? Math.round((totalChecked / totalItems) * 100) : 0;
+    document.getElementById('overallFill').style.width = overallPct + '%';
+    document.getElementById('overallPct').textContent = overallPct + '% (' + totalChecked + ' из ' + totalItems + ')';
+  }
+
+  document.getElementById('resetBtn').addEventListener('click', function() {
+    if (!confirm('Сбросить весь прогресс чек-листов?')) return;
+    chkState = {};
+    saveChecklistState(chkState);
+    renderChecklist();
+    showToast('Прогресс сброшен');
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', function() {
+    var lines = [];
+    lines.push('ЧЕК-ЛИСТ КОНТРОЛЯ СТРОИТЕЛЬНЫХ РАБОТ');
+    lines.push('СтройНадзорAI — ' + new Date().toLocaleDateString('ru-RU'));
+    lines.push('');
+    checklistData.forEach(function(section, sIdx) {
+      var checked = 0;
+      section.items.forEach(function(_, iIdx) { if (chkState[sIdx + '-' + iIdx]) checked++; });
+      lines.push('== ' + section.title + ' (' + checked + '/' + section.items.length + ') ==');
+      section.items.forEach(function(text, iIdx) {
+        var mark = chkState[sIdx + '-' + iIdx] ? '[x]' : '[ ]';
+        lines.push(mark + ' ' + text);
+      });
+      lines.push('');
+    });
+    var report = lines.join('\n');
+    var done = function() { showToast('Чек-лист скопирован в буфер обмена'); };
+    var fail = function() {
+      var ta = document.createElement('textarea');
+      ta.value = report;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('Чек-лист скопирован в буфер обмена'); }
+      catch (e) { showToast('Не удалось скопировать. Скопируйте вручную.'); }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(report).then(done).catch(fail);
+    } else {
+      fail();
+    }
+  });
+
+  renderChecklist();
+
+})();
+</script>
 </body>
 </html>
