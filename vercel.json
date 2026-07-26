@@ -1,7 +1,10 @@
 {
+  "buildCommand": "",
+  "installCommand": "echo 'No dependencies needed'",
   "functions": {
     "api/chat.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "runtime": "@vercel/node@3"
     }
   }
 }
