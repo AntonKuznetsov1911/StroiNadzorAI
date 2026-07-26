@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>СтройНадзорAI — калькуляторы, нормативы, чек-листы</title>
-<meta name="description" content="Профессиональная платформа технического надзора: строительные калькуляторы, справочник СП/ГОСТ/СНиП, чек-листы проверки работ и AI-бот в Telegram.">
+<meta name="description" content="Профессиональная платформа технического надзора: строительные калькуляторы, справочник СП/ГОСТ/СНиП, чек-листы проверки работ и AI-чат консультант.">
 <meta name="theme-color" content="#1B3557">
 <style>
 /* =========================================================
@@ -442,16 +442,80 @@ tbody tr:last-child td { border-bottom: none; }
 .cost-grand span { color: var(--accent); font-size: 1.3rem; margin-left: 8px; }
 
 /* =========================================================
-   BOT PAGE
+   CHAT PAGE
    ========================================================= */
-.bot-hero { text-align: center; padding-bottom: 30px; }
-.bot-avatar {
-  width: 88px; height: 88px; border-radius: 22px; background: var(--accent); color: #fff; font-size: 2.2rem; font-weight: 800;
-  display: grid; place-items: center; margin: 0 auto 22px; box-shadow: 0 8px 26px rgba(232,106,46,0.4);
+.chat-shell {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card); display: flex; flex-direction: column; overflow: hidden;
 }
-.bot-hero h1 { text-align: center; }
-.bot-hero .hero-desc { margin-left: auto; margin-right: auto; text-align: center; }
-.bot-hero .hero-actions { justify-content: center; }
+.chat-toolbar {
+  display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
+  border-bottom: 1px solid var(--card-border); background: var(--ground-alt); flex-shrink: 0;
+}
+.chat-toolbar-title { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+.chat-settings-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--card-border); background: var(--card);
+  cursor: pointer; font-size: 1.05rem; display: grid; place-items: center; color: var(--text-secondary);
+  transition: background 0.2s, color 0.2s, transform 0.2s; flex-shrink: 0;
+}
+.chat-settings-btn:hover { background: var(--ground-alt); color: var(--text); transform: rotate(45deg); }
+.chat-messages {
+  padding: 22px 20px; overflow-y: auto; max-height: 520px; min-height: 360px;
+  display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;
+}
+.chat-msg { display: flex; gap: 10px; max-width: 82%; }
+.chat-msg-model { align-self: flex-start; }
+.chat-msg-user { align-self: flex-end; flex-direction: row-reverse; }
+.chat-avatar {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--primary); color: #fff;
+  display: grid; place-items: center; font-size: 1rem;
+}
+:root[data-theme="dark"] .chat-avatar { background: var(--cyan); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .chat-avatar { background: var(--cyan); } }
+.chat-msg-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chat-bubble {
+  padding: 12px 16px; border-radius: 14px; font-size: 0.9rem; line-height: 1.65; word-wrap: break-word;
+  overflow-wrap: anywhere; white-space: normal;
+}
+.chat-bubble a { color: inherit; text-decoration: underline; }
+.chat-msg-model .chat-bubble { background: var(--ground-alt); border: 1px solid var(--card-border); border-top-left-radius: 4px; color: var(--text); }
+.chat-msg-user .chat-bubble { background: var(--accent); color: #fff; border-top-right-radius: 4px; }
+.chat-bubble-error { background: rgba(193,68,58,0.12) !important; border: 1px solid var(--danger) !important; color: var(--danger) !important; }
+.chat-time { font-size: 0.68rem; color: var(--text-secondary); padding: 0 4px; }
+.chat-msg-user .chat-time { text-align: right; }
+.chat-input-row { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--card-border); background: var(--card); align-items: flex-end; flex-shrink: 0; }
+.chat-input {
+  flex: 1; resize: none; border-radius: var(--radius); border: 1px solid var(--card-border); background: var(--input-bg);
+  color: var(--text); padding: 11px 14px; font-family: inherit; font-size: 0.9rem; max-height: 140px; line-height: 1.5;
+}
+.chat-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,106,46,0.15); }
+.chat-send-btn { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; padding: 0; display: grid; place-items: center; font-size: 1.1rem; }
+.typing-dots { display: inline-flex; gap: 4px; align-items: center; padding: 4px 2px; }
+.typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); animation: typingBounce 1.2s infinite ease-in-out; }
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (max-width: 600px) {
+  .chat-messages { max-height: 420px; min-height: 300px; padding: 18px 14px; }
+  .chat-msg { max-width: 94%; }
+  .chat-input-row { padding: 12px 14px; }
+}
+
+/* =========================================================
+   MODAL (chat settings)
+   ========================================================= */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(10,16,24,0.55); display: none; align-items: center; justify-content: center;
+  z-index: 300; padding: 20px;
+}
+.modal-overlay.show { display: flex; }
+.modal-card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg); max-width: 440px; width: 100%; box-shadow: var(--shadow-card-hover); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--card-border); }
+.modal-head h3 { font-size: 1.02rem; font-weight: 700; }
+.modal-close { background: transparent; border: none; font-size: 1.3rem; color: var(--text-secondary); cursor: pointer; line-height: 1; padding: 4px 8px; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 22px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
 
 /* =========================================================
    CTA / FOOTER
@@ -497,7 +561,7 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
       <li><a href="#calc" data-route="calc">Калькуляторы</a></li>
       <li><a href="#reference" data-route="reference">Справочник</a></li>
       <li><a href="#checklist" data-route="checklist">Чек-листы</a></li>
-      <li><a href="#bot" data-route="bot">Telegram-бот</a></li>
+      <li><a href="#chat" data-route="chat">AI Чат</a></li>
     </ul>
     <div class="nav-actions">
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему">
@@ -516,11 +580,11 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
 <main id="page-home" class="page">
   <section class="hero">
     <div class="wrap hero-content">
-      <div class="hero-eyebrow">Технический надзор</div>
+      <div class="hero-eyebrow">Веб-платформа</div>
       <h1>Инструменты стройконтроля <em>с искусственным интеллектом</em></h1>
-      <p class="hero-desc">Калькуляторы материалов, актуальный справочник нормативов, чек-листы приёмки работ и AI-консультант в Telegram — всё в одной платформе для инженеров, прорабов и проектировщиков.</p>
+      <p class="hero-desc">Калькуляторы материалов, актуальный справочник нормативов, чек-листы приёмки работ и AI-консультант в чате — всё в одной платформе для инженеров, прорабов и проектировщиков.</p>
       <div class="hero-actions">
-        <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть Telegram-бота</a>
+        <a href="#chat" class="btn btn-accent">Открыть AI-чат</a>
         <a href="#calc" class="btn btn-ghost">Перейти к калькуляторам</a>
       </div>
     </div>
@@ -561,11 +625,11 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
           <p>Пошаговые проверки по этапам строительства с отслеживанием прогресса и экспортом отчёта.</p>
           <span class="qa-arrow">Открыть чек-лист &rarr;</span>
         </a>
-        <a href="#bot" class="qa-card">
-          <div class="qa-icon">&#9993;</div>
-          <h3>Telegram-бот</h3>
-          <p>AINadzorBot — AI-консультации по нормативам, анализ дефектов по фото и работа с документами.</p>
-          <span class="qa-arrow">Открыть бота &rarr;</span>
+        <a href="#chat" class="qa-card">
+          <div class="qa-icon">&#128172;</div>
+          <h3>AI Чат</h3>
+          <p>AI-консультант по нормативам прямо в браузере — вопросы по СП, ГОСТ, СНиП и технологии работ.</p>
+          <span class="qa-arrow">Открыть чат &rarr;</span>
         </a>
       </div>
     </div>
@@ -595,19 +659,19 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
           <p>Контрольные списки по этапам работ с сохранением прогресса локально и экспортом в текстовый отчёт.</p>
         </div>
         <div class="f-card">
-          <div class="f-icon">&#128247;</div>
-          <h3>Анализ дефектов по фото</h3>
-          <p>Отправьте фото дефекта в Telegram-боте — AI определит тип, критичность и ссылки на нормативы.</p>
+          <div class="f-icon">&#128172;</div>
+          <h3>AI-консультации в чате</h3>
+          <p>Задавайте вопросы по нормативам и технологии работ — AI-консультант отвечает на основе СП, ГОСТ и СНиП.</p>
         </div>
         <div class="f-card">
-          <div class="f-icon">&#128196;</div>
-          <h3>Работа с документами</h3>
-          <p>Бот анализирует PDF, DOCX, XLSX, изображения, CAD-файлы и другие форматы — более 15 типов.</p>
+          <div class="f-icon">&#128187;</div>
+          <h3>Работает в браузере</h3>
+          <p>Открывается на любом устройстве без установки приложений, регистрации и лишних разрешений.</p>
         </div>
         <div class="f-card">
-          <div class="f-icon">&#127908;</div>
-          <h3>Голосовой ввод</h3>
-          <p>Распознавание голосовых сообщений на русском языке через Whisper и Vosk прямо в чате.</p>
+          <div class="f-icon">&#128274;</div>
+          <h3>Данные остаются у вас</h3>
+          <p>Чек-листы, смета и история AI-чата сохраняются локально в браузере на вашем устройстве.</p>
         </div>
       </div>
     </div>
@@ -616,8 +680,8 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   <section class="cta-section">
     <div class="cta-inner">
       <h2>Попробуйте прямо сейчас</h2>
-      <p>Бесплатный AI-бот, доступен круглосуточно в Telegram</p>
-      <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Начать в Telegram</a>
+      <p>Бесплатный AI-консультант по строительным нормативам, доступен круглосуточно в браузере</p>
+      <a href="#chat" class="btn btn-accent">Открыть AI-чат</a>
     </div>
   </section>
 </main>
@@ -873,57 +937,27 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
 </main>
 
 <!-- =========================================================
-     PAGE: TELEGRAM BOT
+     PAGE: AI CHAT
      ========================================================= -->
-<main id="page-bot" class="page">
-  <section class="hero bot-hero">
-    <div class="wrap hero-content" style="max-width:680px;margin:0 auto;">
-      <div class="bot-avatar">СН</div>
-      <div class="hero-eyebrow" style="justify-content:center;display:flex;">Telegram-бот</div>
-      <h1>AINadzorBot</h1>
-      <p class="hero-desc">AI-ассистент технического надзора: консультации по нормативам, анализ дефектов по фото, работа с документами и голосом — прямо в Telegram, круглосуточно.</p>
-      <div class="hero-actions">
-        <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть в Telegram</a>
-      </div>
+<main id="page-chat" class="page">
+  <section class="mini-hero">
+    <div class="wrap mini-hero-content">
+      <h1>AI-чат технического надзора</h1>
+      <p>Задайте вопрос по нормативам, технологии работ или контролю качества — AI-консультант ответит на основе СП, ГОСТ и СНиП. Работает прямо в браузере через Google Gemini API.</p>
     </div>
   </section>
 
   <section>
     <div class="wrap">
-      <div class="sec-header">
-        <div class="sec-eyebrow">Возможности бота</div>
-        <h2 class="sec-title">Что умеет AINadzorBot</h2>
-      </div>
-      <div class="features-grid">
-        <div class="f-card">
-          <div class="f-icon">&#128218;</div>
-          <h3>AI-консультации по нормативам</h3>
-          <p>Ответы по СП, ГОСТ, СНиП и ФЗ на основе 4 AI-моделей, подобранных под тип запроса.</p>
+      <div class="chat-shell">
+        <div class="chat-toolbar">
+          <div class="chat-toolbar-title"><span aria-hidden="true">&#9971;&#65039;</span> AI-консультант по нормативам</div>
+          <button class="chat-settings-btn" id="chatSettingsBtn" type="button" aria-label="Настройки AI-чата" title="Настройки">&#9881;&#65039;</button>
         </div>
-        <div class="f-card">
-          <div class="f-icon">&#128247;</div>
-          <h3>Анализ дефектов по фото</h3>
-          <p>Отправьте фотографию — бот определит тип дефекта, критичность и нормативные ссылки.</p>
-        </div>
-        <div class="f-card">
-          <div class="f-icon">&#128196;</div>
-          <h3>Работа с документами</h3>
-          <p>Поддержка более 15 форматов: PDF, DOCX, XLSX, изображения, CAD-файлы, архивы.</p>
-        </div>
-        <div class="f-card">
-          <div class="f-icon">&#127908;</div>
-          <h3>Голосовой ввод</h3>
-          <p>Распознавание голосовых сообщений на русском языке через Whisper и Vosk.</p>
-        </div>
-        <div class="f-card">
-          <div class="f-icon">&#128736;</div>
-          <h3>Управление проектами</h3>
-          <p>Создание проектов, хранение файлов, чек-листы и отслеживание замечаний.</p>
-        </div>
-        <div class="f-card">
-          <div class="f-icon">&#128736;</div>
-          <h3>Строительные калькуляторы</h3>
-          <p>Расчёт бетона, арматуры, кладки и сметы прямо в чате без переключения приложений.</p>
+        <div class="chat-messages" id="chatMessages" role="log" aria-live="polite"></div>
+        <div class="chat-input-row">
+          <textarea id="chatInput" class="chat-input" placeholder="Введите вопрос по нормативам, расчётам или технологии работ..." rows="1"></textarea>
+          <button class="btn btn-accent chat-send-btn" id="chatSendBtn" type="button" aria-label="Отправить сообщение">&#10148;</button>
         </div>
       </div>
     </div>
@@ -932,79 +966,55 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   <section class="section-alt">
     <div class="wrap">
       <div class="sec-header">
-        <div class="sec-eyebrow">AI модели</div>
-        <h2 class="sec-title">Мультимодельная архитектура</h2>
-        <p class="sec-desc">Каждый запрос направляется к модели, которая решит его лучше остальных.</p>
-      </div>
-      <div class="models-grid">
-        <div class="m-card">
-          <div class="m-logo">&#9889;</div>
-          <h3>xAI Grok</h3>
-          <p>Быстрые ответы, веб-поиск, классификация запросов</p>
-          <span class="m-tag tag-orange">Web + X Search</span>
-        </div>
-        <div class="m-card">
-          <div class="m-logo">&#129302;</div>
-          <h3>Claude</h3>
-          <p>Глубокий технический анализ, экспертные консультации</p>
-          <span class="m-tag tag-blue">Тех. анализ</span>
-        </div>
-        <div class="m-card">
-          <div class="m-logo">&#128142;</div>
-          <h3>Gemini</h3>
-          <p>Анализ фото дефектов, генерация технических изображений</p>
-          <span class="m-tag tag-purple">Vision + Image</span>
-        </div>
-        <div class="m-card">
-          <div class="m-logo">&#127908;</div>
-          <h3>Whisper / Vosk</h3>
-          <p>Распознавание голосовых на русском языке</p>
-          <span class="m-tag tag-green">Голос</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="wrap">
-      <div class="sec-header">
         <div class="sec-eyebrow">Быстрый старт</div>
-        <h2 class="sec-title">Как начать</h2>
+        <h2 class="sec-title">Как начать пользоваться AI-чатом</h2>
       </div>
       <div class="steps-row">
         <div class="step">
           <div class="step-num">1</div>
           <div>
-            <h3>Откройте бота</h3>
-            <p>Найдите @AINadzorBot в Telegram или нажмите кнопку выше.</p>
+            <h3>Получите API-ключ</h3>
+            <p>Бесплатный ключ Google Gemini можно получить на <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">2</div>
           <div>
-            <h3>Задайте вопрос</h3>
-            <p>Текст, фото дефекта, документ или голосовое сообщение.</p>
+            <h3>Введите ключ в настройках</h3>
+            <p>Нажмите на значок шестерёнки в чате и вставьте ключ — он сохранится только в вашем браузере.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div>
-            <h3>Получите ответ</h3>
-            <p>AI подберёт модель и даст экспертный ответ со ссылками на нормативы.</p>
+            <h3>Задайте вопрос</h3>
+            <p>AI-консультант ответит со ссылками на нормативные документы и практическими рекомендациями.</p>
           </div>
         </div>
       </div>
     </div>
   </section>
-
-  <section class="cta-section">
-    <div class="cta-inner">
-      <h2>Начните работу с ботом</h2>
-      <p>Бесплатно, без регистрации, доступен круглосуточно</p>
-      <a href="https://t.me/AINadzorBot" class="btn btn-accent" target="_blank" rel="noopener">Открыть @AINadzorBot</a>
-    </div>
-  </section>
 </main>
+
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Настройки AI-чата</h3>
+      <button class="modal-close" id="settingsClose" type="button" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="apiKeyInput">Google Gemini API ключ</label>
+        <input type="text" id="apiKeyInput" placeholder="AIza...." autocomplete="off" spellcheck="false">
+        <div class="hint">Ключ хранится только в этом браузере (localStorage) и никуда не отправляется, кроме Google Gemini API. Получить бесплатный ключ: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-accent" id="apiKeySave" type="button">Сохранить ключ</button>
+        <button class="btn btn-danger-outline" id="clearHistoryBtn" type="button">Очистить историю</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <footer>
   <div class="wrap">
@@ -1013,7 +1023,7 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
       <li><a href="#calc">Калькуляторы</a></li>
       <li><a href="#reference">Справочник</a></li>
       <li><a href="#checklist">Чек-листы</a></li>
-      <li><a href="https://t.me/AINadzorBot" target="_blank" rel="noopener">Telegram-бот</a></li>
+      <li><a href="#chat">AI Чат</a></li>
     </ul>
     <p>&copy; 2025&ndash;2026 СтройНадзорAI. Open Source.</p>
   </div>
@@ -1083,7 +1093,7 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   /* =========================================================
      ROUTER
      ========================================================= */
-  var pages = ['home', 'calc', 'reference', 'checklist', 'bot'];
+  var pages = ['home', 'calc', 'reference', 'checklist', 'chat'];
   function route() {
     var hash = (location.hash || '#home').replace('#', '');
     if (pages.indexOf(hash) === -1) hash = 'home';
@@ -1588,6 +1598,267 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   });
 
   renderChecklist();
+
+  /* =========================================================
+     AI CHAT (Google Gemini)
+     ========================================================= */
+  var CHAT_KEY = 'sn_chat_history';
+  var API_KEY_KEY = 'sn_gemini_key';
+  var CHAT_MODEL = 'gemini-2.0-flash';
+  var CHAT_MAX_HISTORY = 20;
+  var BOT_AVATAR = '&#9971;&#65039;';
+
+  var SYSTEM_PROMPT =
+    'Ты — экспертный AI-консультант по строительным нормативам Российской Федерации. Твои знания включают:\n' +
+    '- Своды правил (СП), ГОСТ, СНиП, Федеральные законы\n' +
+    '- Технологии строительных работ\n' +
+    '- Расчёт конструкций и материалов\n' +
+    '- Контроль качества и строительный надзор\n' +
+    '- Безопасность труда в строительстве\n' +
+    '- Проектирование зданий и сооружений\n\n' +
+    'Правила ответа:\n' +
+    '- Отвечай профессионально, но понятно\n' +
+    '- Ссылайся на конкретные нормативные документы (СП, ГОСТ, СНиП) где возможно\n' +
+    '- Если вопрос не относится к строительству, вежливо направь пользователя к строительной тематике\n' +
+    '- Давай практические рекомендации\n' +
+    '- Используй структурированные ответы с пунктами где уместно';
+
+  var chatMessagesEl = document.getElementById('chatMessages');
+  var chatInput = document.getElementById('chatInput');
+  var chatSendBtn = document.getElementById('chatSendBtn');
+  var chatSettingsBtn = document.getElementById('chatSettingsBtn');
+  var settingsOverlay = document.getElementById('settingsOverlay');
+  var settingsClose = document.getElementById('settingsClose');
+  var apiKeyInput = document.getElementById('apiKeyInput');
+  var apiKeySave = document.getElementById('apiKeySave');
+  var clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+  var chatHistory = [];
+
+  function loadChatHistory() {
+    try {
+      var raw = localStorage.getItem(CHAT_KEY);
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
+  function saveChatHistory() {
+    try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatHistory)); } catch (e) {}
+  }
+  function getApiKey() {
+    try { return localStorage.getItem(API_KEY_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setApiKey(key) {
+    try {
+      if (key) localStorage.setItem(API_KEY_KEY, key);
+      else localStorage.removeItem(API_KEY_KEY);
+    } catch (e) {}
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function formatMessageText(text) {
+    var esc = escapeHtml(text);
+    // **bold** -> <strong>
+    esc = esc.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // bare URLs -> links
+    esc = esc.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    // split into lines, detect bullet / numbered list markers
+    var lines = esc.split('\n');
+    var html = lines.map(function(line) {
+      var trimmed = line.trim();
+      if (/^[-*•]\s+/.test(trimmed)) {
+        return '&bull;&nbsp;' + trimmed.replace(/^[-*•]\s+/, '');
+      }
+      if (/^\d+[.)]\s+/.test(trimmed)) {
+        return trimmed;
+      }
+      return line;
+    }).join('<br>');
+    return html;
+  }
+
+  function timeStr(ts) {
+    var d = new Date(ts);
+    var hh = ('0' + d.getHours()).slice(-2);
+    var mm = ('0' + d.getMinutes()).slice(-2);
+    return hh + ':' + mm;
+  }
+
+  function welcomeHtml() {
+    var hasKey = !!getApiKey();
+    var text = hasKey
+      ? 'Здравствуйте! Я AI-консультант по строительным нормативам РФ. Задайте вопрос о СП, ГОСТ, СНиП, расчётах конструкций, технологии работ или контроле качества.'
+      : 'Для работы AI-чата введите ваш Google Gemini API ключ в настройках (значок шестерёнки &#9881;&#65039;). Получить бесплатный ключ: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">https://aistudio.google.com/apikey</a>';
+    return '<div class="chat-msg chat-msg-model"><div class="chat-avatar" aria-hidden="true">' + BOT_AVATAR + '</div>' +
+      '<div class="chat-msg-col"><div class="chat-bubble">' + text + '</div></div></div>';
+  }
+
+  function renderMessageHtml(msg) {
+    var isUser = msg.role === 'user';
+    var cls = isUser ? 'chat-msg-user' : 'chat-msg-model';
+    var avatar = isUser ? '' : '<div class="chat-avatar" aria-hidden="true">' + BOT_AVATAR + '</div>';
+    var bubbleCls = 'chat-bubble' + (msg.error ? ' chat-bubble-error' : '');
+    return '<div class="chat-msg ' + cls + '">' + avatar +
+      '<div class="chat-msg-col"><div class="' + bubbleCls + '">' + formatMessageText(msg.text) + '</div>' +
+      '<div class="chat-time">' + timeStr(msg.time) + '</div></div></div>';
+  }
+
+  function scrollChatToBottom() {
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  }
+
+  function renderChatMessages() {
+    if (chatHistory.length === 0) {
+      chatMessagesEl.innerHTML = welcomeHtml();
+      return;
+    }
+    chatMessagesEl.innerHTML = chatHistory.map(renderMessageHtml).join('');
+    scrollChatToBottom();
+  }
+
+  function addMessage(role, text, opts) {
+    opts = opts || {};
+    chatHistory.push({ role: role, text: text, time: Date.now(), error: !!opts.error });
+    if (chatHistory.length > CHAT_MAX_HISTORY) {
+      chatHistory = chatHistory.slice(chatHistory.length - CHAT_MAX_HISTORY);
+    }
+    saveChatHistory();
+    renderChatMessages();
+  }
+
+  function showTypingIndicator() {
+    var div = document.createElement('div');
+    div.className = 'chat-msg chat-msg-model';
+    div.id = 'typingIndicator';
+    div.innerHTML = '<div class="chat-avatar" aria-hidden="true">' + BOT_AVATAR + '</div>' +
+      '<div class="chat-msg-col"><div class="chat-bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div></div>';
+    chatMessagesEl.appendChild(div);
+    scrollChatToBottom();
+  }
+  function removeTypingIndicator() {
+    var el = document.getElementById('typingIndicator');
+    if (el) el.parentNode.removeChild(el);
+  }
+
+  function autoGrowChatInput() {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
+  }
+
+  function callGeminiApi() {
+    var apiKey = getApiKey();
+    var contents = chatHistory
+      .filter(function(m) { return !m.error; })
+      .map(function(m) { return { role: m.role, parts: [{ text: m.text }] }; });
+    var body = {
+      contents: contents,
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+    };
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + CHAT_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey);
+
+    chatSendBtn.disabled = true;
+    showTypingIndicator();
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function(res) {
+      return res.json().catch(function() { return {}; }).then(function(data) {
+        return { ok: res.ok, status: res.status, data: data };
+      });
+    }).then(function(result) {
+      removeTypingIndicator();
+      chatSendBtn.disabled = false;
+      if (!result.ok) {
+        var errMsg = (result.data && result.data.error && result.data.error.message) ||
+          ('Ошибка запроса к Gemini API (код ' + result.status + '). Проверьте правильность API-ключа в настройках.');
+        addMessage('model', 'Ошибка: ' + errMsg, { error: true });
+        return;
+      }
+      var candidate = result.data && result.data.candidates && result.data.candidates[0];
+      var parts = candidate && candidate.content && candidate.content.parts;
+      var textOut = parts ? parts.map(function(p) { return p.text || ''; }).join('') : '';
+      if (!textOut) {
+        addMessage('model', 'Не удалось получить ответ от AI. Возможно, запрос был заблокирован фильтрами безопасности. Попробуйте переформулировать вопрос.', { error: true });
+        return;
+      }
+      addMessage('model', textOut);
+    }).catch(function() {
+      removeTypingIndicator();
+      chatSendBtn.disabled = false;
+      addMessage('model', 'Ошибка сети: не удалось связаться с Gemini API. Проверьте подключение к интернету и правильность API-ключа.', { error: true });
+    });
+  }
+
+  function sendChatMessage() {
+    var text = chatInput.value.trim();
+    if (!text) return;
+    var apiKey = getApiKey();
+    if (!apiKey) {
+      showToast('Введите API-ключ Gemini в настройках чата');
+      openSettings();
+      return;
+    }
+    chatInput.value = '';
+    autoGrowChatInput();
+    addMessage('user', text);
+    callGeminiApi();
+  }
+
+  function openSettings() {
+    apiKeyInput.value = getApiKey();
+    settingsOverlay.classList.add('show');
+    setTimeout(function() { apiKeyInput.focus(); }, 50);
+  }
+  function closeSettings() {
+    settingsOverlay.classList.remove('show');
+  }
+
+  chatSendBtn.addEventListener('click', sendChatMessage);
+  chatInput.addEventListener('input', autoGrowChatInput);
+  chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
+  chatSettingsBtn.addEventListener('click', openSettings);
+  settingsClose.addEventListener('click', closeSettings);
+  settingsOverlay.addEventListener('click', function(e) {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && settingsOverlay.classList.contains('show')) closeSettings();
+  });
+
+  apiKeySave.addEventListener('click', function() {
+    var val = apiKeyInput.value.trim();
+    setApiKey(val);
+    closeSettings();
+    showToast(val ? 'API-ключ сохранён' : 'API-ключ удалён');
+    renderChatMessages();
+  });
+
+  clearHistoryBtn.addEventListener('click', function() {
+    if (!confirm('Очистить всю историю переписки с AI-чатом?')) return;
+    chatHistory = [];
+    saveChatHistory();
+    renderChatMessages();
+    closeSettings();
+    showToast('История чата очищена');
+  });
+
+  chatHistory = loadChatHistory();
+  renderChatMessages();
 
 })();
 </script>
