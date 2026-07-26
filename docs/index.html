@@ -973,22 +973,22 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
         <div class="step">
           <div class="step-num">1</div>
           <div>
-            <h3>Получите API-ключ</h3>
-            <p>Бесплатный ключ Google Gemini можно получить на <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+            <h3>Откройте AI-чат</h3>
+            <p>Перейдите в раздел «AI Консультант» — чат готов к работе, никаких ключей вводить не нужно.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">2</div>
           <div>
-            <h3>Введите ключ в настройках</h3>
-            <p>Нажмите на значок шестерёнки в чате и вставьте ключ — он сохранится только в вашем браузере.</p>
+            <h3>Задайте вопрос</h3>
+            <p>Напишите вопрос по строительным нормативам, расчётам, технологиям или контролю качества.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div>
-            <h3>Задайте вопрос</h3>
-            <p>AI-консультант ответит со ссылками на нормативные документы и практическими рекомендациями.</p>
+            <h3>Получите ответ</h3>
+            <p>AI-консультант ответит со ссылками на нормативные документы (СП, ГОСТ, СНиП) и практическими рекомендациями.</p>
           </div>
         </div>
       </div>
@@ -1003,13 +1003,8 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
       <button class="modal-close" id="settingsClose" type="button" aria-label="Закрыть">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="field">
-        <label for="apiKeyInput">Google Gemini API ключ</label>
-        <input type="text" id="apiKeyInput" placeholder="AIza...." autocomplete="off" spellcheck="false">
-        <div class="hint">Ключ хранится только в этом браузере (localStorage) и никуда не отправляется, кроме Google Gemini API. Получить бесплатный ключ: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></div>
-      </div>
+      <p style="margin-bottom:1rem;color:var(--text-secondary)">AI-чат работает автоматически. Несколько AI-провайдеров обеспечивают стабильную работу.</p>
       <div class="modal-actions">
-        <button class="btn btn-accent" id="apiKeySave" type="button">Сохранить ключ</button>
         <button class="btn btn-danger-outline" id="clearHistoryBtn" type="button">Очистить историю</button>
       </div>
     </div>
@@ -1600,28 +1595,12 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   renderChecklist();
 
   /* =========================================================
-     AI CHAT (Google Gemini)
+     AI CHAT (Backend API с фоллбэком: Gemini → Grok → Claude → OpenAI)
      ========================================================= */
   var CHAT_KEY = 'sn_chat_history';
-  var API_KEY_KEY = 'sn_gemini_key';
-  var CHAT_MODEL = 'gemini-2.0-flash';
   var CHAT_MAX_HISTORY = 20;
   var BOT_AVATAR = '&#9971;&#65039;';
-
-  var SYSTEM_PROMPT =
-    'Ты — экспертный AI-консультант по строительным нормативам Российской Федерации. Твои знания включают:\n' +
-    '- Своды правил (СП), ГОСТ, СНиП, Федеральные законы\n' +
-    '- Технологии строительных работ\n' +
-    '- Расчёт конструкций и материалов\n' +
-    '- Контроль качества и строительный надзор\n' +
-    '- Безопасность труда в строительстве\n' +
-    '- Проектирование зданий и сооружений\n\n' +
-    'Правила ответа:\n' +
-    '- Отвечай профессионально, но понятно\n' +
-    '- Ссылайся на конкретные нормативные документы (СП, ГОСТ, СНиП) где возможно\n' +
-    '- Если вопрос не относится к строительству, вежливо направь пользователя к строительной тематике\n' +
-    '- Давай практические рекомендации\n' +
-    '- Используй структурированные ответы с пунктами где уместно';
+  var API_URL = 'https://stroinadzor-api.up.railway.app';
 
   var chatMessagesEl = document.getElementById('chatMessages');
   var chatInput = document.getElementById('chatInput');
@@ -1629,8 +1608,6 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   var chatSettingsBtn = document.getElementById('chatSettingsBtn');
   var settingsOverlay = document.getElementById('settingsOverlay');
   var settingsClose = document.getElementById('settingsClose');
-  var apiKeyInput = document.getElementById('apiKeyInput');
-  var apiKeySave = document.getElementById('apiKeySave');
   var clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
   var chatHistory = [];
@@ -1645,15 +1622,6 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   function saveChatHistory() {
     try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatHistory)); } catch (e) {}
   }
-  function getApiKey() {
-    try { return localStorage.getItem(API_KEY_KEY) || ''; } catch (e) { return ''; }
-  }
-  function setApiKey(key) {
-    try {
-      if (key) localStorage.setItem(API_KEY_KEY, key);
-      else localStorage.removeItem(API_KEY_KEY);
-    } catch (e) {}
-  }
 
   function escapeHtml(str) {
     return String(str)
@@ -1664,11 +1632,8 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
 
   function formatMessageText(text) {
     var esc = escapeHtml(text);
-    // **bold** -> <strong>
     esc = esc.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // bare URLs -> links
     esc = esc.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-    // split into lines, detect bullet / numbered list markers
     var lines = esc.split('\n');
     var html = lines.map(function(line) {
       var trimmed = line.trim();
@@ -1691,12 +1656,8 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   }
 
   function welcomeHtml() {
-    var hasKey = !!getApiKey();
-    var text = hasKey
-      ? 'Здравствуйте! Я AI-консультант по строительным нормативам РФ. Задайте вопрос о СП, ГОСТ, СНиП, расчётах конструкций, технологии работ или контроле качества.'
-      : 'Для работы AI-чата введите ваш Google Gemini API ключ в настройках (значок шестерёнки &#9881;&#65039;). Получить бесплатный ключ: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">https://aistudio.google.com/apikey</a>';
     return '<div class="chat-msg chat-msg-model"><div class="chat-avatar" aria-hidden="true">' + BOT_AVATAR + '</div>' +
-      '<div class="chat-msg-col"><div class="chat-bubble">' + text + '</div></div></div>';
+      '<div class="chat-msg-col"><div class="chat-bubble">Здравствуйте! Я AI-консультант по строительным нормативам РФ. Задайте вопрос о СП, ГОСТ, СНиП, расчётах конструкций, технологии работ или контроле качества.</div></div></div>';
   }
 
   function renderMessageHtml(msg) {
@@ -1751,22 +1712,20 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
     chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
   }
 
-  function callGeminiApi() {
-    var apiKey = getApiKey();
-    var contents = chatHistory
+  function callBackendApi() {
+    var history = chatHistory
       .filter(function(m) { return !m.error; })
-      .map(function(m) { return { role: m.role, parts: [{ text: m.text }] }; });
+      .map(function(m) { return { role: m.role, content: m.text }; });
+    var lastMsg = history.pop();
     var body = {
-      contents: contents,
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+      message: lastMsg ? lastMsg.content : '',
+      history: history
     };
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + CHAT_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey);
 
     chatSendBtn.disabled = true;
     showTypingIndicator();
 
-    fetch(url, {
+    fetch(API_URL + '/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -1778,45 +1737,34 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
       removeTypingIndicator();
       chatSendBtn.disabled = false;
       if (!result.ok) {
-        var errMsg = (result.data && result.data.error && result.data.error.message) ||
-          ('Ошибка запроса к Gemini API (код ' + result.status + '). Проверьте правильность API-ключа в настройках.');
+        var errMsg = (result.data && result.data.detail) || 'Сервер временно недоступен. Попробуйте через минуту.';
         addMessage('model', 'Ошибка: ' + errMsg, { error: true });
         return;
       }
-      var candidate = result.data && result.data.candidates && result.data.candidates[0];
-      var parts = candidate && candidate.content && candidate.content.parts;
-      var textOut = parts ? parts.map(function(p) { return p.text || ''; }).join('') : '';
+      var textOut = result.data && result.data.answer;
       if (!textOut) {
-        addMessage('model', 'Не удалось получить ответ от AI. Возможно, запрос был заблокирован фильтрами безопасности. Попробуйте переформулировать вопрос.', { error: true });
+        addMessage('model', 'Не удалось получить ответ от AI. Попробуйте переформулировать вопрос.', { error: true });
         return;
       }
       addMessage('model', textOut);
     }).catch(function() {
       removeTypingIndicator();
       chatSendBtn.disabled = false;
-      addMessage('model', 'Ошибка сети: не удалось связаться с Gemini API. Проверьте подключение к интернету и правильность API-ключа.', { error: true });
+      addMessage('model', 'Ошибка сети: не удалось связаться с сервером. Проверьте подключение к интернету.', { error: true });
     });
   }
 
   function sendChatMessage() {
     var text = chatInput.value.trim();
     if (!text) return;
-    var apiKey = getApiKey();
-    if (!apiKey) {
-      showToast('Введите API-ключ Gemini в настройках чата');
-      openSettings();
-      return;
-    }
     chatInput.value = '';
     autoGrowChatInput();
     addMessage('user', text);
-    callGeminiApi();
+    callBackendApi();
   }
 
   function openSettings() {
-    apiKeyInput.value = getApiKey();
     settingsOverlay.classList.add('show');
-    setTimeout(function() { apiKeyInput.focus(); }, 50);
   }
   function closeSettings() {
     settingsOverlay.classList.remove('show');
@@ -1838,14 +1786,6 @@ footer { background: var(--footer-bg); color: rgba(240,237,233,0.5); padding: 32
   });
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && settingsOverlay.classList.contains('show')) closeSettings();
-  });
-
-  apiKeySave.addEventListener('click', function() {
-    var val = apiKeyInput.value.trim();
-    setApiKey(val);
-    closeSettings();
-    showToast(val ? 'API-ключ сохранён' : 'API-ключ удалён');
-    renderChatMessages();
   });
 
   clearHistoryBtn.addEventListener('click', function() {
