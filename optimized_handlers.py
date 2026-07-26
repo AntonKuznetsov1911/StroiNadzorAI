@@ -58,7 +58,7 @@ async def handle_with_grok(
 
         # Вызываем Grok
         response = await xai_client.chat_completions_create_async(
-            model="grok-2-latest",
+            model="grok-4-1-fast-non-reasoning",
             messages=messages,
             max_tokens=2000,
             temperature=0.7,

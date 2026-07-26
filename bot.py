@@ -3992,7 +3992,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 response = await loop.run_in_executor(
                                     None,
                                     lambda: call_grok_with_retry(
-                                        client, model="grok-4-1-fast", max_tokens=6000, temperature=0.3,
+                                        client, model=GROK_MODEL_FAST, max_tokens=6000, temperature=0.3,
                                         messages=[
                                             {"role": "system", "content": "Вы — эксперт по строительным нормативам РФ. Анализируете комплекты проектной документации."},
                                             {"role": "user", "content": zip_prompt}
@@ -4686,7 +4686,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 logger.info("📝 Запрашиваем детальный технический промпт у xAI Grok...")
                 grok_response = await client.chat_completions_create_async(
-                    model="grok-4-1-fast",
+                    model=GROK_MODEL_FAST,
                     messages=prompt_messages,
                     max_tokens=1500,  # Увеличено для детальных технических промптов с размерами
                     temperature=0.5  # Снижено для большей точности и конкретики
@@ -4796,7 +4796,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 async for chunk in call_grok_with_streaming(
                     client,
-                    model=GROK_MODEL_FAST,  # Быстрая модель
+                    model=GROK_MODEL_FAST,
                     messages=messages_with_system,
                     max_tokens=500,  # Только начало
                     temperature=0.7,
@@ -5060,7 +5060,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     None,
                     lambda: call_grok_with_retry(
                         client,
-                        model=GROK_MODEL_FAST,  # Используем быструю модель
+                        model=GROK_MODEL_FAST,
                         max_tokens=300,
                         temperature=0.8,
                         messages=[{"role": "user", "content": related_q_prompt}]
